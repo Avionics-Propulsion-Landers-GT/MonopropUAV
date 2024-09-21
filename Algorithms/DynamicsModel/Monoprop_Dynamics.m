@@ -18,11 +18,11 @@ function monocopter_dynamics_with_wind()
     I = [I_x, I_y, I_z];  % Inertia tensor diagonal elements
 
     % Initial conditions
-    r = [0; 0; 100];  % Initial position (m)
+    r = [0; 0; 0];  % Initial position (m)
     v = [0; 0; 0];  % Initial velocity (m/s)
     q = [1; 0; 0; 0];  % Initial quaternion (neutral orientation)
     omega = [0; 0; 0];  % Initial angular velocity (rad/s)
-    thrust_dir_body = [0; 0; -1];  % Thrust in the body frame (along z-axis)
+    thrust_dir_body = [0; 0; 1.5];  % Thrust in the body frame (along z-axis)
 
     % Pre-allocate arrays to store results
     position_history = zeros(3, num_steps);
