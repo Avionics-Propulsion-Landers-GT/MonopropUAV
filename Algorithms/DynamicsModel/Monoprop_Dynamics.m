@@ -22,7 +22,7 @@ function monocopter_dynamics_with_wind()
     v = [0; 0; 0];  % Initial velocity (m/s)
     q = [1; 0; 0; 0];  % Initial quaternion (neutral orientation)
     omega = [0; 0; 0];  % Initial angular velocity (rad/s)
-    thrust_dir_body = [0; 0; 1];  % Thrust in the body frame (along z-axis)
+    thrust_dir_body = [0; 0; -1];  % Thrust in the body frame (along z-axis)
 
     % Pre-allocate arrays to store results
     position_history = zeros(3, num_steps);

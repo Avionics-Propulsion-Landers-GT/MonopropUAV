@@ -18,8 +18,8 @@ function monocopter_dynamics_with_path_and_orientation_control()
     I = [I_x, I_y, I_z];  % Inertia tensor diagonal elements
 
     % Initial conditions
-    r = [0; 0; 500];  % Initial position (m)
-    v = [0; 0; 0];  % Initial velocity (m/s)
+    r = [0; 0; 0];  % Initial position (m)
+    v = [0; 0; 1];  % Initial velocity (m/s)
     q = [1; 0; 0; 0];  % Initial quaternion (neutral orientation)
     omega = [0; 0; 0];  % Initial angular velocity (rad/s)
     thrust_dir_body = [0; 0; 1];  % Thrust in the body frame (along z-axis)
