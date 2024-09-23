@@ -7,4 +7,9 @@ Tasks assigned.
 2. Dynamics Modeling - Yash Buddhdeo, Sai Lalith Kanumuri, Mahir Daiyan Ashraf, Saleem Salick
 3. Path Planning - Jaehun Baek
 4. RCS Modeling
+<<<<<<< HEAD
 >>>>>>> 924ad2389cfceabf9d754aa8875b187badb5eeae
+=======
+
+- test
+>>>>>>> 7ff006e (testing)
