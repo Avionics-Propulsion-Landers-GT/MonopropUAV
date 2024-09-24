@@ -68,3 +68,9 @@ F_rodrigues = F_rodrigues/norm(F_rodrigues)
 
 diff = (F_pitchyaw/norm(F_pitchyaw) - F_desired);
 diffMag = norm(diff)*100 % Offset percentage
+
+
+%% Ben's method
+axis_of_rot = cross(F_init, F_desired);
+angle_of_rot = acos(dot(F_init, F_desired));
+
