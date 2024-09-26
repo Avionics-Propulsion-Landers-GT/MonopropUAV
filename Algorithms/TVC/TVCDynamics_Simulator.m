@@ -70,7 +70,10 @@ diff = (F_pitchyaw/norm(F_pitchyaw) - F_desired);
 diffMag = norm(diff)*100 % Offset percentage
 
 
-%% Ben's method
-axis_of_rot = cross(F_init, F_desired);
-angle_of_rot = acos(dot(F_init, F_desired));
+%% Quaternion method
 
+% computing the dot product
+rotation_angle = acos(dot(F_init, F_desired));
+% constructing the quaternion of rotation
+q = quaternion(cos(rotation_angle/2), sin(rotation_angle/2*kx), ...
+    sin(rotation_angle/2*ky), sin(rotation_angle/2*kz));
