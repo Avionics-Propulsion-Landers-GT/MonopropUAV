@@ -77,3 +77,12 @@ rotation_angle = acos(dot(F_init, F_desired));
 % constructing the quaternion of rotation
 q = quaternion(cos(rotation_angle/2), sin(rotation_angle/2*kx), ...
     sin(rotation_angle/2*ky), sin(rotation_angle/2*kz));
+
+%% Calculate yaw / pitch angles
+yaw1 = atan2(F_init(2), F_desired(3));
+pitch1 = atan2(F_init(3), F_desired(1));
+yaw2 = atan2(F_desired(2),F_desired(3));
+pitch2 = atan2(F_desired(3),F_desired(1));
+
+net_pitch = rad2deg(pitch2-pitch1)
+net_yaw = rad2deg(yaw2-yaw1)
