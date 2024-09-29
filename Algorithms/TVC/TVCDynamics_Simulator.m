@@ -1,14 +1,28 @@
 % Modeling the migration between 3D orientation axes
 % of the TVC.
 
-F_init = [5,4,15]; % To be edited
+F_init = [90,0,0]; % Static neutral state to compare to [roll, yaw, pitch]
 init_mag = norm(F_init);
 F_init = F_init/norm(F_init);
 
-F_desired = [2,3,17]; % Also to be edited
+F_desired = [90,90,90]; % Desired orientation [roll, yaw, pitch]
 mag_desired = norm(F_desired);
 F_desired = F_desired/norm(F_desired);
 
+%% Calculate yaw / pitch angles
+yaw1 = atan2(F_init(2), F_desired(3));
+pitch1 = atan2(F_init(3), F_desired(1));
+yaw2 = atan2(F_desired(2),F_desired(3));
+pitch2 = atan2(F_desired(3),F_desired(1));
+
+net_pitch = rad2deg(pitch2-pitch1)
+net_yaw = rad2deg(yaw2-yaw1)
+
+% Convert yaw and pitch to pulse width signals
+pulse_pitch = (10 * net_pitch) + 1500
+pulse_yaw = (10 * net_yaw) + 1500
+
+%{
 net_rotation_angle = acos(dot(F_init,F_desired)/(norm(F_desired)*norm(F_init)));
 
 max_tolerable = 30*pi/360;
@@ -38,7 +52,7 @@ rodriguesRotMatrix = i + sin(net_rotation_angle)*skewSymmetric_ofk ...
 theta = atan2(-1*rodriguesRotMatrix(3,1), ...
     sqrt(rodriguesRotMatrix(1,1)^2 + rodriguesRotMatrix(2,1)^2));
 
-psi = atan2(rodriguesRotMatrix(2,1),rodriguesRotMatrix(1,1));
+phi = atan2(rodriguesRotMatrix(2,1),rodriguesRotMatrix(1,1));
 
 % Verifying
 if theta <= max_tolerable && phi <= max_tolerable
@@ -76,13 +90,6 @@ diffMag = norm(diff)*100 % Offset percentage
 rotation_angle = acos(dot(F_init, F_desired));
 % constructing the quaternion of rotation
 q = quaternion(cos(rotation_angle/2), sin(rotation_angle/2*kx), ...
-    sin(rotation_angle/2*ky), sin(rotation_angle/2*kz));
+   sin(rotation_angle/2*ky), sin(rotation_angle/2*kz));
+%}
 
-%% Calculate yaw / pitch angles
-yaw1 = atan2(F_init(2), F_desired(3));
-pitch1 = atan2(F_init(3), F_desired(1));
-yaw2 = atan2(F_desired(2),F_desired(3));
-pitch2 = atan2(F_desired(3),F_desired(1));
-
-net_pitch = rad2deg(pitch2-pitch1)
-net_yaw = rad2deg(yaw2-yaw1)
