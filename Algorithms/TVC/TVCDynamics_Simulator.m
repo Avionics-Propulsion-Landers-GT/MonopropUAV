@@ -1,26 +1,37 @@
-% Modeling the migration between 3D orientation axes
-% of the TVC.
+% Modeling the rotation between 3D orientation axes of the TVC.
 
-F_init = [90,0,0]; % Static neutral state to compare to [roll, yaw, pitch]
-init_mag = norm(F_init);
+F_init = [0,0,1]; % Static neutral state to compare to [pitch, yaw, roll]
 F_init = F_init/norm(F_init);
 
-F_desired = [90,90,90]; % Desired orientation [roll, yaw, pitch]
-mag_desired = norm(F_desired);
+F_desired = [5,2,1]; % Desired orientation [pitch, yaw, roll]
 F_desired = F_desired/norm(F_desired);
 
-%% Calculate yaw / pitch angles
-yaw1 = atan2(F_init(2), F_desired(3));
-pitch1 = atan2(F_init(3), F_desired(1));
-yaw2 = atan2(F_desired(2),F_desired(3));
-pitch2 = atan2(F_desired(3),F_desired(1));
+% Calculate yaw / pitch angles
+yaw1 = atan2(F_desired(1), F_desired(3));
+pitch1 = atan2(F_desired(2), F_desired(3));
 
-net_pitch = rad2deg(pitch2-pitch1)
-net_yaw = rad2deg(yaw2-yaw1)
+net_pitch = rad2deg(pitch1);
+net_yaw = rad2deg(yaw1);
 
 % Convert yaw and pitch to pulse width signals
-pulse_pitch = (10 * net_pitch) + 1500
-pulse_yaw = (10 * net_yaw) + 1500
+pulse_pitch = (10 * net_pitch) + 1500;
+pulse_yaw = (10 * net_yaw) + 1500;
+
+% Print pulse width for pitch and yaw
+sprintf("%.2f", pulse_pitch)
+sprintf("%.2f", pulse_yaw)
+
+% Convert width signals back to angle rotations
+re_pitch = (pulse_pitch - 1500) / 10;
+re_yaw = (pulse_yaw - 1500) / 10;
+
+% Convert angular rotations back to a normalized vector
+F_re = [tan(deg2rad(re_yaw)), tan(deg2rad(re_pitch)), 1];
+F_re = F_re / norm(F_re);
+
+% Print original and recalculated output vectors
+F_desired
+F_re
 
 %{
 net_rotation_angle = acos(dot(F_init,F_desired)/(norm(F_desired)*norm(F_init)));
