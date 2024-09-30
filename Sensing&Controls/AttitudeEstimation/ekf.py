@@ -4,6 +4,7 @@
 # Sarang Suman
 
 import numpy as np
+import sympy as sp
 
 class EKF():
 
@@ -21,6 +22,8 @@ class EKF():
         self.state_dim = state_dim
         self.sensor_dim = sensor_dim
 
+        self.x_symbols = sp.symbols(f'x:{self.state_dim}')  # Create symbolic variables for the state vector
+
     # Function
     def f(self, x):
         # State transition function (non-linear). Modify as per your system's dynamics
@@ -32,12 +35,15 @@ class EKF():
 
     def F_jacobian(self, x):
         # Takes the Jacobian of the state transition function f
-        return np.eye(self.state_dim)
-
+        f_sym = sp.Matrix(self.f(sp.Matrix(self.x_symbols)))  # Apply the state transition function to the symbolic state vector
+        F = f_sym.jacobian(self.x_symbols)  # Compute the Jacobian matrix of the state transition function
+        return np.array(F).astype(np.float64)  # Convert the Jacobian matrix to a NumPy array of type float64
 
     def H_jacobian(self, x):
         # Takes Jacobian of the measurement function h
-        return np.eye(self.sensor_dim, self.state_dim)
+        h_sym = sp.Matrix(self.h(sp.Matrix(self.x_symbols)))  # Apply the measurement function to the symbolic state vector
+        H = h_sym.jacobian(self.x_symbols)  # Compute the Jacobian matrix of the measurement function
+        return np.array(H).astype(np.float64)  # Convert the Jacobian matrix to a NumPy array of type float64
 
     # Calculates the next state transition, and updates the error covariance
     def predict(self):
