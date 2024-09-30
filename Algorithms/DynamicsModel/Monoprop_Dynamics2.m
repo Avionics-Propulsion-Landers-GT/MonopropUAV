@@ -1,32 +1,28 @@
-function monocopter_dynamics_with_pid()
+function monocopter_dynamics_with_wind()
     % Simulation parameters
     dt = 0.01;  % Time step (seconds)
-    t_end = 20;  % Total simulation time (seconds)
+    t_end = 10;  % Simulation time (seconds)
     num_steps = floor(t_end / dt);  % Number of time steps
 
     % Physical constants and parameters
     m = 1.0;  % Mass of the monocopter (kg)
     g = 9.81;  % Gravitational acceleration (m/s^2)
     k_D = 0.1;  % Drag coefficient
+    k_wind = 0.05;  % Wind drag coefficient
+    T = 10;  % Thrust magnitude (N)
 
     % Moments of inertia (kg*m^2)
-    I = diag([1.0, 2.0, 1.0]);  % Inertia tensor (3x3 diagonal matrix)
+    I_x = 1.0;
+    I_y = 2.0;
+    I_z = 1.0;
+    I = [I_x, I_y, I_z];  % Inertia tensor diagonal elements
 
     % Initial conditions
     r = [0; 0; 0];  % Initial position (m)
     v = [0; 0; 0];  % Initial velocity (m/s)
     q = [1; 0; 0; 0];  % Initial quaternion (neutral orientation)
     omega = [0; 0; 0];  % Initial angular velocity (rad/s)
-
-    % Target trajectory points
-    target_positions = [[0; 0; 0], [0; 0; 100], [0; 0; 0]];  % from (0,0,0) to (0,0,100) and back
-    target_index = 1;  % Start at the first target position
-
-    % PID Controller parameters
-    Kp = 1.0;  % Proportional gain
-    Ki = 0.1;  % Integral gain
-    Kd = 0.5;  % Derivative gain
-    integral = [0; 0; 0];  % Integral error
+    thrust_dir_body = [0; 0; 1];  % Thrust in the body frame (along z-axis)
 
     % Pre-allocate arrays to store results
     position_history = zeros(3, num_steps);
@@ -34,27 +30,21 @@ function monocopter_dynamics_with_pid()
     quaternion_history = zeros(4, num_steps);
     angular_velocity_history = zeros(3, num_steps);
 
+    % Initial wind velocity (random starting point)
+    v_wind = [randn(); randn(); randn()] * 2;  % Random initial wind velocity in m/s
+
     % Main simulation loop
     for step = 1:num_steps
         t = (step - 1) * dt;  % Current time
+
+        % Random wind velocity (updates over time with noise)
+        v_wind = v_wind + 0.1 * randn(3, 1);  % Smooth random walk for wind changes
 
         % Store history
         position_history(:, step) = r;
         velocity_history(:, step) = v;
         quaternion_history(:, step) = q;
         angular_velocity_history(:, step) = omega;
-
-        % Calculate position error
-        target_pos = target_positions(:, target_index);
-        position_error = target_pos - r;
-
-        % PID Control
-        integral = integral + position_error * dt;  % Integral error
-        derivative = position_error / dt;  % Derivative error
-        thrust = Kp * position_error + Ki * integral + Kd * derivative;
-
-        % Clamping thrust to avoid extreme values
-        thrust = min(max(thrust, 0), 20);  % Limit thrust to a maximum of 20 N
 
         % 1. Compute rotational dynamics (Euler's equations)
         M = [0; 0; 0];  % No external torques in this case
@@ -71,32 +61,26 @@ function monocopter_dynamics_with_pid()
         q = q / norm(q);  % Normalize to maintain unit quaternion
 
         % 3. Compute translational dynamics (Newton's second law)
-        % Compute the rotation matrix from the quaternion
-        R_b_to_w = quat_to_rotation_matrix(q);
+        R_b_to_w = quat_to_rotation_matrix(q);  % Rotation matrix from body to world
 
-        % Ensure thrust_vector is a column vector
-        thrust_vector = [0; 0; thrust];  % Thrust acts along the z-axis in body frame
+        thrust_world = R_b_to_w * thrust_dir_body * T;  % Thrust in world frame
 
-        % Thrust in world frame
-        thrust_world = R_b_to_w * thrust_vector;  % Thrust acts in the world frame
+        v_rel = v - v_wind;  % Relative velocity between monocopter and wind
 
-        % Net force = thrust - gravity - drag
-        gravity = [0; 0; -m * g];  % Gravity acts downwards
-        drag = -k_D * v;  % Drag force
-        F_net = thrust_world + gravity + drag;  % Net force on the vehicle
+        % Wind force proportional to relative velocity squared
+        F_wind = -k_wind * norm(v_rel) * v_rel;
+
+        % Net force = thrust - gravity - drag + wind force
+        gravity = [0; 0; -m * g];
+        drag = -k_D * v;
+        F_net = thrust_world + gravity + drag + F_wind;
 
         % Acceleration
-        a = F_net / m;  % Compute acceleration using Newton's second law
+        a = F_net / m;
 
         % Update velocity and position
-        v = v + a * dt;  % Update velocity
-        r = r + v * dt;  % Update position
-
-        % Check for reaching the target
-        if norm(position_error) < 0.1 && target_index < size(target_positions, 2)
-            target_index = target_index + 1;  % Move to the next target position
-            integral = [0; 0; 0];  % Reset integral error when reaching a target
-        end
+        v = v + a * dt;
+        r = r + v * dt;
     end
 
     % Plot results
@@ -105,15 +89,9 @@ end
 
 %% Function to calculate the angular acceleration using Euler's equations
 function omega_dot = euler_equations(omega, M, I)
-    % Extract moments of inertia
-    I_x = I(1, 1);
-    I_y = I(2, 2);
-    I_z = I(3, 3);
+    I_x = I(1); I_y = I(2); I_z = I(3);
 
-    % Euler's equations
-    omega_x = omega(1);
-    omega_y = omega(2);
-    omega_z = omega(3);
+    omega_x = omega(1); omega_y = omega(2); omega_z = omega(3);
     omega_dot_x = (M(1) + (I_y - I_z) * omega_y * omega_z) / I_x;
     omega_dot_y = (M(2) + (I_z - I_x) * omega_z * omega_x) / I_y;
     omega_dot_z = (M(3) + (I_x - I_y) * omega_x * omega_y) / I_z;
@@ -121,11 +99,9 @@ function omega_dot = euler_equations(omega, M, I)
     omega_dot = [omega_dot_x; omega_dot_y; omega_dot_z];
 end
 
-%% Function to compute the angular velocity matrix Omega for quaternion kinematics
+%% Function to compute the angular velocity matrix for quaternion kinematics
 function Omega = omega_matrix(omega)
-    omega_x = omega(1);
-    omega_y = omega(2);
-    omega_z = omega(3);
+    omega_x = omega(1); omega_y = omega(2); omega_z = omega(3);
 
     Omega = [0, -omega_x, -omega_y, -omega_z;
              omega_x, 0, omega_z, -omega_y;
@@ -135,12 +111,8 @@ end
 
 %% Function to convert a quaternion to a rotation matrix
 function R = quat_to_rotation_matrix(q)
-    w = q(1);
-    x = q(2);
-    y = q(3);
-    z = q(4);
+    w = q(1); x = q(2); y = q(3); z = q(4);
 
-    % Compute the rotation matrix
     R = [1 - 2*y^2 - 2*z^2, 2*x*y - 2*z*w, 2*x*z + 2*y*w;
          2*x*y + 2*z*w, 1 - 2*x^2 - 2*z^2, 2*y*z - 2*x*w;
          2*x*z - 2*y*w, 2*y*z + 2*x*w, 1 - 2*x^2 - 2*y^2];
@@ -148,42 +120,37 @@ end
 
 %% Function to plot simulation results
 function plot_results(position_history, velocity_history, quaternion_history, angular_velocity_history, dt)
-    time = (0:size(position_history, 2) - 1) * dt;
+    % Time vector
+    t = (0:(size(position_history, 2) - 1)) * dt;
 
-    % 3D Trajectory plot
     figure;
-    plot3(position_history(1, :), position_history(2, :), position_history(3, :), 'b-', 'LineWidth', 1.5);
-    grid on;
-    title('Monocopter 3D Trajectory');
-    xlabel('X Position (m)');
-    ylabel('Y Position (m)');
-    zlabel('Z Position (m)');
-    view(3);  % Set 3D view for better visualization
+    % Plot 3D trajectory
+    subplot(2, 2, 1);
+    plot3(position_history(1, :), position_history(2, :), position_history(3, :));
+    xlabel('X (m)'); ylabel('Y (m)'); zlabel('Z (m)');
+    title('3D Trajectory');
 
-    % Position, velocity, quaternion, and angular velocity history
-    figure;
-    subplot(3, 1, 1);
-    plot(time, position_history(1, :), 'r', time, position_history(2, :), 'g', time, position_history(3, :), 'b');
-    title('Position (m)');
+    % Plot velocity
+    subplot(2, 2, 2);
+    plot(t, velocity_history);
     xlabel('Time (s)');
-    legend('x', 'y', 'z');
+    ylabel('Velocity (m/s)');
+    title('Velocity History');
+    legend('Vx', 'Vy', 'Vz');
 
-    subplot(3, 1, 2);
-    plot(time, velocity_history(1, :), 'r', time, velocity_history(2, :), 'g', time, velocity_history(3, :), 'b');
-    title('Velocity (m/s)');
+    % Plot quaternion
+    subplot(2, 2, 3);
+    plot(t, quaternion_history);
     xlabel('Time (s)');
-    legend('x', 'y', 'z');
+    ylabel('Quaternion');
+    title('Quaternion History');
+    legend('w', 'x', 'y', 'z');
 
-    subplot(3, 1, 3);
-    plot(time, quaternion_history(1, :), 'r', time, quaternion_history(2, :), 'g', time, quaternion_history(3, :), 'b', time, quaternion_history(4, :), 'k');
-    title('Quaternions');
+    % Plot angular velocity
+    subplot(2, 2, 4);
+    plot(t, angular_velocity_history);
     xlabel('Time (s)');
-    legend('q1', 'q2', 'q3', 'q4');
-
-    % Angular velocity plot
-    figure;
-    plot(time, angular_velocity_history(1, :), 'r', time, angular_velocity_history(2, :), 'g', time, angular_velocity_history(3, :), 'b');
-    title('Angular Velocity (rad/s)');
-    xlabel('Time (s)');
-    legend('wx', 'wy', 'wz');
+    ylabel('Angular Velocity (rad/s)');
+    title('Angular Velocity History');
+    legend('\omega_x', '\omega_y', '\omega_z');
 end
