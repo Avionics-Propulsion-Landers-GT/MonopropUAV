@@ -20,6 +20,7 @@ This project implements an attitude estimation algorithm based on the Fourati fi
 
 
 2. **Main Function**:
+
    The core function of the program is the `fouratiFilter`:
    - **Sensor Integration**: The gyroscope data is used to update the orientation by integrating angular velocity over time.
    - **Error Correction**: The accelerometer and magnetometer readings are used to correct drift in the orientation estimate and a weighted combination of errors.
@@ -27,7 +28,7 @@ This project implements an attitude estimation algorithm based on the Fourati fi
    - **Quaternion Output**: The filter outputs quaternions representing the object's orientation over time.
 
 
-3. **Helper Functions**:
+4. **Helper Functions**:
    - **Quaternion Multiplication and Normalization**: Basic quaternion operations are used to combine and normalize rotations.
    -  **Error Calculation**: The program calculates the difference between expected and measured sensor values to apply corrections.
    -  **Filtering**: Low-pass and high-pass filters remove noise and emphasize relevant sensor data.
