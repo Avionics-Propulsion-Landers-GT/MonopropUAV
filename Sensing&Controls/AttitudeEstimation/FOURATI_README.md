@@ -13,18 +13,25 @@ This project implements an attitude estimation algorithm based on the Fourati fi
 ## How It Works
 
 1. **Input Data**: The program processes a list of sensor data (`SensorData`), which contains:
-   - 3-axis accelerometer readings
-   - 3-axis gyroscope readings
-   - 3-axis magnetometer readings
-   - Timestamps for each data point
+   - Timestamps for each data point (in seconds)
+   - 3-axis accelerometer readings (X, Y, Z)
+   - 3-axis gyroscope readings (roll, pitch, yaw)
+   - 3-axis magnetometer readings (X, Y, Z)
+
 
 2. **Main Function**:
-   - The `fouratiFilter` function takes the sensor data and computes the estimated orientation for each timestamp.
-   - It integrates gyroscope data over time to update the orientation and applies corrections using the accelerometer and magnetometer to ensure accuracy.
-   - The function returns a list of quaternions representing the estimated orientation at each time step.
+   The core function of the program is the `fouratiFilter`:
+   - **Sensor Integration**: The gyroscope data is used to update the orientation by integrating angular velocity over time.
+   - **Error Correction**: The accelerometer and magnetometer readings are used to correct drift in the orientation estimate and a weighted combination of errors.
+   - **Filter Application**: Low-pass and high-pass filters are applied to smooth the input data.
+   - **Quaternion Output**: The filter outputs quaternions representing the object's orientation over time.
+
 
 3. **Helper Functions**:
-   - Several helper functions are used within the `fouratiFilter` function to handle quaternion operations, sensor filtering, and error correction, ensuring the sensor data is properly processed.
+   - **Quaternion Multiplication and Normalization**: Basic quaternion operations are used to combine and normalize rotations.
+   -  **Error Calculation**: The program calculates the difference between expected and measured sensor values to apply corrections.
+   -  **Filtering**: Low-pass and high-pass filters remove noise and emphasize relevant sensor data.
+
 
 ## How to Use
 
