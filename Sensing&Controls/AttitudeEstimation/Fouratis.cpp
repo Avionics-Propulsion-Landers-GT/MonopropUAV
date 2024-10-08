@@ -4,7 +4,7 @@
 
 using namespace std;
 
-// Structure to hold sensor data 
+// Structure to hold sensor data
 struct SensorData {
     double timestamp;
     double accel[3];
@@ -13,7 +13,7 @@ struct SensorData {
 };
 
 // Quaternion multiplication
-vector<double> quaternionMultiply(vector<double> q1, vector<double> q2) {
+vector<double> quaternionMultiply(const vector<double>& q1, const vector<double>& q2) {
     return {
         q1[0] * q2[0] - q1[1] * q2[1] - q1[2] * q2[2] - q1[3] * q2[3],
         q1[0] * q2[1] + q1[1] * q2[0] + q1[2] * q2[3] - q1[3] * q2[2],
@@ -23,13 +23,16 @@ vector<double> quaternionMultiply(vector<double> q1, vector<double> q2) {
 }
 
 // Quaternion normalization
-vector<double> normalizeQuaternion(vector<double> q) {
+vector<double> normalizeQuaternion(const vector<double>& q) {
     double norm = sqrt(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
-    return { q[0] / norm, q[1] / norm, q[2] / norm, q[3] / norm };
+    if (norm > 0) {
+        return { q[0] / norm, q[1] / norm, q[2] / norm, q[3] / norm };
+    }
+    return { 1.0, 0.0, 0.0, 0.0 }; // Return identity quaternion if dividing by 0
 }
 
-// Filters out high frequency noise 
-vector<double> lowPassFilter(vector<double> data, vector<double> prevData, double alpha = 0.1) {
+// Filters out high-frequency noise 
+vector<double> lowPassFilter(const vector<double>& data, const vector<double>& prevData, double alpha = 0.1) {
     vector<double> result(3);
     for (int i = 0; i < 3; i++) {
         result[i] = alpha * data[i] + (1 - alpha) * prevData[i];
@@ -37,8 +40,8 @@ vector<double> lowPassFilter(vector<double> data, vector<double> prevData, doubl
     return result;
 }
 
-// Filters out low frequency noise
-vector<double> highPassFilter(vector<double> data, vector<double> prevData, double alpha = 0.1) {
+// Filters out low-frequency noise
+vector<double> highPassFilter(const vector<double>& data, const vector<double>& prevData, double alpha = 0.1) {
     vector<double> lowPass = lowPassFilter(data, prevData, alpha);
     vector<double> result(3);
     for (int i = 0; i < 3; i++) {
@@ -47,31 +50,22 @@ vector<double> highPassFilter(vector<double> data, vector<double> prevData, doub
     return result;
 }
 
-// Rotating a vector with a quaternion
-vector<double> rotateVectorWithQuaternion(vector<double> vec, vector<double> q) {
-    vector<double> qVec = { 0, vec[0], vec[1], vec[2] };
+// Rotate vector with a quaternion
+vector<double> rotateVectorWithQuaternion(const vector<double>& vec, const vector<double>& q) {
     vector<double> qConjugate = { q[0], -q[1], -q[2], -q[3] };
-    vector<double> rotatedVec = quaternionMultiply(quaternionMultiply(q, qVec), qConjugate);
-    return { rotatedVec[1], rotatedVec[2], rotatedVec[3] };
-}
-
-// Compute error between expected and measured sensor values
-vector<double> computeError(vector<double> expected, vector<double> measured) {
-    vector<double> error(3);
-    for (int i = 0; i < 3; i++) {
-        error[i] = expected[i] - measured[i];
-    }
-    return error;
+    vector<double> vecQuat = { 0, vec[0], vec[1], vec[2] };
+    vector<double> rotatedVec = quaternionMultiply(quaternionMultiply(q, vecQuat), qConjugate);
+    return { rotatedVec[1], rotatedVec[2], rotatedVec[3] }; // Discard the scalar part
 }
 
 // Integrates gyroscope data and updates attitude quaternion
-vector<double> integrateGyroscope(vector<double> q, vector<double> gyro, double dt) {
+vector<double> integrateGyroscope(vector<double> q, const vector<double>& gyro, double dt) {
     // Quaternion for the gyroscope data 
     vector<double> gyroQuat = { 0, gyro[0], gyro[1], gyro[2] };
-    
-    // Scales gyroscope data by 0.5 for time elapsed sine (rate of change of a quaternion is half the angular displacement over a small time interval)
+
+    // Scale gyroscope data by 0.5 for time elapsed (rate of change of a quaternion is half the angular displacement over a small time interval)
     for (int i = 0; i < 3; i++) {
-        gyroQuat[i + 1] *= 0.5 * dt; 
+        gyroQuat[i + 1] *= 0.5 * dt;
     }
 
     // Compute the quaternion derivative
@@ -85,56 +79,44 @@ vector<double> integrateGyroscope(vector<double> q, vector<double> gyro, double 
     return normalizeQuaternion(q);
 }
 
+// Correct orientation using magnetometer and accelerometer data
+vector<double> correctOrientation(const vector<double>& q, const vector<double>& accel, const vector<double>& mag) {
+    // Expected gravity and magnetic reference vectors
+    vector<double> gravityRef = { 0, 0, 9.81 }; 
+    vector<double> magRef = { 1.0, 0.0, 0.0 }; //can be tuned later
 
-// Correct orientation using DBA and magnetometer data
-vector<double> correctOrientation(vector<double> q, vector<double> dba, vector<double> mag) {
-    // Expected gravity
-    vector<double> gravity = { 0, 0, 9.81 };
+    // Rotate reference vectors to body frame
+    vector<double> gravityBody = rotateVectorWithQuaternion(gravityRef, q);
+    vector<double> accelError = { gravityBody[0] - accel[0], gravityBody[1] - accel[1], gravityBody[2] - accel[2] };
 
-    vector<double> referenceMag = { 1.0, 0.0, 0.0 }; //can be tuned later
+    // Rotate magnetometer reading to body frame
+    vector<double> magBody = rotateVectorWithQuaternion(magRef, q);
+    vector<double> magError = { magBody[0] - mag[0], magBody[1] - mag[1], magBody[2] - mag[2] };
 
-    // Rotate gravity vector to body frame 
-    vector<double> gravityBody = rotateVectorWithQuaternion(gravity, q);
+    // Combine errors with weights for correction
+    double alphaAccel = 0.7; // Weight for accelerometer correction (TUNE)
+    double alphaMag = 0.3;   // Weight for magnetometer correction (TUNE)
 
-    // Compute error between measured and expected gravity
-    vector<double> accelError = computeError(gravityBody, dba);
+    vector<double> correctionQuat = {
+        1.0,
+        alphaAccel * accelError[0] + alphaMag * magError[0],
+        alphaAccel * accelError[1] + alphaMag * magError[1],
+        alphaAccel * accelError[2] + alphaMag * magError[2]
+    };
 
-    // compute error for the magnetic field
-    vector<double> magError = computeError(mag, referenceMag);
-
-    // Combine the error and apply correction 
-    vector<double> qCorrection = { 1, accelError[0] + magError[0], accelError[1] + magError[1], accelError[2] + magError[2] };
-    normalizeQuaternion(qCorrection);
-
-    return quaternionMultiply(q, qCorrection);
-}
-
-// Compute DBA by subtracting gravity (For use to filter out sudden motions)
-vector<double> computeDynamicBodyAcceleration(vector<double> accel, vector<double> q) {
-    vector<double> gravity = { 0, 0, 9.81 };
-
-    // Rotate gravity vector to body frame
-    vector<double> gravityBody = rotateVectorWithQuaternion(gravity, q);
-
-    // Subtract gravity from measured acceleration to get DBA
-    vector<double> dba(3);
-    for (int i = 0; i < 3; i++) {
-        dba[i] = accel[i] - gravityBody[i];
-    }
-
-    return dba;
+    return normalizeQuaternion(quaternionMultiply(q, correctionQuat));
 }
 
 // Main Fourati Filter
-vector<vector<double>> fouratiFilter(vector<SensorData> data, double alpha = 0.1) {
+vector<vector<double>> fouratiFilter(const vector<SensorData>& data, double alpha = 0.1) {
     int n = data.size();
     vector<double> q = { 1, 0, 0, 0 }; // Initial quaternion
 
-    vector<double> prevAccel = { 0, 0, 0 };
-    vector<double> prevMag = { 0, 0, 0 };
-    vector<double> prevGyro = { 0, 0, 0 };
+    vector<double> prevAccel = { data[0].accel[0], data[0].accel[1], data[0].accel[2] };
+    vector<double> prevMag = { data[0].mag[0], data[0].mag[1], data[0].mag[2] };
+    vector<double> prevGyro = { data[0].gyro[0], data[0].gyro[1], data[0].gyro[2] };
 
-    vector<vector<double>> quaternions;  // Stores the quaternions
+    vector<vector<double>> quaternions; // Stores the quaternions
 
     for (int i = 0; i < n; i++) {
         vector<double> accel = { data[i].accel[0], data[i].accel[1], data[i].accel[2] };
@@ -152,17 +134,17 @@ vector<vector<double>> fouratiFilter(vector<SensorData> data, double alpha = 0.1
         // Integrate gyroscope data
         q = integrateGyroscope(q, gyroFiltered, dt);
 
-        // Compute DBA and correct orientation
-        vector<double> dba = computeDynamicBodyAcceleration(accelFiltered, q);
-        q = correctOrientation(q, dba, magFiltered); 
+        // Correct orientation
+        q = correctOrientation(q, accelFiltered, magFiltered);
 
         // Store the quaternion
-        quaternions.push_back(q);
+        quaternions.push_back(normalizeQuaternion(q));
 
         // Update previous sensor data for next loop
         prevAccel = accelFiltered;
         prevMag = magFiltered;
         prevGyro = gyroFiltered;
+
     }
 
     return quaternions;
@@ -170,5 +152,20 @@ vector<vector<double>> fouratiFilter(vector<SensorData> data, double alpha = 0.1
 
 
 int main() {
- 
+    vector<SensorData> sensorData = {
+    {0.0, {0.0, 0.0, 9.81}, {0.0, 0.0, 0.0}, {1.0, 0.0, 0.0}},
+    {0.1, {0.1, 0.0, 9.7}, {0.0, 0.0, 0.1}, {1.0, 0.0, 0.0}},
+    {0.2, {0.0, 0.1, 9.8}, {0.0, 0.1, 0.0}, {1.0, 0.0, 0.0}},
+    {0.3, {-0.1, 0.0, 9.6}, {0.1, 0.0, 0.0}, {1.0, 0.0, 0.0}},
+    {0.4, {0.0, -0.1, 9.8}, {0.0, 0.0, -0.1}, {0.5, 0.5, 0.0}},
+    {0.5, {0.0, 0.0, 9.81}, {0.0, 0.0, 0.2}, {1.0, 0.0, 0.0}}
+    };
+
+    vector<vector<double>> quaternions = fouratiFilter(sensorData);
+
+    for (const auto& q : quaternions) {
+        cout << "Quaternion: [" << q[0] << ", " << q[1] << ", " << q[2] << ", " << q[3] << "]" << endl;
+    }
+
+    return 0;
 }

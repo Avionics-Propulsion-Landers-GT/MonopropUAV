@@ -239,7 +239,7 @@
     "pinned_symbol_libs": []
   },
   "meta": {
-    "filename": "fullSchem.kicad_pro",
+    "filename": "TICC1101.kicad_pro",
     "version": 1
   },
   "net_settings": {
@@ -384,7 +384,7 @@
   },
   "sheets": [
     [
-      "d29960fe-c2d0-44cb-92b1-6a1410218e3a",
+      "22bbd291-d3f3-4894-8cde-8c86431e335b",
       "Root"
     ]
   ],
