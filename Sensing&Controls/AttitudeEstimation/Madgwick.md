@@ -44,14 +44,23 @@ def quaternion_multiply(q1,q2):
 
 This function multiplies two quaternions.
 
+#### c. `integrate_gyro(q,gyro,dt)`
+```python
+def integrate_gyro(q, gyro, dt):
+    # ...
+```
+
+This function approximates the quaternion derivative and adjusts the orientation quaternion accordingly.
+
 ### 3. Algorithm Loop
 
 The main loop of the Madgwick Filter runs without a function being called. For each set of sensor measurement in a time step, it performs the following:
 
 1) Read sensor data to obtain sensor measurements.                                       
 2) Compute oritentation increment from accelerometer measurements (gradient step).
-3) Compute orientation from gyroscope measurements (numeriacal integration).                                       
+3) Compute orientation from gyroscope measurements (numeriacal integration).                                     
 4) Fuse the measurements from both the accelerometer and gyroscope to obtain estimated altitude(roll, pitch, yaw).
+    - Gyroscope drift is corrected using accelerometer data to maintain accurate orientation estimates. 
 
 ## To Use
 
