@@ -2,7 +2,7 @@
 ## Filter Overview
 
 The provided code implements the Madgwick filter, an algorithm that calculates the object orientation accurately from data from accelerometer, gyroscope, 
-and magnetometer(Optional).
+and magnetometer (Optional).
 The objective of Madgwick filter is to minimize the error created by raw gyroscope data, which always include high frequency of noise.
 Therefore, accelerometer and magnetometer used to compute the gyroscope measurement error and correct it via gradient-descent algorithm.
 
