@@ -4,6 +4,7 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
+import math
 
 max_tilt = 30 # maximum angle that rocket could tilt
 max_curvature = 15 # maximum curvature (based on TVC restrictions and velocity)
@@ -36,16 +37,30 @@ def second_derivative(p0, p1, p2, p3, t):
     fourth_term = tuple((6 * t)*c for c in p3)
     return tuple(first_term[c] + second_term[c] + third_term[c] + fourth_term[c] for c in range(3))
 
+# check if at point t we exceeded the maximum tilt 
+# NOTE: Do we need this check?
+def doesNotExceedTilt(max_tilt, crnt_orientation):
+    z_vec = [0,0,1] # normal vector representing the z-vector
+
+# check if at t we exceed the maximum curvature that our vehicle can handle.
+def doesNotExceedCurva(max_curv, p0, p1, p2, p3, t):
+    crnt_crv = np.linalg.norm(second_derivative(p0, p1, p2, p3, t))
+    if crnt_crv > max_curv:
+        print("NOT a valid path at this t.")
+        return False
+    else:
+        print("Is a valid path at this t.")
+        return True
 
 if __name__ == '__main__': # Plot bezier curve and print out the first and second derivatives
     # Arbitrary points, will choose later on
     p0 = (0,0,0)
     p1 = (0.1,0.2,0.3)
-    p2 = (-5,-2,-3)
+    p2 = (5,2,3)
     p3 = (1,1,1)
 
     ax = plt.figure().add_subplot(projection='3d')
-
+    ax2 = plt.figure(2).add_subplot()
     t = np.linspace(0, 1, 200) # Create np array of 200 evenly spaced values between 0 and 1
 
     # Prepare arrays x, y, z
@@ -53,17 +68,26 @@ if __name__ == '__main__': # Plot bezier curve and print out the first and secon
     y = np.array([])
     z = np.array([])
 
+    # Array for graphing the curvature
+    curvArr = np.array([])
+
     # Creating np arrays of all the points we want to plot
     for i in t:
         point = bezier_curve(p0, p1, p2, p3, i)
         x_coordinate = point[0]
         y_coordinate = point[1]
         z_coordinate = point[2]
+        curv = np.linalg.norm(second_derivative(p0, p1, p2, p3, i))
 
         x = np.append(x, x_coordinate)
         y = np.append(y, y_coordinate)
         z = np.append(z, z_coordinate)
 
+        curvArr = np.append(curvArr, curv)
+    
+    ax2.plot(t, curvArr, label='curvature wrt t')
+    ax2.axhline(y = max_curvature, color = 'red', linestyle = '--', label = 'Max Curvature')
+    ax2.legend()
     ax.plot(x, y, z, label='bezier curve')
     ax.legend()
 
@@ -71,7 +95,5 @@ if __name__ == '__main__': # Plot bezier curve and print out the first and secon
     print(f"The first derivative when t is {test_t} is {first_derivative(p0,p1,p2,p3,test_t)}")
     print(f"The second derivative when t is {test_t} is {second_derivative(p0,p1,p2,p3,test_t)}")
 
+    doesNotExceedCurva(max_curvature, p0, p1, p2, p3, test_t)
     plt.show()
-
-
-
