@@ -4,10 +4,11 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
-import math
+import random
 
 max_tilt = 30 # maximum angle that rocket could tilt
 max_curvature = 15 # maximum curvature (based on TVC restrictions and velocity)
+const = 0.1 # arbitrary constraint value, change at will.
 
 """
 Formula for a cubic bezier curve.
@@ -53,11 +54,15 @@ def doesNotExceedCurva(max_curv, p0, p1, p2, p3, t):
         return True
 
 if __name__ == '__main__': # Plot bezier curve and print out the first and second derivatives
-    # Arbitrary points, will choose later on
+    # generate p1 and p2 randomly (dependent on p0 and p3), then check if the path is valid.
+    ## if not, see what we can do to get it right (how idk)
     p0 = (0,0,0)
-    p1 = (0.1,0.2,0.3)
-    p2 = (5,2,3)
     p3 = (1,1,1)
+    usedPoints = []
+    p1 = tuple(random.uniform(max(p0[0], p0[1], p0[2]), max(p3[0], p3[1], p3[2])) for _ in range(3))
+    p2 = tuple(random.uniform(max(p0[0], p0[1], p0[2]), max(p3[0], p3[1], p3[2])) for _ in range(3))
+    usedPoints.append(p1)
+    usedPoints.append(p2)
 
     ax = plt.figure().add_subplot(projection='3d')
     ax2 = plt.figure(2).add_subplot()
@@ -71,6 +76,18 @@ if __name__ == '__main__': # Plot bezier curve and print out the first and secon
     # Array for graphing the curvature
     curvArr = np.array([])
 
+    # check if at any point in t we exceed the curvature constraint
+    for i in t:
+        if doesNotExceedCurva(max_curvature, p0, p1, p2, p3, i) == False:
+            # generate new points to try
+            # this is a bit of a brute force solution but i dont really care rn
+            p1_new = tuple(random.uniform(max(p0[0], p0[1], p0[2]), max(p3[0], p3[1], p3[2])) for _ in range(3))
+            p2_new = tuple(random.uniform(max(p0[0], p0[1], p0[2]), max(p3[0], p3[1], p3[2])) for _ in range(3))
+            while (np.linalg.norm(p2_new - c) <= const or np.linalg.norm(p1_new - c) <= const for c in usedPoints):
+                p1_new = tuple(random.uniform(max(p0[0], p0[1], p0[2]), max(p3[0], p3[1], p3[2])) for _ in range(3))
+                p2_new = tuple(random.uniform(max(p0[0], p0[1], p0[2]), max(p3[0], p3[1], p3[2])) for _ in range(3))
+            break
+
     # Creating np arrays of all the points we want to plot
     for i in t:
         point = bezier_curve(p0, p1, p2, p3, i)
@@ -78,7 +95,7 @@ if __name__ == '__main__': # Plot bezier curve and print out the first and secon
         y_coordinate = point[1]
         z_coordinate = point[2]
         curv = np.linalg.norm(second_derivative(p0, p1, p2, p3, i))
-
+    
         x = np.append(x, x_coordinate)
         y = np.append(y, y_coordinate)
         z = np.append(z, z_coordinate)
