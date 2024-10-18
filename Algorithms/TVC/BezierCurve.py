@@ -40,6 +40,7 @@ def second_derivative(p0, p1, p2, p3, t):
 
 # check if at point t we exceeded the maximum tilt 
 # NOTE: Do we need this check?
+# We should keep this check in, we'll need it to ensure the rocket doesn't roll out - Nathan
 def doesNotExceedTilt(max_tilt, crnt_orientation):
     z_vec = [0,0,1] # normal vector representing the z-vector
 
@@ -113,4 +114,10 @@ if __name__ == '__main__': # Plot bezier curve and print out the first and secon
     print(f"The second derivative when t is {test_t} is {second_derivative(p0,p1,p2,p3,test_t)}")
 
     doesNotExceedCurva(max_curvature, p0, p1, p2, p3, test_t)
+
+    print(p0)
+    print(p1)
+    print(p2)
+    print(p3)
+    
     plt.show()
