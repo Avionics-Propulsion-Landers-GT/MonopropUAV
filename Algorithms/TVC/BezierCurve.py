@@ -8,7 +8,7 @@ import random
 
 max_tilt = 30 # maximum angle that rocket could tilt
 max_curvature = 15 # maximum curvature (based on TVC restrictions and velocity)
-const = 0.1 # arbitrary constraint value, change at will.
+const = 0.1 # arbitrary constraint value, change at will to tune algorithm.
 
 """
 Formula for a cubic bezier curve.
@@ -42,25 +42,36 @@ def second_derivative(p0, p1, p2, p3, t):
 # NOTE: Do we need this check?
 def doesNotExceedTilt(max_tilt, crnt_orientation):
     z_vec = [0,0,1] # normal vector representing the z-vector
+    crnt_norm = crnt_orientation / np.linalg.norm(crnt_orientation)
+    alpha = np.arccos(np.dot(z_vec, crnt_norm))
+    if alpha >= max_tilt:
+        return False
+    else:
+        return True
 
 # check if at t we exceed the maximum curvature that our vehicle can handle.
 def doesNotExceedCurva(max_curv, p0, p1, p2, p3, t):
     crnt_crv = np.linalg.norm(second_derivative(p0, p1, p2, p3, t))
     if crnt_crv > max_curv:
-        print("NOT a valid path at this t.")
+        # print("NOT a valid path at this t.")
+        # for debugging
         return False
     else:
-        print("Is a valid path at this t.")
+        # print("Is a valid path at this t.")
+        # for debugging
         return True
+
+def genRand(p_init, p_final):
+    return tuple(random.uniform(min(p_init[0], p_init[1], p_init[2]), max(p_final[0], p_final[1], p_final[2])) for _ in range(3))
 
 if __name__ == '__main__': # Plot bezier curve and print out the first and second derivatives
     # generate p1 and p2 randomly (dependent on p0 and p3), then check if the path is valid.
     ## if not, see what we can do to get it right (how idk)
     p0 = (0,0,0)
-    p3 = (1,1,1)
+    p3 = (1,6,1)
     usedPoints = []
-    p1 = tuple(random.uniform(max(p0[0], p0[1], p0[2]), max(p3[0], p3[1], p3[2])) for _ in range(3))
-    p2 = tuple(random.uniform(max(p0[0], p0[1], p0[2]), max(p3[0], p3[1], p3[2])) for _ in range(3))
+    p1 = genRand(p0,p3)
+    p2 = genRand(p0,p3)
     usedPoints.append(p1)
     usedPoints.append(p2)
 
@@ -77,16 +88,27 @@ if __name__ == '__main__': # Plot bezier curve and print out the first and secon
     curvArr = np.array([])
 
     # check if at any point in t we exceed the curvature constraint
-    for i in t:
-        if doesNotExceedCurva(max_curvature, p0, p1, p2, p3, i) == False:
-            # generate new points to try
-            # this is a bit of a brute force solution but i dont really care rn
-            p1_new = tuple(random.uniform(max(p0[0], p0[1], p0[2]), max(p3[0], p3[1], p3[2])) for _ in range(3))
-            p2_new = tuple(random.uniform(max(p0[0], p0[1], p0[2]), max(p3[0], p3[1], p3[2])) for _ in range(3))
-            while (np.linalg.norm(p2_new - c) <= const or np.linalg.norm(p1_new - c) <= const for c in usedPoints):
-                p1_new = tuple(random.uniform(max(p0[0], p0[1], p0[2]), max(p3[0], p3[1], p3[2])) for _ in range(3))
-                p2_new = tuple(random.uniform(max(p0[0], p0[1], p0[2]), max(p3[0], p3[1], p3[2])) for _ in range(3))
-            break
+    valid_path_found = False
+
+    while not valid_path_found:
+        # Generate random points
+        p1 = genRand(p0,p3)
+        p2 = genRand(p0,p3)
+        usedPoints.append(p1)
+        usedPoints.append(p2)
+
+        valid_path_found = True  # Assume valid until proven otherwise
+        
+        # Check curvature and tilt for each t value in the curve
+        t = np.linspace(0, 1, 200)
+        for i in t:
+            crnt_orientation = first_derivative(p0, p1, p2, p3, i)
+            if not doesNotExceedCurva(max_curvature, p0, p1, p2, p3, i) or not doesNotExceedTilt(max_tilt, crnt_orientation):
+                valid_path_found = False
+                break  # No need to keep checking, start over with new random points
+
+        if not valid_path_found:
+            print("Invalid path, retrying with new random points...")
 
     # Creating np arrays of all the points we want to plot
     for i in t:
@@ -111,6 +133,8 @@ if __name__ == '__main__': # Plot bezier curve and print out the first and secon
     test_t = 0.8
     print(f"The first derivative when t is {test_t} is {first_derivative(p0,p1,p2,p3,test_t)}")
     print(f"The second derivative when t is {test_t} is {second_derivative(p0,p1,p2,p3,test_t)}")
+
+    print(f"P1 = {p1}, P2 = {p2}")
 
     doesNotExceedCurva(max_curvature, p0, p1, p2, p3, test_t)
     plt.show()
