@@ -16,6 +16,9 @@ Formula for a cubic bezier curve.
 :param p0, p1, p2, p3: tuples of form (x,y,z) 
 :param t: decimal between 0 and 1 representing time
 :return: tuple containing the coordinates in (x,y,z) of the curve at the respective t value
+
+TO-DO: add ability to check if velocity vector at end is the same as the desired end vector 
+TO-DO: define "gradient descent" func or some func to adjust an initial p1 and p2 to align with our constraints if they are not compatible
 """
 def bezier_curve(p0, p1, p2, p3, t):
     first_term = tuple(((1 - t) ** 3) * c for c in p0)
@@ -66,8 +69,6 @@ def genRand(p_init, p_final):
     return tuple(random.uniform(min(p_init[0], p_init[1], p_init[2]), max(p_final[0], p_final[1], p_final[2])) for _ in range(3))
 
 if __name__ == '__main__': # Plot bezier curve and print out the first and second derivatives
-    # generate p1 and p2 randomly (dependent on p0 and p3), then check if the path is valid.
-    ## if not, see what we can do to get it right (how idk)
     p0 = (0,0,0)
     p3 = (1,6,1)
     usedPoints = []
