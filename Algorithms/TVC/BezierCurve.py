@@ -102,7 +102,6 @@ if __name__ == '__main__': # Plot bezier curve and print out the first and secon
         valid_path_found = True  # Assume valid until proven otherwise
         
         # Check curvature and tilt for each t value in the curve
-        t = np.linspace(0, 1, 200)
         for i in t:
             crnt_orientation = first_derivative(p0, p1, p2, p3, i)
             if not doesNotExceedCurva(max_curvature, p0, p1, p2, p3, i) or not doesNotExceedTilt(max_tilt, crnt_orientation):
