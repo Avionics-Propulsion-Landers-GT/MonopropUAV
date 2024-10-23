@@ -29,9 +29,9 @@ class Complementary():
         # z tilt from adjusted magnetometer data
         tilt_angles = np.array([np.arctan2(accel[1], accel[0]), np.arctan2(-accel[0], np.sqrt(accel[1] ** 2 + accel[2] ** 2)), 0])
         b = np.matmul(np.array(
-            [np.cos(tilt_angles[0]), np.sin(tilt_angles[0]) * np.sin(tilt_angles[1]), np.sin(tilt_angles[0]) * np.cos(tilt_angles[1])],
+            [[np.cos(tilt_angles[0]), np.sin(tilt_angles[0]) * np.sin(tilt_angles[1]), np.sin(tilt_angles[0]) * np.cos(tilt_angles[1])],
             [0, np.cos(tilt_angles[1]), -np.sin(tilt_angles[1])],
-            [-np.sin(tilt_angles[0]), np.cos(tilt_angles[0]) * np.sin(tilt_angles[1]), np.cos(tilt_angles[0]) * np.cos(tilt_angles[1])]), mag)
+            [-np.sin(tilt_angles[0]), np.cos(tilt_angles[0]) * np.sin(tilt_angles[1]), np.cos(tilt_angles[0]) * np.cos(tilt_angles[1])]]), mag)
         tilt_angles[2] = np.arctan2(-b[1], b[0])
 
         # Estimates attitude from previous estimate and gyro data with simple integration over time
@@ -44,7 +44,7 @@ class Complementary():
         # Takes an average of the two estimates and normalizes it
         self.attitude_estimation =  self.gain * gyro_estimate + (1 - self.gain) * tilt_angles
         if (np.linalg.norm(self.attitude_estimation) != 0):
-            self.attitude_estimation = self.attitude_estimation / np.linalg.norm(self.attitude_estimations)
+            self.attitude_estimation = self.attitude_estimation / np.linalg.norm(self.attitude_estimation)
 
         # Returns the attitude estimate
         return self.get_estimate()
