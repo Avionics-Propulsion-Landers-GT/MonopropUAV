@@ -78,6 +78,16 @@ def genPoints(p_init, p_final):
 def vectorsAligned(v_init, v_final):
     return first_derivative(p0,p1,p2,p3,0) == v_init and first_derivative(p0,p1,p2,p3,1) == v_final
 
+def planarSolution(start_point, end_point):
+    distance = end_point[2] - start_point[2]
+    z1 = (1/3) * distance + start_point[2]
+    z2 = (2/3) * distance + start_point[2]
+
+    p1 = (start_point[0], start_point[1], z1)
+    p2 = (end_point[0], end_point[1], z2)
+
+    return (p1, p2)
+
 if __name__ == '__main__': # Plot bezier curve and print out the first and second derivatives
     p0 = (0,0,0)
     p3 = (1,6,1) # random end point, adjust as necesary
