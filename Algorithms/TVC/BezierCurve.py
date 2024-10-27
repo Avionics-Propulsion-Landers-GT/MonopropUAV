@@ -71,9 +71,11 @@ def genRand(p_init, p_final):
 def genPoints(p_init, p_final):
     if np.dot(np.linalg.norm(np.subtract(p_final - p_init)), np.array([0,0,1])) <= max_angle :
         ## planar method (2 dimensional)
+        pass
     else: 
         ## hermite curve (3 dimensional)
         # return the 2 points as tuples or as np arrays.
+        pass
 
 def vectorsAligned(v_init, v_final):
     return first_derivative(p0,p1,p2,p3,0) == v_init and first_derivative(p0,p1,p2,p3,1) == v_final
@@ -87,6 +89,13 @@ def planarSolution(start_point, end_point):
     p2 = (end_point[0], end_point[1], z2)
 
     return (p1, p2)
+
+# Hermite Curve: P(t) = (1-t)^3 * P0 + 3t(1-t)^2 * P0' + 3t^2(1-t) * P1 + t^3 * P1' where P0 and P1 are start and end points, P0' and P1' are tangent vectors at those points
+def hermiteCurve(p0, p0_prime, p1, p1_prime, t):
+    x = (1-t)**3 * p0[0] + 3 * t * (1-t)**2 * p0_prime[0] + 3 * t**2 * (1-t) * p1[0] + t**3 * p1_prime[0]
+    y = (1-t)**3 * p0[1] + 3 * t * (1-t)**2 * p0_prime[1] + 3 * t**2 * (1-t) * p1[1] + t**3 * p1_prime[1]  
+    z = (1-t)**3 * p0[2] + 3 * t * (1-t)**2 * p0_prime[2] + 3 * t**2 * (1-t) * p1[2] + t**3 * p1_prime[2]  
+    return (x, y, z)
 
 if __name__ == '__main__': # Plot bezier curve and print out the first and second derivatives
     p0 = (0,0,0)
@@ -156,17 +165,18 @@ if __name__ == '__main__': # Plot bezier curve and print out the first and secon
     ax.plot(x, y, z, label='bezier curve')
     ax.legend()
 
-    # test_t = 0.8
-    # print(f"The first derivative when t is {test_t} is {first_derivative(p0,p1,p2,p3,test_t)}")
-    # print(f"The second derivative when t is {test_t} is {second_derivative(p0,p1,p2,p3,test_t)}")
+    test_t = 0.8
+    print(f"The first derivative when t is {test_t} is {first_derivative(p0,p1,p2,p3,test_t)}")
+    print(f"The second derivative when t is {test_t} is {second_derivative(p0,p1,p2,p3,test_t)}")
 
-    # print(f"P1 = {p1}, P2 = {p2}")
+    print(f"P1 = {p1}, P2 = {p2}")
 
-    # doesNotExceedCurva(max_curvature, p0, p1, p2, p3, test_t)
+    doesNotExceedCurva(max_curvature, p0, p1, p2, p3, test_t)
 
-    # print(p0)
-    # print(p1)
-    # print(p2)
-    # print(p3)
+    print(p0)
+    print(p1)
+    print(p2)
+    print(p3)
     
     plt.show()
+ 
