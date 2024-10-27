@@ -69,24 +69,28 @@ def genRand(p_init, p_final):
     return tuple(random.uniform(min(p_init[0], p_init[1], p_init[2]), max(p_final[0], p_final[1], p_final[2])) for _ in range(3))
 
 def genPoints(p_init, p_final):
+    p1, p2
     if np.dot(np.linalg.norm(np.subtract(p_final - p_init)), np.array([0,0,1])) <= max_angle :
-        ## planar method (2 dimensional)
-        pass
+        # assuming that initial and end velocity vectors are parallel to the z unit vector.
+        p1, p2 = planarSolution(p_init, p_final)
     else: 
+        p1, p2 = planarSolution(p_init, p_final)
+        
         ## hermite curve (3 dimensional)
         # return the 2 points as tuples or as np arrays.
-        pass
+    
+    return (p1, p2)
 
 def vectorsAligned(v_init, v_final):
     return first_derivative(p0,p1,p2,p3,0) == v_init and first_derivative(p0,p1,p2,p3,1) == v_final
 
-def planarSolution(start_point, end_point):
-    distance = end_point[2] - start_point[2]
-    z1 = (1/3) * distance + start_point[2]
-    z2 = (2/3) * distance + start_point[2]
+def planarSolution(p_init, p_final):
+    distance = p_init[2] - p_final[2]
+    z1 = (1/3) * distance + p_init[2]
+    z2 = (2/3) * distance + p_init[2]
 
-    p1 = (start_point[0], start_point[1], z1)
-    p2 = (end_point[0], end_point[1], z2)
+    p1 = (p_init[0], p_init[1], z1)
+    p2 = (p_final[0], p_final[1], z2)
 
     return (p1, p2)
 
