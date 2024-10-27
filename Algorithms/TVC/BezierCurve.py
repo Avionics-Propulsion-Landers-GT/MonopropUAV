@@ -9,6 +9,7 @@ import random
 max_tilt = 30 # maximum angle that rocket could tilt
 max_curvature = 15 # maximum curvature (based on TVC restrictions and velocity)
 const = 0.1 # arbitrary constraint value, change at will to tune algorithm.
+max_angle = 15 # maximum angle that the TVC can achieve. Degrees.
 
 """
 Formula for a cubic bezier curve.
@@ -67,15 +68,22 @@ def doesNotExceedCurva(max_curv, p0, p1, p2, p3, t):
 def genRand(p_init, p_final):
     return tuple(random.uniform(min(p_init[0], p_init[1], p_init[2]), max(p_final[0], p_final[1], p_final[2])) for _ in range(3))
 
+def genPoints(p_init, p_final):
+    if np.dot(np.linalg.norm(np.subtract(p_final - p_init)), np.array([0,0,1])) <= max_angle :
+        ## planar method (2 dimensional)
+    else: 
+        ## hermite curve (3 dimensional)
+        # return the 2 points as tuples or as np arrays.
+
 def vectorsAligned(v_init, v_final):
     return first_derivative(p0,p1,p2,p3,0) == v_init and first_derivative(p0,p1,p2,p3,1) == v_final
 
 if __name__ == '__main__': # Plot bezier curve and print out the first and second derivatives
     p0 = (0,0,0)
-    p3 = (1,6,1)
+    p3 = (1,6,1) # random end point, adjust as necesary
     usedPoints = []
-    p1 = genRand(p0,p3)
-    p2 = genRand(p0,p3)
+    p1 = genRand(p0,p3) # use genPoints func
+    p2 = genRand(p0,p3) # use genPoints func
     usedPoints.append(p1)
     usedPoints.append(p2)
 
@@ -97,7 +105,7 @@ if __name__ == '__main__': # Plot bezier curve and print out the first and secon
     # initial and final velocity vectors (to ease the process of chaining together bezier curves)
     v_init = tuple([0,0,1])
     v_final = tuple([0,0,1])
-    # adjust these as necessary. Prob write a func to take these in.
+    # adjust these as necessary. 
 
     while not valid_path_found:
         # Generate random points
