@@ -16,9 +16,8 @@ Formula for a cubic bezier curve.
 :param p0, p1, p2, p3: tuples of form (x,y,z) 
 :param t: decimal between 0 and 1 representing time
 :return: tuple containing the coordinates in (x,y,z) of the curve at the respective t value
-
-TO-DO: add ability to check if velocity vector at end is the same as the desired end vector 
-TO-DO: define "gradient descent" func or some func to adjust an initial p1 and p2 to align with our constraints if they are not compatible
+ 
+TO-DO: implement Nathan's method
 """
 def bezier_curve(p0, p1, p2, p3, t):
     first_term = tuple(((1 - t) ** 3) * c for c in p0)
@@ -68,6 +67,9 @@ def doesNotExceedCurva(max_curv, p0, p1, p2, p3, t):
 def genRand(p_init, p_final):
     return tuple(random.uniform(min(p_init[0], p_init[1], p_init[2]), max(p_final[0], p_final[1], p_final[2])) for _ in range(3))
 
+def vectorsAligned(v_init, v_final):
+    return first_derivative(p0,p1,p2,p3,0) == v_init and first_derivative(p0,p1,p2,p3,1) == v_final
+
 if __name__ == '__main__': # Plot bezier curve and print out the first and second derivatives
     p0 = (0,0,0)
     p3 = (1,6,1)
@@ -92,6 +94,11 @@ if __name__ == '__main__': # Plot bezier curve and print out the first and secon
     # check if at any point in t we exceed the curvature constraint
     valid_path_found = False
 
+    # initial and final velocity vectors (to ease the process of chaining together bezier curves)
+    v_init = tuple([0,0,1])
+    v_final = tuple([0,0,1])
+    # adjust these as necessary. Prob write a func to take these in.
+
     while not valid_path_found:
         # Generate random points
         p1 = genRand(p0,p3)
@@ -104,7 +111,7 @@ if __name__ == '__main__': # Plot bezier curve and print out the first and secon
         # Check curvature and tilt for each t value in the curve
         for i in t:
             crnt_orientation = first_derivative(p0, p1, p2, p3, i)
-            if not doesNotExceedCurva(max_curvature, p0, p1, p2, p3, i) or not doesNotExceedTilt(max_tilt, crnt_orientation):
+            if not doesNotExceedCurva(max_curvature, p0, p1, p2, p3, i) or not doesNotExceedTilt(max_tilt, crnt_orientation) or not vectorsAligned(v_init, v_final):
                 valid_path_found = False
                 break  # No need to keep checking, start over with new random points
 
@@ -131,17 +138,17 @@ if __name__ == '__main__': # Plot bezier curve and print out the first and secon
     ax.plot(x, y, z, label='bezier curve')
     ax.legend()
 
-    test_t = 0.8
-    print(f"The first derivative when t is {test_t} is {first_derivative(p0,p1,p2,p3,test_t)}")
-    print(f"The second derivative when t is {test_t} is {second_derivative(p0,p1,p2,p3,test_t)}")
+    # test_t = 0.8
+    # print(f"The first derivative when t is {test_t} is {first_derivative(p0,p1,p2,p3,test_t)}")
+    # print(f"The second derivative when t is {test_t} is {second_derivative(p0,p1,p2,p3,test_t)}")
 
-    print(f"P1 = {p1}, P2 = {p2}")
+    # print(f"P1 = {p1}, P2 = {p2}")
 
-    doesNotExceedCurva(max_curvature, p0, p1, p2, p3, test_t)
+    # doesNotExceedCurva(max_curvature, p0, p1, p2, p3, test_t)
 
-    print(p0)
-    print(p1)
-    print(p2)
-    print(p3)
+    # print(p0)
+    # print(p1)
+    # print(p2)
+    # print(p3)
     
     plt.show()
