@@ -306,5 +306,36 @@ function plot_results(position_history, velocity_history, acceleration_history, 
     % Saving to file
     output_data = [time', position_history', velocity_history', acceleration_history', angular_velocity_history'];
     csvwrite('monocopter_data.csv', output_data);
-    
+    output_data2 = [time', quaternion_history'];
+    csvwrite('quaternion_data.csv',output_data2);
+    eulers = zeros(3, size(quaternion_history,2));
+    for i = 1:size(quaternion_history,2)
+        
+        w = quaternion_history(1,i);
+        x = quaternion_history(2,i);
+        y = quaternion_history(3,i);
+        z = quaternion_history(4,i);
+        %{
+        roll = atan2(2*(y*z + w*x), w^2 + x^2 - y^2 - z^2);
+        pitch = asin(2*(w*y - z*x));
+        yaw = atan2(2*(x*y + w*z), w^2 - x^2 - y^2 + z^2);
+        eulers(:,i) = [roll; pitch; yaw];
+        %}
+        %euler = quat2eul([w,x,y,z],"ZYX")
+        
+    end
+    output_data3 = [time', eulers'];
+    csvwrite('eulers_data.csv',output_data3);
+
+    m = 378;
+    w = quaternion_history(1,m);
+    x = quaternion_history(2,m);
+    y = quaternion_history(3,m);
+    z = quaternion_history(4,m);
+    disp([w,x,y,z])
+    roll = eulers(1,m);
+    pitch = eulers(2,m);
+    yaw = eulers(3,m);
+    quat2eul([w,x,y,z])
+
 end  % End of plot_results function
