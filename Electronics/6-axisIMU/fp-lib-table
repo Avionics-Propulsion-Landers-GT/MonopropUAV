@@ -1,0 +1,4 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "6-axisIMU_footprints")(type "KiCad")(uri "${KIPRJMOD}/6-axisIMU_footprints.pretty")(options "")(descr ""))
+)
