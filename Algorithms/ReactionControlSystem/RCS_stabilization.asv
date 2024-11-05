@@ -1,0 +1,118 @@
+% Initialize PID gains
+Kp = 1.0;  % Proportional gain for velocity error
+Kd = 0.2;  % Derivative gain for acceleration error
+Ki = 0.2; % Integral gain for accumulated velocity error
+
+% Initialize state variables
+theta_dot = 3;  % Current angular velocity (rad/s)
+theta_dot_desired = 0;  % Desired angular velocity (0 for stabilization)
+theta = 0;  % Current roll angle (rad)
+
+% Initialize thruster forces (F1, F2, F3, F4)
+F1 = 0;  % Thrust from the first thruster
+F2 = 0;  % Thrust from the second thruster
+F3 = 0;  % Thrust from the third thruster
+F4 = 0;  % Thrust from the fourth thruster
+
+% Distance from center to thrusters (radius)
+r = 1.0;  % distance from the center of mass to the thrusters (meters)
+I = 10.0;  % moment of inertia (kg*m^2)
+thrust_max = 10
+
+% Time settings
+dt = 0.1;  % Time step (seconds)
+t_end = 10; % Total simulation time (seconds)
+time_steps = 0:dt:t_end; % Time vector
+
+% Initialize arrays to store results for plotting
+theta_vals = zeros(size(time_steps));  % Roll angle (rad)
+theta_dot_vals = zeros(size(time_steps));  % Angular velocity (rad/s)
+F1_vals = zeros(size(time_steps));  % Thrust from F1
+F2_vals = zeros(size(time_steps));  % Thrust from F2
+F3_vals = zeros(size(time_steps));  % Thrust from F3
+F4_vals = zeros(size(time_steps));  % Thrust from F4
+
+% Initialize error terms for PID
+previous_error = 0;
+integral = 0;
+
+% Control loop (run at a constant time step dt)
+for i = 1:length(time_steps)
+    % Calculate the error terms
+    e_theta_dot = theta_dot_desired - theta_dot;  % Error in angular velocity
+    
+    % Update the integral term (for velocity error)
+    integral = integral + e_theta_dot * dt;
+    
+    % Compute the derivative term (rate of change of velocity error)
+    derivative = (e_theta_dot - previous_error) / dt;
+    
+    % Calculate the PID control output (thrust force for the net thrust)
+    F_total = Kp * e_theta_dot + Kd * derivative + Ki * integral;
+    
+    if F_total < 0
+        F2 = F2 - F_total/2;
+        F4 = F4 - F_total/2;
+        F1 = 0;
+        F3 = 0;
+    else
+        F1 = F1 + F_total/2;
+        F3 = F3 + F_total/2;
+        F2 = 0;
+        F4 = 0;
+    end
+    net_torque = r*(F1-F2+F3-F4);
+    angular_acceleration = net_torque / I;
+    theta_dot = theta_dot + angular_acceleration * dt;
+    theta = theta + theta_dot * dt;
+
+    % Store roll angle and angular velocity for plotting
+    theta_vals(i) = theta;
+    theta_dot_vals(i) = theta_dot;
+
+    F1_vals(i) = F1;
+    F2_vals(i) = F2;
+    F3_vals(i) = F3;
+    F4_vals(i) = F4;
+    
+    % Update previous error for the next iteration
+    previous_error = e_theta_dot;
+end
+
+% Plot the results
+figure;
+
+% Plot roll angle (theta)
+subplot(4, 1, 1);
+plot(time_steps, theta_vals, 'LineWidth', 2);
+xlabel('Time (s)');
+ylabel('Roll Angle (rad)');
+title('Roll Angle vs. Time');
+grid on;
+
+% Plot angular velocity (theta_dot)
+subplot(4, 1, 2);
+plot(time_steps, theta_dot_vals, 'LineWidth', 2);
+xlabel('Time (s)');
+ylabel('Angular Velocity (rad/s)');
+title('Angular Velocity vs. Time');
+grid on;
+
+% Plot thruster forces (F1, F2)
+subplot(4, 1, 3);
+plot(time_steps, F1_vals, 'r', 'LineWidth', 2); hold on;
+plot(time_steps, F2_vals, 'g', 'LineWidth', 2);
+xlabel('Time (s)');
+ylabel('Thrust (N)');
+title('Thruster Forces vs. Time');
+legend('F1', 'F2');
+grid on;
+
+subplot(4, 1, 4);
+plot(time_steps, F3_vals, 'b', 'LineWidth', 2); hold on;
+plot(time_steps, F4_vals, 'm', 'LineWidth', 2);
+xlabel('Time (s)');
+ylabel('Thrust (N)');
+title('Thruster Forces vs. Time');
+legend('F3', 'F4');
+grid on;
