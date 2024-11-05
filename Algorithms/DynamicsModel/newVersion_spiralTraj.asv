@@ -315,15 +315,14 @@ function plot_results(position_history, velocity_history, acceleration_history, 
         w = quaternion_history(1,i)/norm(quaternion_history(:,i));
         x = quaternion_history(2,i)/norm(quaternion_history(:,i));
         y = quaternion_history(3,i)/norm(quaternion_history(:,i));
-        z = quaternion_history(4,i)/norm(quaternion_history(:,i));
+        z = quaternion_history(4,i)/norm(quaternion_history(:));
         
         roll = atan2(2*(w*x + y*z),1-2*(x^2+y^2));
         pitch = -pi/2 + 2*atan2(sqrt(1+2*(w*y - x*z)),sqrt(1-2*(w*y - x*z)));
         yaw = atan2(2*(w*z + x*y), 1-2*(y^2+z^2));
-        [roll; pitch; yaw]
         eulers_calc(:,i) = [roll; pitch; yaw];
         
-        euler = quat2eul([w,x,y,z],"XYZ")
+        euler = quat2eul([w,x,y,z],"XYZ");
         eulers(:,i) = euler;
         
     end
