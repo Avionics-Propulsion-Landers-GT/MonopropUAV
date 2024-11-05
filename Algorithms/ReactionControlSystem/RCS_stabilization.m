@@ -2,7 +2,7 @@ Kp = 1.0;
 Kd = 0.2;
 Ki = 0.5;
 
-theta_dot = 3;
+theta_dot = 0.6;
 theta_dot_desired = 0;
 theta = 0;
 
@@ -13,14 +13,15 @@ F4 = 0;
 
 r = 1.0;
 I = 10.0;
-thrust_max = 15;
+thrust_max = 2;
 
 dt = 0.1;
-t_end = 10;
+t_end = 20;
 time_steps = 0:dt:t_end;
 
 theta_vals = zeros(size(time_steps));
 theta_dot_vals = zeros(size(time_steps));
+angular_acceleration_vals = zeros(size(time_steps));
 F1_vals = zeros(size(time_steps));
 F2_vals = zeros(size(time_steps));
 F3_vals = zeros(size(time_steps));
@@ -56,10 +57,10 @@ for i = 1:length(time_steps)
     angular_acceleration = net_torque / I;
     theta_dot = theta_dot + angular_acceleration * dt;
     theta = theta + theta_dot * dt;
-    disp(theta_dot)
 
     theta_vals(i) = theta;
     theta_dot_vals(i) = theta_dot;
+    angular_acceleration_vals(i) = angular_acceleration;
     F1_vals(i) = F1;
     F2_vals(i) = F2;
     F3_vals(i) = F3;
@@ -68,35 +69,44 @@ for i = 1:length(time_steps)
     previous_error = e_theta_dot;
 end
 
+disp(theta_dot_vals(1:100))
+
 figure;
-subplot(4, 1, 1);
+subplot(5, 1, 1);
 plot(time_steps, theta_vals, 'LineWidth', 2);
-xlabel('Time (s)');
-ylabel('Roll Angle (rad)');
-title('Roll Angle vs. Time');
+xlabel('time (s)');
+ylabel('roll angle (rad)');
+title('roll angle vs. time');
 grid on;
 
-subplot(4, 1, 2);
+subplot(5, 1, 2);
 plot(time_steps, theta_dot_vals, 'LineWidth', 2);
-xlabel('Time (s)');
-ylabel('Angular Velocity (rad/s)');
-title('Angular Velocity vs. Time');
+xlabel('time (s)');
+ylabel('angular Velocity (rad/s)');
+title('angular velocity vs. time');
 grid on;
 
-subplot(4, 1, 3);
+subplot(5, 1, 3);
 plot(time_steps, F1_vals, 'r', 'LineWidth', 2); hold on;
 plot(time_steps, F2_vals, 'g', 'LineWidth', 2);
-xlabel('Time (s)');
-ylabel('Thrust (N)');
-title('Thruster Forces vs. Time');
+xlabel('time (s)');
+ylabel('thrust (N)');
+title('thruster forces vs. time');
 legend('F1', 'F2');
 grid on;
 
-subplot(4, 1, 4);
+subplot(5, 1, 4);
 plot(time_steps, F3_vals, 'b', 'LineWidth', 2); hold on;
 plot(time_steps, F4_vals, 'm', 'LineWidth', 2);
-xlabel('Time (s)');
-ylabel('Thrust (N)');
-title('Thruster Forces vs. Time');
+xlabel('time (s)');
+ylabel('thrust (N)');
+title('thruster forces vs. Time');
 legend('F3', 'F4');
+grid on;
+
+subplot(5, 1, 5);
+plot(time_steps, angular_acceleration_vals, 'LineWidth', 2);
+xlabel('time (s)');
+ylabel('angular acceleration (rad/s^2)');
+title('angular acceleration vs. time');
 grid on;
