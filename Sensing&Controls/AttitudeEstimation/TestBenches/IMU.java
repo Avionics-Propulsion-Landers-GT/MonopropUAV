@@ -20,23 +20,23 @@ public class IMU {
     private static double magZScaling = 1;
 
     // Standard deviations of normally distributed error on each axis of each of the sensors
-    private static double gyroXErrorSD = 1;
-    private static double gyroYErrorSD = 1;
-    private static double gyroZErrorSD = 1;
-    private static double accelXErrorSD = 1;
-    private static double accelYErrorSD = 1;
-    private static double accelZErrorSD = 1;
-    private static double magXErrorSD = 1;
-    private static double magYErrorSD = 1;
-    private static double magZErrorSD = 1;
+    private static double gyroXErrorNoiseScaling = 0.07;
+    private static double gyroYErrorNoiseScaling = 0.07;
+    private static double gyroZErrorNoiseScaling = 0.07;
+    private static double accelXErrorNoiseScaling = 0.15;
+    private static double accelYErrorNoiseScaling = 0.15;
+    private static double accelZErrorNoiseScaling = 0.15;
+    private static double magXErrorNoiseScaling = 1;
+    private static double magYErrorNoiseScaling = 1;
+    private static double magZErrorNoiseScaling = 1;
 
     // Adds an offset to the sensors (will result in gyro drifting due to integration)
-    private static double gyroXOffset = 1;
-    private static double gyroYOffset = 1;
-    private static double gyroZOffset = 1;
-    private static double accelXOffset = 1;
-    private static double accelYOffset = 1;
-    private static double accelZOffset = 1;
+    private static double gyroXOffset = 0.005;
+    private static double gyroYOffset = 0.005;
+    private static double gyroZOffset = 0.005;
+    private static double accelXOffset = 0.0005;
+    private static double accelYOffset = 0.0002;
+    private static double accelZOffset = 0.0003;
     private static double magXOffset = 1;
     private static double magYOffset = 1;
     private static double magZOffset = 1;
@@ -69,15 +69,15 @@ public class IMU {
             imuData.setMagZ(imuData.getMagZ() * magZScaling);
 
             // Adds normally distributed noise to all sensors
-            imuData.setGyroX(imuData.getGyroX() + random.nextGaussian() * gyroXErrorSD);
-            imuData.setGyroY(imuData.getGyroY() + random.nextGaussian() * gyroYErrorSD);
-            imuData.setGyroZ(imuData.getGyroZ() + random.nextGaussian() * gyroZErrorSD);
-            imuData.setAccelX(imuData.getAccelX() + random.nextGaussian() * accelXErrorSD);
-            imuData.setAccelY(imuData.getAccelY() + random.nextGaussian() * accelYErrorSD);
-            imuData.setAccelZ(imuData.getAccelZ() + random.nextGaussian() * accelZErrorSD);
-            imuData.setMagX(imuData.getMagX() + random.nextGaussian() * magXErrorSD);
-            imuData.setMagY(imuData.getMagY() + random.nextGaussian() * magYErrorSD);
-            imuData.setMagZ(imuData.getMagZ() + random.nextGaussian() * magZErrorSD);
+            imuData.setGyroX(imuData.getGyroX() + random.nextGaussian() * gyroXErrorNoiseScaling);
+            imuData.setGyroY(imuData.getGyroY() + random.nextGaussian() * gyroYErrorNoiseScaling);
+            imuData.setGyroZ(imuData.getGyroZ() + random.nextGaussian() * gyroZErrorNoiseScaling);
+            imuData.setAccelX(imuData.getAccelX() + random.nextGaussian() * accelXErrorNoiseScaling);
+            imuData.setAccelY(imuData.getAccelY() + random.nextGaussian() * accelYErrorNoiseScaling);
+            imuData.setAccelZ(imuData.getAccelZ() + random.nextGaussian() * accelZErrorNoiseScaling);
+            imuData.setMagX(imuData.getMagX() + random.nextGaussian() * magXErrorNoiseScaling);
+            imuData.setMagY(imuData.getMagY() + random.nextGaussian() * magYErrorNoiseScaling);
+            imuData.setMagZ(imuData.getMagZ() + random.nextGaussian() * magZErrorNoiseScaling);
 
             // Adds offset to all sensors
             imuData.setGyroX(imuData.getGyroX() + gyroXOffset);

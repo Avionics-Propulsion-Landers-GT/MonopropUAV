@@ -4,7 +4,7 @@ import numpy as np
 import os
 
 # Filter still needs to be tuned
-filter = complementary.Complementary(0.5)
+filter = complementary.Complementary(0.66)
 filter.initialize(0, np.array([0,0,1]))
 attitudes = []
 
