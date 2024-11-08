@@ -9,6 +9,7 @@ import random
 max_tilt = 30 # maximum angle that rocket could tilt
 max_curvature = 15 # maximum curvature (based on TVC restrictions and velocity)
 const = 0.1 # arbitrary constraint value, change at will to tune algorithm.
+max_angle = 15 # maximum angle that the TVC can achieve. Degrees.
 
 """
 Formula for a cubic bezier curve.
@@ -16,9 +17,8 @@ Formula for a cubic bezier curve.
 :param p0, p1, p2, p3: tuples of form (x,y,z) 
 :param t: decimal between 0 and 1 representing time
 :return: tuple containing the coordinates in (x,y,z) of the curve at the respective t value
-
-TO-DO: add ability to check if velocity vector at end is the same as the desired end vector 
-TO-DO: define "gradient descent" func or some func to adjust an initial p1 and p2 to align with our constraints if they are not compatible
+ 
+TO-DO: implement Nathan's method
 """
 def bezier_curve(p0, p1, p2, p3, t):
     first_term = tuple(((1 - t) ** 3) * c for c in p0)
@@ -68,12 +68,45 @@ def doesNotExceedCurva(max_curv, p0, p1, p2, p3, t):
 def genRand(p_init, p_final):
     return tuple(random.uniform(min(p_init[0], p_init[1], p_init[2]), max(p_final[0], p_final[1], p_final[2])) for _ in range(3))
 
+def genPoints(p_init, p_final):
+    p1, p2
+    if np.dot(np.linalg.norm(np.subtract(p_final - p_init)), np.array([0,0,1])) <= max_angle :
+        # assuming that initial and end velocity vectors are parallel to the z unit vector.
+        p1, p2 = planarSolution(p_init, p_final)
+    else: 
+        p1, p2 = planarSolution(p_init, p_final)
+        
+        ## hermite curve (3 dimensional)
+        # return the 2 points as tuples or as np arrays.
+    
+    return (p1, p2)
+
+def vectorsAligned(v_init, v_final):
+    return first_derivative(p0,p1,p2,p3,0) == v_init and first_derivative(p0,p1,p2,p3,1) == v_final
+
+def planarSolution(p_init, p_final):
+    distance = p_init[2] - p_final[2]
+    z1 = (1/3) * distance + p_init[2]
+    z2 = (2/3) * distance + p_init[2]
+
+    p1 = (p_init[0], p_init[1], z1)
+    p2 = (p_final[0], p_final[1], z2)
+
+    return (p1, p2)
+
+# Hermite Curve: P(t) = (1-t)^3 * P0 + 3t(1-t)^2 * P0' + 3t^2(1-t) * P1 + t^3 * P1' where P0 and P1 are start and end points, P0' and P1' are tangent vectors at those points
+def hermiteCurve(p0, p0_prime, p1, p1_prime, t):
+    x = (1-t)**3 * p0[0] + 3 * t * (1-t)**2 * p0_prime[0] + 3 * t**2 * (1-t) * p1[0] + t**3 * p1_prime[0]
+    y = (1-t)**3 * p0[1] + 3 * t * (1-t)**2 * p0_prime[1] + 3 * t**2 * (1-t) * p1[1] + t**3 * p1_prime[1]  
+    z = (1-t)**3 * p0[2] + 3 * t * (1-t)**2 * p0_prime[2] + 3 * t**2 * (1-t) * p1[2] + t**3 * p1_prime[2]  
+    return (x, y, z)
+
 if __name__ == '__main__': # Plot bezier curve and print out the first and second derivatives
     p0 = (0,0,0)
-    p3 = (1,6,1)
+    p3 = (1,6,1) # random end point, adjust as necesary
     usedPoints = []
-    p1 = genRand(p0,p3)
-    p2 = genRand(p0,p3)
+    p1 = genRand(p0,p3) # use genPoints func
+    p2 = genRand(p0,p3) # use genPoints func
     usedPoints.append(p1)
     usedPoints.append(p2)
 
@@ -92,6 +125,11 @@ if __name__ == '__main__': # Plot bezier curve and print out the first and secon
     # check if at any point in t we exceed the curvature constraint
     valid_path_found = False
 
+    # initial and final velocity vectors (to ease the process of chaining together bezier curves)
+    v_init = tuple([0,0,1])
+    v_final = tuple([0,0,1])
+    # adjust these as necessary. 
+
     while not valid_path_found:
         # Generate random points
         p1 = genRand(p0,p3)
@@ -104,7 +142,7 @@ if __name__ == '__main__': # Plot bezier curve and print out the first and secon
         # Check curvature and tilt for each t value in the curve
         for i in t:
             crnt_orientation = first_derivative(p0, p1, p2, p3, i)
-            if not doesNotExceedCurva(max_curvature, p0, p1, p2, p3, i) or not doesNotExceedTilt(max_tilt, crnt_orientation):
+            if not doesNotExceedCurva(max_curvature, p0, p1, p2, p3, i) or not doesNotExceedTilt(max_tilt, crnt_orientation) or not vectorsAligned(v_init, v_final):
                 valid_path_found = False
                 break  # No need to keep checking, start over with new random points
 
@@ -145,3 +183,4 @@ if __name__ == '__main__': # Plot bezier curve and print out the first and secon
     print(p3)
     
     plt.show()
+ 
