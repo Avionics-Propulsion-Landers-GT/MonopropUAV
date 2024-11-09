@@ -73,13 +73,11 @@ def get_max_curve(c):
             idx = i / 100
     return max, idx
 
-# Given the initial position, velocity, and desired end point, calculate the required bezier control points that 
-# that minimize curvature by using the rule of thirds for the z points. Then, print out all the points and plot the curve
-if __name__ == '__main__':
+def createPoints(p0, v0, p1): # p0 starting point, p1 ending point, v0 initial velocity
     # Setup initial values and arrays to store points
-    p0 = (7, 4, 0)
-    v0 = (3, 5, 12)
-    p1 = (0, 0, 25)
+    # p0 = (7, 4, 0)
+    # v0 = (3, 5, 12)
+    # p1 = (0, 0, 25)
     p1_og = p1
     # To create the most optimal path, the end velocity is dependent on the initial conditions, 
     # so we lose control over it and don't end up using it
@@ -97,6 +95,45 @@ if __name__ == '__main__':
     x = np.array([])
     y = np.array([])
     z = np.array([])
+
+    t = np.linspace(0, 1, 100)
+
+    # Create lists of 100 evenly spaced values   
+    points = bezier_curve(p0, b0, b1, p1, t)
+
+    # Add each corresponding list to their respective arrays 
+    x = np.append(x, points[0])
+    y = np.append(y, points[1])
+    z = np.append(z, points[2])
+
+    return x, y, z
+
+# Given the initial position, velocity, and desired end point, calculate the required bezier control points that 
+# that minimize curvature by using the rule of thirds for the z points. Then, print out all the points and plot the curve
+if __name__ == '__main__':
+    # Setup initial values and arrays to store points
+    p0 = (7, 4, 0)
+    v0 = (3, 5, 12)
+    p1 = (0, 0, 25)
+    p1_og = p1
+    # To create the most optimal path, the end velocity is dependent on the initial conditions, 
+    # so we lose control over it and don't end up using it
+    # v1 = (0 ,0, 15)
+    new_point = True
+
+    # if angle_check(p0, p1) == False:
+    #     p1 = get_new_endpoint(p0)
+    #     new_point = True
+
+    # x = np.array([])
+    # y = np.array([])
+    # z = np.array([])
+
+    x, y, z = createPoints(p0, v0, p1)
+
+    # Calculate the 2 bezier control points using the initial conditions and endpoint
+    b0 = (p0[0] + (v0[0] / 3), p0[1] + (v0[1] / 3), p0[2] + (v0[2] / 3))
+    b1 = (0, 0, b0[2] + ((p1[2] - p0[2]) / 3))
 
     vx = np.array([])
     vy = np.array([])
@@ -127,9 +164,9 @@ if __name__ == '__main__':
     total_length = 0
 
     # Add each corresponding list to their respective arrays 
-    x = np.append(x, points[0])
-    y = np.append(y, points[1])
-    z = np.append(z, points[2])
+    # x = np.append(x, points[0])
+    # y = np.append(y, points[1])
+    # z = np.append(z, points[2])
 
     vx = np.append(vx, velocities[0])
     vy = np.append(vy, velocities[1])
