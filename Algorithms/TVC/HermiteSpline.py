@@ -32,40 +32,6 @@ def second_derivative(p0, p1, p2, p3, t):
     fourth_term = tuple((6 * t)*c for c in p3)
     return tuple(first_term[c] + second_term[c] + third_term[c] + fourth_term[c] for c in range(3))
 
-# # Calculate the path following a hermite spline given the 
-# # endpoints p0 and p1 and their corresponding velocities v0 and v1
-# def hermite_spline(p0, v0, p1, v1, t):
-#     v1_rel = v1 + p1
-#     h0 = tuple(c * (2 * (t ** 3) - 3 * (t ** 2) + 1) for c in p0)
-#     h1 = tuple(c * ((t ** 3) - 2 * (t ** 2) + t) for c in v0)
-#     h2 = tuple(c * (-2 * (t ** 3) + 3 * (t ** 2)) for c in p1)
-#     h3 = tuple(c * ((t ** 3) - (t ** 2)) for c in v1)
-#     return tuple(h0[c] + h1[c] + h2[c] + h3[c] for c in range(3))
-
-# # Calculate the tangent velocities at each time step for the hermite spline
-# def hermite_velocity(p0, v0, p1, v1, t):
-#     hv0 = tuple(c * (6 * (t ** 2) - 6 * t) for c in p0)
-#     hv1 = tuple(c * (3 * (t ** 2) - 4 * t + 1) for c in v0)
-#     hv2 = tuple(c * (-6 * (t ** 2) + 6 * t) for c in p1)
-#     hv3 = tuple(c * (3 * (t ** 2) - 2 * t) for c in v1)
-#     return tuple(hv0[c] + hv1[c] + hv2[c] + hv3[c] for c in range(3))
-
-# # Find the magnitude of speed corresponding to each velocity point
-# def hermite_speed(x, y, z):
-#     return math.sqrt((x ** 2) + (y ** 2) + (z ** 2))
-
-# # Calculate the tangent accelerations at each time step for the hermite spline
-# def hermite_acceleration(p0, v0, p1, v1, t):
-#     ha0 = tuple(c * (12 * t - 6) for c in p0)
-#     ha1 = tuple(c * (6 * t - 4) for c in v0)
-#     ha2 = tuple(c * (-12 * t + 6) for c in p1)
-#     ha3 = tuple(c * (6 * t - 2) for c in v1)
-#     return tuple(ha0[c] + ha1[c] + ha2[c] + ha3[c] for c in range(3))
-
-# # Find the magnitude of the acceleration corresponding to each acceleration point
-# def hermite_accel_mag(x, y, z):
-#     return math.sqrt((x ** 2) + (y ** 2) + (z ** 2))
-
 def hermite_curvature(x1, y1, z1, x2, y2, z2):
     n0 = x1 * y2 - y1 * x2
     n1 = y1 * z2 - z1 * y2
@@ -113,7 +79,7 @@ if __name__ == '__main__':
     # Setup initial values and arrays to store points
     p0 = (7, 4, 0)
     v0 = (3, 5, 12)
-    p1 = (0, 0, 45)
+    p1 = (0, 0, 25)
     p1_og = p1
     # To create the most optimal path, the end velocity is dependent on the initial conditions, 
     # so we lose control over it and don't end up using it
