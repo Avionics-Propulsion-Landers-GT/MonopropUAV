@@ -1,4 +1,5 @@
 import java.io.*;
+import java.math.BigDecimal;
 import java.util.Random;
 
 /**
@@ -9,15 +10,15 @@ import java.util.Random;
  */
 public class IMU {
     // Scales the inputs from each of the axes of the sensors
-    private static double gyroXScaling = 1;
-    private static double gyroYScaling = 1;
-    private static double gyroZScaling = 1;
-    private static double accelXScaling = 1;
-    private static double accelYScaling = 1;
-    private static double accelZScaling = 1;
-    private static double magXScaling = 1;
-    private static double magYScaling = 1;
-    private static double magZScaling = 1;
+    private static double gyroXScaling = 1.05;
+    private static double gyroYScaling = 1.03;
+    private static double gyroZScaling = 1.01;
+    private static double accelXScaling = 1.04;
+    private static double accelYScaling = 1.02;
+    private static double accelZScaling = 1.03;
+    private static double magXScaling = 1.04;
+    private static double magYScaling = 1.02;
+    private static double magZScaling = 1.03;
 
     // Standard deviations of normally distributed error on each axis of each of the sensors
     private static double gyroXErrorNoiseScaling = 0.07;
@@ -26,9 +27,9 @@ public class IMU {
     private static double accelXErrorNoiseScaling = 0.15;
     private static double accelYErrorNoiseScaling = 0.15;
     private static double accelZErrorNoiseScaling = 0.15;
-    private static double magXErrorNoiseScaling = 1;
-    private static double magYErrorNoiseScaling = 1;
-    private static double magZErrorNoiseScaling = 1;
+    private static double magXErrorNoiseScaling = 0.0000001;
+    private static double magYErrorNoiseScaling = 0.0000001;
+    private static double magZErrorNoiseScaling = 0.0000001;
 
     // Adds an offset to the sensors (will result in gyro drifting due to integration)
     private static double gyroXOffset = 0.005;
@@ -37,25 +38,28 @@ public class IMU {
     private static double accelXOffset = 0.0005;
     private static double accelYOffset = 0.0002;
     private static double accelZOffset = 0.0003;
-    private static double magXOffset = 1;
-    private static double magYOffset = 1;
-    private static double magZOffset = 1;
+    private static double magXOffset = 0.0000002;
+    private static double magYOffset = 0.0000002;
+    private static double magZOffset = 0.0000002;
 
     public static void main(String[] args) throws IOException {
         String line = "";
         String delimiter = ",";
-        BufferedReader bufferedReader = new BufferedReader(new FileReader("fileName.csv"));
-        File outputFile = new File("IMUData.csv");
+        BufferedReader bufferedReader = new BufferedReader(new FileReader("monocopter_data.csv"));
+        File outputFile = new File("noisy_monocopter_data.csv");
         PrintWriter out = new PrintWriter(outputFile);
         Random random = new Random();
+        out.println("time,x ang vel,y ang vel,z ang vel,x accel,y accel,z accel,x mag,y mag,z mag");
+        line = bufferedReader.readLine();
 
         while ((line = bufferedReader.readLine()) != null) {
+            out.print("\n");
             // Gets the simulated data from the CSV file
             String[] inputData = line.split(delimiter);
-            IMUData imuData = new IMUData(Double.valueOf(inputData[0]), Double.valueOf(inputData[1]),
-                    Double.valueOf(inputData[2]), Double.valueOf(inputData[3]), Double.valueOf(inputData[4]),
-                    Double.valueOf(inputData[5]), Double.valueOf(inputData[6]), Double.valueOf(inputData[7]),
-                    Double.valueOf(inputData[8]), Double.valueOf(inputData[9]));
+            IMUData imuData = new IMUData(new BigDecimal(inputData[0]).doubleValue(), new BigDecimal(inputData[1]).doubleValue(),
+                    new BigDecimal(inputData[2]).doubleValue(), new BigDecimal(inputData[3]).doubleValue(), new BigDecimal(inputData[4]).doubleValue(),
+                    new BigDecimal(inputData[5]).doubleValue(), new BigDecimal(inputData[6]).doubleValue(), new BigDecimal(inputData[7]).doubleValue(),
+                    new BigDecimal(inputData[8]).doubleValue(), new BigDecimal(inputData[9]).doubleValue());
 
             // Scales inputs from all sensors
             imuData.setGyroX(imuData.getGyroX() * gyroXScaling);
@@ -90,9 +94,11 @@ public class IMU {
             imuData.setMagY(imuData.getMagY() + magYOffset);
             imuData.setMagZ(imuData.getMagZ() + magZOffset);
 
-            out.printf("%f, %f, %f, %f, %f, %f, %f, %f, %f, %f\n", imuData.getTimestamp(), imuData.getAccelX(),
+
+            out.printf("%f, %f, %f, %f, %f, %f, %f, %f, %f, %f", imuData.getTimestamp(), imuData.getAccelX(),
                     imuData.getAccelY(), imuData.getAccelZ(), imuData.getGyroX(), imuData.getGyroY(),
-                    imuData.getGyroZ(), imuData.getGyroX(), imuData.getGyroY(), imuData.getGyroZ());
+                    imuData.getGyroZ(), imuData.getMagX(), imuData.getMagY(), imuData.getMagZ());
+            
         }
         bufferedReader.close();
         out.close();
