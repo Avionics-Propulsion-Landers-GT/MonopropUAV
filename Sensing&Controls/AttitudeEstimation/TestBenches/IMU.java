@@ -49,7 +49,7 @@ public class IMU {
         File outputFile = new File("noisy_monocopter_data.csv");
         PrintWriter out = new PrintWriter(outputFile);
         Random random = new Random();
-        out.println("time,x ang vel,y ang vel,z ang vel,x accel,y accel,z accel,x mag,y mag,z mag");
+        out.print("time,x ang vel,y ang vel,z ang vel,x accel,y accel,z accel,x mag,y mag,z mag");
         line = bufferedReader.readLine();
 
         while ((line = bufferedReader.readLine()) != null) {
