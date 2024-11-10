@@ -108,6 +108,21 @@ def createPoints(p0, v0, p1): # p0 starting point, p1 ending point, v0 initial v
 
     return x, y, z
 
+
+type ArrayOfPoints = np.array
+type ArrayOfVelocities = np.array
+type Velocity = np.array[1,3]
+
+def createTargetTangentVectors(x_arr: ArrayOfPoints, y_arr: ArrayOfPoints, z_arr: ArrayOfPoints) -> dict: # Creates the array of tangent vectors between any the i'th target point and the i+1 target point
+    velocities = np.empty((len(x_arr),3))
+    velocities = {} # dictionary where points are keys and values are the unit tangent vector at that point
+    for i in range(len(x_arr)-1):
+        v = np.array([x_arr[i+1] - x_arr[i], y_arr[i+1] - y_arr[i], z_arr[i+1] - z_arr[i]])
+        point = (x_arr[i], y_arr[i], z_arr[i])
+        # velocities[i] = v/np.linalg.norm(v)
+        velocities[point] = v/np.linalg.norm(v) 
+        
+    return velocities
 # Given the initial position, velocity, and desired end point, calculate the required bezier control points that 
 # that minimize curvature by using the rule of thirds for the z points. Then, print out all the points and plot the curve
 if __name__ == '__main__':

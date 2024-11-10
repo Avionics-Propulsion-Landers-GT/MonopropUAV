@@ -1,26 +1,15 @@
 # Algorithm for coming up with which points on the path to target
-from HermiteSpline import createPoints
+from HermiteSpline import createPoints, createTargetTangentVectors
 import numpy as np
 
 start_point = (7, 4, 0)
 initial_velo = (3, 5, 12)
 end_point = (0, 0, 45)
 
-x, y, z = createPoints(start_point, initial_velo, end_point)
-type ArrayOfPoints = np.array
-type ArrayOfVelocities = np.array
 type Velocity = np.array[1,3]
 
-def createTargetTangentVectors(x_arr: ArrayOfPoints, y_arr: ArrayOfPoints, z_arr: ArrayOfPoints) -> dict: # Creates the array of tangent vectors between any the i'th target point and the i+1 target point
-    velocities = np.empty((len(x_arr),3))
-    velocities = {} # dictionary where points are keys and values are the unit tangent vector at that point
-    for i in range(len(x_arr)-1):
-        v = np.array([x_arr[i+1] - x_arr[i], y_arr[i+1] - y_arr[i], z_arr[i+1] - z_arr[i]])
-        point = (x_arr[i], y_arr[i], z_arr[i])
-        # velocities[i] = v/np.linalg.norm(v)
-        velocities[point] = v/np.linalg.norm(v) 
-        
-    return velocities
+x, y, z = createPoints(start_point, initial_velo, end_point)
+targetTangentVectorsDict = createTargetTangentVectors(x,y,z)
 
 def getPositionalTangentVector(current_pos: tuple, current_target: tuple) -> Velocity:
     current_pos = np.float64(current_pos)
@@ -29,7 +18,7 @@ def getPositionalTangentVector(current_pos: tuple, current_target: tuple) -> Vel
     v = v/np.linalg.norm(v)
     return v
 
-def theta(current_pos: tuple, current_target: tuple, targetTangentVectorsDict: dict): # Angle of "error"
+def theta(current_pos: tuple, current_target: tuple): # Angle of "error"
     v1 = getPositionalTangentVector(current_pos, current_target)
     v2 = targetTangentVectorsDict[current_target]
 
@@ -42,14 +31,29 @@ def theta(current_pos: tuple, current_target: tuple, targetTangentVectorsDict: d
     angle_deg = np.degrees(angle_rad)
     return angle_deg
 
+def getTarget(current_pos: tuple, current_target_iteration: int,max_angle): # Checks if current target point is valid, if not returns a new point that is valid
+    target = (x[current_target_iteration], y[current_target_iteration], z[current_target_iteration])
 
+
+    if (current_target_iteration+1 > len(x)-1):
+        print("No valid targets")
+       
+        return None
+    elif (theta(current_pos, target) > max_angle):
+        target = getTarget(current_pos, current_target_iteration + 1, max_angle)
+    
+    
+    return target
+    
 # Theta will never be 0 unless there are three target points which are collinear (unlikely)
 # The sharper the turn between target points, the larger the theta
 
-targetTangentVectorsDict = createTargetTangentVectors(x,y,z)
-print(targetTangentVectorsDict[(x[0],y[0],z[0])])
-print(getPositionalTangentVector(start_point, (x[1],y[1],z[1])))
-print(theta((x[1],y[1],z[1]), (x[2],y[2],z[2]), targetTangentVectorsDict))
-
+if __name__ == '__main__':
+    current_pos = start_point
+    target_index = 2
+    max_angle = 4
+    print(theta(current_pos, (x[target_index],y[target_index],z[target_index])))
+    print(getTarget(current_pos, target_index, max_angle))
+    print((x[target_index],y[target_index],z[target_index]))
 
 
