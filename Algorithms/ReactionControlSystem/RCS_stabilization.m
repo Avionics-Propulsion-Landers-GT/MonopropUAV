@@ -1,6 +1,6 @@
-Kp = 1.0;
-Kd = 0.2;
-Ki = 0.5;
+Kp = 0.4;
+Kd = 0.1;
+Ki = 0.1;
 
 theta_dot = 0.6;
 theta_dot_desired = 0;
