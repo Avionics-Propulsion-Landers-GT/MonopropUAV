@@ -4,8 +4,8 @@ import numpy as np
 import os
 
 # Filter still needs to be tuned
-filter = complementary.Complementary(0.9)
-filter.initialize(0, np.array([0,0,1]))
+filter = complementary.Complementary(0.5)
+filter.initialize(0, np.array([0,0,0]))
 attitudes = []
 
 with open('noisy_monocopter_data.csv', mode ='r') as file:

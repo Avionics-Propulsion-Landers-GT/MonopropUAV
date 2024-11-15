@@ -21,8 +21,8 @@ class Complementary():
         # Gets and formats data from the input array
         delta_t = update_arr[0] - self.last_update_time
         self.last_update_time = update_arr[0]
-        accel = np.array([update_arr[1], update_arr[2], update_arr[3]])
-        gyro = np.array([update_arr[4], update_arr[5], update_arr[6]])
+        gyro = np.array([update_arr[1], update_arr[2], update_arr[3]])
+        accel = np.array([update_arr[4], update_arr[5], update_arr[6]])
         mag =  np.array([update_arr[7], update_arr[8], update_arr[9]])
 
         # Calculates x and y tilt from accelerometer, adjusts magnetometer data with tilt angles, then calculates
@@ -43,8 +43,6 @@ class Complementary():
         
         # Takes an average of the two estimates and normalizes it
         self.attitude_estimation =  self.gain * gyro_estimate + (1 - self.gain) * tilt_angles
-        if (np.linalg.norm(self.attitude_estimation) != 0):
-            self.attitude_estimation = self.attitude_estimation / np.linalg.norm(self.attitude_estimation)
 
         # Returns the attitude estimate
         return self.get_estimate()
