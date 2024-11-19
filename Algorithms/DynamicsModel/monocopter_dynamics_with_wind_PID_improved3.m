@@ -1,3 +1,53 @@
+% What components does the code contain?????
+
+% 1. Physical Parameters:
+% - Models a 1kg vehicle with defined moments of inertia
+% - Accounts for gravity, drag forces, and thrust limitations
+% - Maximum thrust capability of 50 Newtons
+
+
+% 2. Control System:
+% - Uses two PID controllers working in parallel
+% - Position controller for X, Y, Z coordinates
+% - Attitude controller for roll, pitch, and yaw angles
+
+
+% 3. Flight Profile:
+% - Executes a complete flight cycle over 40 seconds
+% - Includes ascent, hover, descent, and landing phases
+
+% What is happening in the code????
+
+% 1. The position control:
+% - Computes position errors in all three dimensions
+% - Generates desired acceleration commands
+% - Uses proportional and derivative gains for smooth corrections
+% - Position gains: Kp = [1.5, 1.5, 2.0], Kd = [1.0, 1.0, 1.5]
+
+% 2. The attitude control:
+% - Converts desired accelerations into target angles
+% - Limits angles to ±30 degrees for stability
+% - Uses quaternions to avoid gimbal lock issues
+% - Attitude gains: Kp = [8.0, 8.0, 0.0], Kd = [2.0, 2.0, 0.0]
+
+% 3. The flight profile
+% - 10-second ascent to 100 meters
+% - 5-second hover at peak altitude
+% - 10-second controlled descent
+% - Final hover phase near ground level
+
+% Wow magic
+% So what can we see from the code a.k.a. what graphs do we get
+% 1. Position
+% 2. Velocity
+% 3. Acceleration
+% 4. Position Error
+% 5. Angular Velocity
+% 6. Quaternion Components
+
+% And also the 3D trajectory plot
+
+
 function monocopter_dynamics_with_wind_PID_improved()
     % Simulation parameters
     dt = 0.01;      % Time step (seconds): Specifies the resolution of the simulation. 
