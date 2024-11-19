@@ -33,8 +33,6 @@ def theta(current_pos: tuple, current_target: tuple): # Angle of "error"
 
 def getTarget(current_pos: tuple, current_target_iteration: int,max_angle): # Checks if current target point is valid, if not returns a new point that is valid
     target = (x[current_target_iteration], y[current_target_iteration], z[current_target_iteration])
-
-
     if (current_target_iteration+1 > len(x)-1):
         print("No valid targets")
        

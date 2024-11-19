@@ -111,7 +111,6 @@ def createPoints(p0, v0, p1): # p0 starting point, p1 ending point, v0 initial v
 
 type ArrayOfPoints = np.array
 type ArrayOfVelocities = np.array
-type Velocity = np.array[1,3]
 
 def createTargetTangentVectors(x_arr: ArrayOfPoints, y_arr: ArrayOfPoints, z_arr: ArrayOfPoints) -> dict: # Creates the array of tangent vectors between any the i'th target point and the i+1 target point
     velocities = np.empty((len(x_arr),3))
