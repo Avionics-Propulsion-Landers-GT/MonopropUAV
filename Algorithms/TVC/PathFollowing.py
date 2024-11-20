@@ -44,7 +44,8 @@ def theta(current_pos: tuple, current_target: tuple): # Angle of "error"
 
 def getTarget(current_pos: tuple, current_target_iteration: int, max_angle: float, x, y, z): # Checks if current target point is valid, if not returns a new point that is valid
     target = (x[current_target_iteration], y[current_target_iteration], z[current_target_iteration])
-    
+
+    #TODO calculate distance to endpoint, below code does not work.
     END_DISTANCE = 2 # distance between current position and end point when we want to stop running
     distance_to_endpoint = np.linalg.norm(END_DISTANCE - current_pos)
     shouldCalculateNewPoint = distance_to_endpoint > END_DISTANCE
@@ -63,7 +64,7 @@ def getTarget(current_pos: tuple, current_target_iteration: int, max_angle: floa
         x, y, z = createPoints(current_pos, current_velo, end_point)
 
         ## CALL THIS FUNCTION ON SAME PATH
-        target = getTarget(current_pos, current_velo, max_angle, x, y, z)
+        target = getTarget(current_pos, current_target_iteration, max_angle, x, y, z)
 
     elif (theta(current_pos, target, targetTangentVectorsDict) > max_angle):
         target = getTarget(current_pos, current_target_iteration + 1, max_angle)
