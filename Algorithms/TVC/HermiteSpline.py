@@ -10,7 +10,7 @@ max_tvc = 15 # maximum angle that the TVC can achieve. Degrees.
 # max_curvature = # maximum curvature (based on TVC restrictions and velocity)
 max_speed = 22.5 # maximum reachable speed for any aribtrary point
 max_acceleration = 2.25 # maximum reachable acceleration for any arbitrary point
-MAX_ANGLE = 12.5 # maximum angle between both current position and target point, and start point and end point
+MAX_ANGLE = 13.5 # maximum angle between both current position and target point, and start point and end point
 
 #TODO find all references to a maximum angle and replace with the variable MAX_ANGLE
 
@@ -51,15 +51,13 @@ def angle_check(p0, p1):
     angle = math.degrees(math.atan(opp / adj))
     # We use 80 as the angle to give the rocket some leeway to account for v0 being in the opposite direction, 
     # so it doesn't have to fly at the maximum 15 degree tilt the whole time to reach the end
-    if angle >= 80:
-        return True
-    return False
+    return angle >= (90 - MAX_ANGLE)
 
 def get_new_endpoint(p0):
     # Because the endpoint always wants to be above the origin (0, 0, z),
     # we can calculate the "adjacent" side of a connecting triangle using 0 for x and y of p1
     adj = math.sqrt((p0[0] ** 2) + (p0[1] ** 2))
-    z = adj * math.tan(math.radians(80))
+    z = adj * math.tan(math.radians(90 - MAX_ANGLE))
     p1 = (0, 0, z)
     return p1
 
@@ -76,18 +74,11 @@ def get_max_curve(c):
             idx = i / 100
     return max, idx
 
-def createPoints(p0, v0, p1): # p0 starting point, p1 ending point, v0 initial velocity
-    # Setup initial values and arrays to store points
-    # p0 = (7, 4, 0)
-    # v0 = (3, 5, 12)
-    # p1 = (0, 0, 25)
+def createPoints(p0, v0, p1, num_points): # p0 starting point, p1 ending point, v0 initial velocity
     p1_og = p1
-    # To create the most optimal path, the end velocity is dependent on the initial conditions, 
-    # so we lose control over it and don't end up using it
-    # v1 = (0 ,0, 15)
     new_point = False
 
-    if angle_check(p0, p1) == False:
+    if not angle_check(p0, p1):
         p1 = get_new_endpoint(p0)
         new_point = True
 
@@ -99,9 +90,9 @@ def createPoints(p0, v0, p1): # p0 starting point, p1 ending point, v0 initial v
     y = np.array([])
     z = np.array([])
 
-    t = np.linspace(0, 1, 100)
+    t = np.linspace(0, 1, num_points)
 
-    # Create lists of 100 evenly spaced values   
+    # Create lists of num_points evenly spaced values   
     points = bezier_curve(p0, b0, b1, p1, t)
 
     # Add each corresponding list to their respective arrays 
@@ -121,10 +112,10 @@ def createTargetTangentVectors(x_arr: ArrayOfPoints, y_arr: ArrayOfPoints, z_arr
     for i in range(len(x_arr)-1):
         v = np.array([x_arr[i+1] - x_arr[i], y_arr[i+1] - y_arr[i], z_arr[i+1] - z_arr[i]])
         point = (x_arr[i], y_arr[i], z_arr[i])
-        # velocities[i] = v/np.linalg.norm(v)
         velocities[point] = v/np.linalg.norm(v) 
         
     return velocities
+
 # Given the initial position, velocity, and desired end point, calculate the required bezier control points that 
 # that minimize curvature by using the rule of thirds for the z points. Then, print out all the points and plot the curve
 if __name__ == '__main__':
@@ -146,7 +137,7 @@ if __name__ == '__main__':
     # y = np.array([])
     # z = np.array([])
 
-    x, y, z = createPoints(p0, v0, p1)
+    x, y, z = createPoints(p0, v0, p1, 100)
 
     # Calculate the 2 bezier control points using the initial conditions and endpoint
     b0 = (p0[0] + (v0[0] / 3), p0[1] + (v0[1] / 3), p0[2] + (v0[2] / 3))
