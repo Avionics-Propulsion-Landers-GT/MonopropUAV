@@ -10,6 +10,9 @@ max_tvc = 15 # maximum angle that the TVC can achieve. Degrees.
 # max_curvature = # maximum curvature (based on TVC restrictions and velocity)
 max_speed = 22.5 # maximum reachable speed for any aribtrary point
 max_acceleration = 2.25 # maximum reachable acceleration for any arbitrary point
+MAX_ANGLE = 12.5 # maximum angle between both current position and target point, and start point and end point
+
+#TODO find all references to a maximum angle and replace with the variable MAX_ANGLE
 
 def bezier_curve(p0, p1, p2, p3, t):
     first_term = tuple(((1 - t) ** 3) * c for c in p0)
