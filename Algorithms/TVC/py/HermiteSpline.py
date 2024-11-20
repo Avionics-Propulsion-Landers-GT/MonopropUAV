@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import math
 
-max_tilt = 30 # maximum angle that rocket could tilt
+max_tilt = 30 # maximum angle that rocket could tilt. Degrees
 max_tvc = 15 # maximum angle that the TVC can achieve. Degrees.
 # max_curvature = # maximum curvature (based on TVC restrictions and velocity)
 max_speed = 22.5 # maximum reachable speed for any aribtrary point
