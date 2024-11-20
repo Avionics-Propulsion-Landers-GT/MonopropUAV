@@ -2,7 +2,7 @@
 #include <cmath>
 #include <math.h>
 
-using namespace std;
+// using namespace std;
 
 int main() {
     // Static neutral state to compare to [pitch, yaw, roll]
@@ -25,9 +25,8 @@ int main() {
     float pulsePitch = 1500 + 10 * pitchDeg;
 
     // Print pulse width outputs
-    cout << pulseYaw;
-    cout << "\n";
-    cout << pulsePitch;
+    std::cout << pulseYaw << std::endl;
+    std::cout << pulsePitch;
 
     return 0;
 }
