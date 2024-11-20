@@ -22,12 +22,12 @@ int main() {
 
     // Convert yaw and pitch to pulse width signals
     float pulseYaw = 1500 + 10 * yawDeg;
-    float puulsePitch = 1500 + 10 * pitchDeg;
+    float pulsePitch = 1500 + 10 * pitchDeg;
 
     // Print pulse width outputs
     cout << pulseYaw;
     cout << "\n";
-    cout << puulsePitch;
+    cout << pulsePitch;
 
     return 0;
 }
