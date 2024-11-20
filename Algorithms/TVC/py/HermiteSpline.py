@@ -129,9 +129,9 @@ if __name__ == '__main__':
     # v1 = (0 ,0, 15)
     new_point = True
 
-    # if angle_check(p0, p1) == False:
-    #     p1 = get_new_endpoint(p0)
-    #     new_point = True
+    if angle_check(p0, p1) == False:
+        p1 = get_new_endpoint(p0)
+        new_point = True
 
     # x = np.array([])
     # y = np.array([])
