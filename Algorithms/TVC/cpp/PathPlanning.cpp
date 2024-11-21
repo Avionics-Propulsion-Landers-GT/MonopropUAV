@@ -13,6 +13,8 @@ const double max_acceleration = 2.25;  // Maximum reachable acceleration for any
 const double MAX_ANGLE = 13.5;         // Maximum angle between positions
 
 
+// TODO: Might need to refactor Point3D to Vectors, for ease of use. Unsure how Point3D will affect future logic.
+
 // Type definitions
 using ArrayOfPoints = std::vector<double>;
 using ArrayOfVelocities = std::vector<double>;
