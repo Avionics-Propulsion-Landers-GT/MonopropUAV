@@ -1,167 +1,83 @@
-# Mahony Filter Implementation
+import numpy as np
 
-# The Mahony filter is an algorithm used for estimating orientation based on data from 
-# Inertial Measurement Units (IMUs). It fuses data from accelerometers, gyroscopes, and 
-# optionally magnetometers to provide a stable orientation estimate.
+class Mahony:
+    # Mahony Filter implementation for attitude estimation
+    # This filter combines sensor data (accelerometer, gyroscope, and magnetometer)
+    # to estimate the orientation of an object in space.
 
-# This implementation takes input data in the form of a n x 10 matrix, where each row contains:
-# [timestamp, acc_x, acc_y, acc_z, gyro_x, gyro_y, gyro_z, mag_x, mag_y, mag_z]
+    def __init__(self, Kp, Ki=0):
+        # Constructor to initialize the Mahony filter parameters
+        # Kp: Proportional gain, adjusts response to errors
+        # Ki: Integral gain, helps reduce steady-state errors (optional, default is 0)
 
-def mahony_filter(data, frequency=100.0, Kp=1.0, Ki=0.3):
-    """
-    Implements the Mahony filter for orientation estimation.
+        self.Kp = Kp  # Proportional gain for error correction
+        self.Ki = Ki  # Integral gain for accumulated error correction
+        self.last_update_time = -1  # Tracks the last update timestamp
+        self.attitude_estimation = np.zeros(3)  # Estimated attitude vector (3D)
+        self.integral_error = np.zeros(3)  # Accumulated error for integral term
 
-    Parameters:
-    data (list of lists): n x 10 matrix containing sensor data
-    frequency (float): Sampling frequency in Hz (default: 100.0)
-    Kp (float): Proportional gain (default: 1.0)
-    Ki (float): Integral gain (default: 0.3)
+    def initialize(self, time, initial_attitude_estimation):
+        # Initialize the filter with the starting time and attitude
+        # time: Initial timestamp (e.g., in seconds)
+        # initial_attitude_estimation: Initial orientation vector (3D)
 
-    Returns:
-    list of lists: n x 4 matrix containing estimated quaternions for each time step
-    """
+        self.last_update_time = time  # Store the initial time
 
-    def normalize(v):
-        """Normalize a vector."""
-        mag = sum(x*x for x in v) ** 0.5
-        return [x/mag for x in v] if mag != 0 else v
+        # Normalize the initial attitude estimation vector (if non-zero)
+        if np.linalg.norm(initial_attitude_estimation) != 0:
+            self.attitude_estimation = initial_attitude_estimation / np.linalg.norm(initial_attitude_estimation)
 
-    def quaternion_multiply(a, b):
-        """Multiply two quaternions."""
-        return [
-            a[0]*b[0] - a[1]*b[1] - a[2]*b[2] - a[3]*b[3],
-            a[0]*b[1] + a[1]*b[0] + a[2]*b[3] - a[3]*b[2],
-            a[0]*b[2] - a[1]*b[3] + a[2]*b[0] + a[3]*b[1],
-            a[0]*b[3] + a[1]*b[2] - a[2]*b[1] + a[3]*b[0]
-        ]
+    def update(self, update_arr):
+        # Update the filter with new sensor data
+        # update_arr: Array containing time, accelerometer, gyroscope, and magnetometer data
+        # Format: [time, ax, ay, az, gx, gy, gz, mx, my, mz]
 
-    def quaternion_conjugate(q):
-        """Compute the conjugate of a quaternion."""
-        return [q[0], -q[1], -q[2], -q[3]]
+        # Calculate time difference since the last update
+        delta_t = update_arr[0] - self.last_update_time
+        self.last_update_time = update_arr[0]  # Update the last timestamp
 
-    def rotate_vector(v, q):
-        """Rotate a vector by a quaternion."""
-        p = [0] + v
-        rotated = quaternion_multiply(quaternion_multiply(q, p), quaternion_conjugate(q))
-        return rotated[1:]
+        # Extract sensor data from the input array
+        accel = np.array(update_arr[1:4])  # Accelerometer readings (x, y, z)
+        gyro = np.array(update_arr[4:7])  # Gyroscope readings (x, y, z)
+        mag = np.array(update_arr[7:10])  # Magnetometer readings (x, y, z)
 
-    dt = 1.0 / frequency
-    q = [1, 0, 0, 0]  # Initial quaternion
-    gyro_bias = [0, 0, 0]  # Initial gyroscope bias estimate
-    integral_error = [0, 0, 0]  # Integral of the error for PI control
+        # Normalize accelerometer data to ensure its magnitude is 1
+        if np.linalg.norm(accel) != 0:
+            accel /= np.linalg.norm(accel)
 
-    quaternions = []
+        # Normalize magnetometer data to ensure its magnitude is 1
+        if np.linalg.norm(mag) != 0:
+            mag /= np.linalg.norm(mag)
 
-    for row in data:
-        timestamp, ax, ay, az, gx, gy, gz, mx, my, mz = row
+        # Calculate the error between the estimated and measured direction of gravity
+        # This helps align the estimated attitude with accelerometer data
+        v = np.cross(self.attitude_estimation, accel)
+        
+        # Calculate the error between the estimated and measured direction of the magnetic field
+        # This helps align the estimated attitude with magnetometer data
+        w = np.cross(self.attitude_estimation, mag)
+        
+        # Combine gravity and magnetic errors for a unified correction term
+        error = v + w
 
-        # Normalize accelerometer and magnetometer measurements
-        acc = normalize([ax, ay, az])
-        mag = normalize([mx, my, mz])
+        # Update the integral error term based on the accumulated error and time step
+        self.integral_error += error * delta_t
 
-        # Estimated direction of gravity and magnetic field
-        v = rotate_vector([0, 0, 1], q)  # Gravity in body frame
-        b = rotate_vector(mag, q)  # Magnetic field in body frame
+        # Apply proportional and integral feedback to compute the correction
+        feedback = self.Kp * error + self.Ki * self.integral_error
 
-        # Error is sum of cross product between estimated and measured direction of gravity
-        error = [
-            acc[1]*v[2] - acc[2]*v[1] + mag[1]*b[2] - mag[2]*b[1],
-            acc[2]*v[0] - acc[0]*v[2] + mag[2]*b[0] - mag[0]*b[2],
-            acc[0]*v[1] - acc[1]*v[0] + mag[0]*b[1] - mag[1]*b[0]
-        ]
+        # Update the estimated attitude using gyroscope data and feedback correction
+        rate_of_change = gyro + feedback  # Combined rate of change
+        self.attitude_estimation += rate_of_change * delta_t
 
-        # Apply PI feedback terms
-        for i in range(3):
-            integral_error[i] += error[i] * Ki * dt
-            gyro_bias[i] += integral_error[i]
-            gx, gy, gz = gx - gyro_bias[0], gy - gyro_bias[1], gz - gyro_bias[2]
+        # Normalize the updated attitude estimation to maintain unit magnitude
+        if np.linalg.norm(self.attitude_estimation) != 0:
+            self.attitude_estimation /= np.linalg.norm(self.attitude_estimation)
 
-        # Compute rate of change of quaternion
-        qDot = [
-            0.5 * (-q[1]*gx - q[2]*gy - q[3]*gz),
-            0.5 * (q[0]*gx + q[2]*gz - q[3]*gy),
-            0.5 * (q[0]*gy - q[1]*gz + q[3]*gx),
-            0.5 * (q[0]*gz + q[1]*gy - q[2]*gx)
-        ]
+        # Return the current estimated attitude
+        return self.get_estimate()
 
-        # Integrate to yield quaternion
-        q = [q[i] + qDot[i]*dt for i in range(4)]
-        q = normalize(q)
-
-        quaternions.append(q)
-
-    return quaternions
-
-# Example usage:
-# data = [
-#     [0, 0, 0, 9.81, 0, 0, 0, 0.2, 0, 0.4],
-#     [0.01, 0, 0, 9.81, 0.1, 0, 0, 0.2, 0, 0.4],
-#     # ... more data rows ...
-# ]
-# result = mahony_filter(data)
-# for q in result:
-#     print(f"Estimated orientation (quaternion): {q}")
-
-# Explanation of the Mahony filter:
-# The Mahony filter is an algorithm used to estimate the orientation of an object in 3D space
-# using data from inertial and magnetic sensors. It's particularly useful in situations where
-# you need to track the orientation of a device, such as in drones, robots, or virtual reality systems.
-
-# Key components of the Mahony filter:
-# 1. Sensor Fusion: It combines data from accelerometers (which measure linear acceleration),
-#    gyroscopes (which measure angular velocity), and optionally magnetometers (which measure
-#    magnetic field direction) to provide a more accurate and stable orientation estimate.
-
-# 2. Quaternion Representation: The filter uses quaternions to represent orientation. Quaternions
-#    are a mathematical notation that can represent rotations in 3D space without the problem of
-#    "gimbal lock" that can occur with Euler angles.
-
-# 3. Proportional-Integral (PI) Controller: The filter uses a PI controller to correct errors
-#    in the orientation estimate. The proportional term (Kp) provides immediate correction,
-#    while the integral term (Ki) helps to eliminate steady-state errors.
-
-# 4. Gyroscope Bias Estimation: The filter estimates and corrects for gyroscope bias, which
-#    is a common source of error in inertial measurement units.
-
-# How the algorithm works:
-# 1. Initialize quaternion and gyroscope bias estimates.
-# 2. For each set of sensor measurements:
-#    a. Normalize accelerometer and magnetometer data.
-#    b. Estimate the direction of gravity and magnetic field in the body frame.
-#    c. Compute the error between estimated and measured directions.
-#    d. Apply PI feedback to correct gyroscope measurements and update bias estimate.
-#    e. Compute the rate of change of the quaternion based on corrected gyroscope data.
-#    f. Integrate to get the new quaternion estimate.
-#    g. Normalize the quaternion to ensure it represents a valid rotation.
-
-# This implementation is scalable as it processes each row of input data independently,
-# allowing it to handle datasets of any size. The filter parameters (frequency, Kp, Ki)
-# can be adjusted to optimize performance for different sensors and applications.
-
-# Test function and some sample data
-
-def test_mahony_filter():
-    # Generate some sample data
-    # This data simulates 1 second of sensor readings at 100Hz
-    # with the device starting at rest and then rotating around the z-axis
-    sample_data = []
-    for i in range(100):
-        t = i / 100.0
-        ax, ay, az = 0, 0, -9.81  # Constant gravity
-        gx, gy, gz = 0, 0, 1.0  # Constant rotation around z-axis
-        mx, my, mz = 0.2, 0.4, 0.1  # Constant magnetic field
-        sample_data.append([t, ax, ay, az, gx, gy, gz, mx, my, mz])
-
-    # Run the Mahony filter on the sample data
-    result = mahony_filter(sample_data)
-
-    # Print the first and last quaternions
-    print("Initial quaternion:", result[0])
-    print("Final quaternion:", result[-1])
-
-    # In a perfect scenario, we'd expect to see rotation around the z-axis
-    # This would be represented by changes in the x and y components of the quaternion
-
-# Run the test
-if __name__ == "__main__":
-    test_mahony_filter()
+    def get_estimate(self):
+        # Retrieve the current attitude estimation
+        # Returns the estimated orientation vector (3D)
+        return self.attitude_estimation
