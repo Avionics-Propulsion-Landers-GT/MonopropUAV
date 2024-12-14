@@ -1,16 +1,54 @@
 #include <iostream>
 #include <vector>
 #include <cmath>
+#include <fstream>
+#include <sstream>
 
 using namespace std;
 
 // Structure to hold sensor data
 struct SensorData {
-    double timestamp;
-    double accel[3];
+    double timestamp;   
     double gyro[3];
-    double mag[3];
+    double accel[3];
+    double mag[3];  
 };
+
+// Function to read CSV file and parse sensor data in gyro, accel, mag order
+vector<SensorData> readCSV(const string& filename) {
+    vector<SensorData> sensorData;
+    ifstream file(filename);
+    string line;
+    if (file.is_open()) {
+        getline(file, line); // Skip header row
+        while (getline(file, line)) {
+            stringstream ss(line);
+            SensorData data;
+            ss >> data.timestamp;
+            ss.ignore();
+            ss >> data.gyro[0];
+            ss.ignore();
+            ss >> data.gyro[1];
+            ss.ignore();
+            ss >> data.gyro[2];
+            ss.ignore();
+            ss >> data.accel[0];
+            ss.ignore();
+            ss >> data.accel[1];
+            ss.ignore();
+            ss >> data.accel[2];
+            ss.ignore();
+            ss >> data.mag[0];
+            ss.ignore();
+            ss >> data.mag[1];
+            ss.ignore();
+            ss >> data.mag[2];
+            sensorData.push_back(data);
+        }
+        file.close();
+    }
+    return sensorData;
+}
 
 // Quaternion multiplication
 vector<double> quaternionMultiply(const vector<double>& q1, const vector<double>& q2) {
@@ -32,7 +70,7 @@ vector<double> normalizeQuaternion(const vector<double>& q) {
 }
 
 // Filters out high-frequency noise 
-vector<double> lowPassFilter(const vector<double>& data, const vector<double>& prevData, double alpha = 0.1) {
+vector<double> lowPassFilter(const vector<double>& data, const vector<double>& prevData, double alpha) {
     vector<double> result(3);
     for (int i = 0; i < 3; i++) {
         result[i] = alpha * data[i] + (1 - alpha) * prevData[i];
@@ -41,7 +79,7 @@ vector<double> lowPassFilter(const vector<double>& data, const vector<double>& p
 }
 
 // Filters out low-frequency noise
-vector<double> highPassFilter(const vector<double>& data, const vector<double>& prevData, double alpha = 0.1) {
+vector<double> highPassFilter(const vector<double>& data, const vector<double>& prevData, double alpha) {
     vector<double> lowPass = lowPassFilter(data, prevData, alpha);
     vector<double> result(3);
     for (int i = 0; i < 3; i++) {
@@ -55,7 +93,7 @@ vector<double> rotateVectorWithQuaternion(const vector<double>& vec, const vecto
     vector<double> qConjugate = { q[0], -q[1], -q[2], -q[3] };
     vector<double> vecQuat = { 0, vec[0], vec[1], vec[2] };
     vector<double> rotatedVec = quaternionMultiply(quaternionMultiply(q, vecQuat), qConjugate);
-    return { rotatedVec[1], rotatedVec[2], rotatedVec[3] }; // Discard the scalar part
+    return { rotatedVec[1], rotatedVec[2], rotatedVec[3] }; 
 }
 
 // Integrates gyroscope data and updates attitude quaternion
@@ -83,7 +121,7 @@ vector<double> integrateGyroscope(vector<double> q, const vector<double>& gyro, 
 vector<double> correctOrientation(const vector<double>& q, const vector<double>& accel, const vector<double>& mag) {
     // Expected gravity and magnetic reference vectors
     vector<double> gravityRef = { 0, 0, 9.81 }; 
-    vector<double> magRef = { 1.0, 0.0, 0.0 }; //can be tuned later
+    vector<double> magRef = { 5.00E-05, 0.0, 0.0 }; //can be tuned later
 
     // Rotate reference vectors to body frame
     vector<double> gravityBody = rotateVectorWithQuaternion(gravityRef, q);
@@ -94,8 +132,8 @@ vector<double> correctOrientation(const vector<double>& q, const vector<double>&
     vector<double> magError = { magBody[0] - mag[0], magBody[1] - mag[1], magBody[2] - mag[2] };
 
     // Combine errors with weights for correction
-    double alphaAccel = 0.7; // Weight for accelerometer correction (TUNE)
-    double alphaMag = 0.3;   // Weight for magnetometer correction (TUNE)
+    double alphaAccel = 0.5; // Weight for accelerometer correction (TUNE)
+    double alphaMag = 0.5;   // Weight for magnetometer correction (TUNE)
 
     vector<double> correctionQuat = {
         1.0,
@@ -150,22 +188,12 @@ vector<vector<double>> fouratiFilter(const vector<SensorData>& data, double alph
     return quaternions;
 }
 
-
 int main() {
-    vector<SensorData> sensorData = {
-    {0.0, {0.0, 0.0, 9.81}, {0.0, 0.0, 0.0}, {1.0, 0.0, 0.0}},
-    {0.1, {0.1, 0.0, 9.7}, {0.0, 0.0, 0.1}, {1.0, 0.0, 0.0}},
-    {0.2, {0.0, 0.1, 9.8}, {0.0, 0.1, 0.0}, {1.0, 0.0, 0.0}},
-    {0.3, {-0.1, 0.0, 9.6}, {0.1, 0.0, 0.0}, {1.0, 0.0, 0.0}},
-    {0.4, {0.0, -0.1, 9.8}, {0.0, 0.0, -0.1}, {0.5, 0.5, 0.0}},
-    {0.5, {0.0, 0.0, 9.81}, {0.0, 0.0, 0.2}, {1.0, 0.0, 0.0}}
-    };
-
+    vector<SensorData> sensorData = readCSV("data.csv");
     vector<vector<double>> quaternions = fouratiFilter(sensorData);
-
     for (const auto& q : quaternions) {
         cout << "Quaternion: [" << q[0] << ", " << q[1] << ", " << q[2] << ", " << q[3] << "]" << endl;
     }
-
     return 0;
 }
+
