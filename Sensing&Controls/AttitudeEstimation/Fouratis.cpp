@@ -189,11 +189,15 @@ vector<vector<double>> fouratiFilter(const vector<SensorData>& data, double alph
 }
 
 int main() {
-    vector<SensorData> sensorData = readCSV("data.csv");
+    vector<SensorData> sensorData = readCSV("noisy_monocopter_data.csv");
     vector<vector<double>> quaternions = fouratiFilter(sensorData);
+    std::ofstream myfile;
+    myfile.open ("fourati_output.csv");
     for (const auto& q : quaternions) {
         cout << "Quaternion: [" << q[0] << ", " << q[1] << ", " << q[2] << ", " << q[3] << "]" << endl;
+        myfile << q[0] << ", " << q[1] << ", " << q[2] << ", " << q[3] << endl;
     }
+    myfile.close();
     return 0;
 }
 
