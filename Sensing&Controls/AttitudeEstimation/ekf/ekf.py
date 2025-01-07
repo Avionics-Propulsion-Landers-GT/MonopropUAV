@@ -1,6 +1,21 @@
 # Sarang Suman
 import numpy as np
 import sympy as sp
+import pandas as pd
+import csv
+from sklearn.metrics import mean_squared_error
+import matplotlib.pyplot as plt
+
+df = pd.read_csv('monocopter_data.csv')
+df = df.iloc[:, [1, 2, 3]]
+# df = df.drop(index = 0)
+arr = df.to_numpy()
+
+validation_df = pd.read_csv('validation.csv')
+validation_df = validation_df.iloc[: , 1:] # Remove the first column
+validation_data = validation_df.to_numpy()
+
+
 
 class EKF():
 
@@ -48,6 +63,7 @@ class EKF():
         F = self.F_jacobian(self.x)
         self.x = self.f(self.x)  # Non-linear state transition
         self.P = F @ self.P @ F.T + self.Q  # Update the error covariance
+        return(self.x) # Return the predicted state estimate
 
     # Calculates an update for the state estimate using calculated Kalman Gain and Measurement residual
     # z: sensor measurement
@@ -62,17 +78,56 @@ class EKF():
 
     # Runs iterations of the filter for each sensor reading, calculating new state estimates and updating Kalman gain to optimize the filter
     def run_filter(self, A):
-        # A is an n x 3 matrix of sensor data
-        self.timestamps = A[:, 0]
-        A = np.delete(A, [0], axis=1)
-
-        n = A.shape[0]  # Number of sensor readings
+        measurements = []
+        n = A.shape[0]
 
         for i in range(n):
             z = A[i, :].reshape(-1, 1)  # Get the i-th sensor measurement as a column vector
-            self.predict()  # Prediction step
+
+            measurement = [float(''.join(map(str, coord))) for coord in self.predict().tolist()]
+            measurements.append(measurement)
+
             self.update(z)  # Update step
 
-ekf = EKF(3, 9)
-a = np.array([[1, 2, 3, 1, 2, 3, 1 ,2 ,3, 4], [4, 5, 6, 1, 2, 3, 1 ,2 ,3, 4], [7, 8, 9,  1, 2, 3, 1 ,2 ,3, 4]])
-ekf.run_filter(a)
+        with open('predictions.csv', 'w', newline='') as file:
+            # Step 4: Using csv.writer to write the list to the CSV file
+            writer = csv.writer(file)
+            writer.writerows(measurements)
+
+        return measurements
+
+ekf = EKF(3,3)
+ekf.run_filter(arr)
+
+measurements = pd.read_csv('predictions.csv', header=None)
+
+
+# Plot x values
+plt.figure()
+plt.plot(measurements[measurements.columns[0]], label='Predicted x')
+plt.plot(validation_df[validation_df.columns[0]], label='Actual x')
+plt.xlabel('Time step')
+plt.ylabel('x value')
+plt.legend()
+plt.title('Comparison of x values')
+plt.show()
+
+# Plot y values
+plt.figure()
+plt.plot(measurements[measurements.columns[1]], label='Predicted y')
+plt.plot(validation_df[validation_df.columns[1]], label='Actual y')
+plt.xlabel('Time step')
+plt.ylabel('y value')
+plt.legend()
+plt.title('Comparison of y values')
+plt.show()
+
+# Plot z values
+plt.figure()
+plt.plot(measurements[measurements.columns[2]], label='Predicted z')
+plt.plot(validation_df[validation_df.columns[2]], label='Actual z')
+plt.xlabel('Time step')
+plt.ylabel('z value')
+plt.legend()
+plt.title('Comparison of z values')
+plt.show()
