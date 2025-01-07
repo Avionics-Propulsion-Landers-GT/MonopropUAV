@@ -331,6 +331,7 @@ function plot_results(position_history, velocity_history, acceleration_history, 
     csvwrite('eulers_data.csv',output_data3);
     output_data4 = [time' eulers_calc'];
     csvwrite('eulers_hardcoded_data.csv',output_data4);
+    csvwrite('position_data.csv',[time', position_history']);
 
 
 end  % End of plot_results function
