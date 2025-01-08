@@ -1,6 +1,7 @@
 import csv
 import numpy
 import os
+import math
 
 gps_noise_std_dev = 0.0000005
 lidar_noise_std_dev = 0.2
@@ -15,11 +16,16 @@ with open('position_data.csv', mode = 'r') as file:
         for i in range(1, len(lines)):
           eulers[i - 1].append(float(lines[i]))
 
+earth = 6378.137 # radius of the earth in kilometer
+pi = float(math.pi)
+m = (1 / ((2 * pi / 360) * earth)) / 1000.0;  # 1 meter in degree
 for i in range(len(eulers[0])):
     gps_rand = numpy.random.normal(0, gps_noise_std_dev, size=(2))
     lidar_rand = numpy.random.normal(0, lidar_noise_std_dev, size=(1))
-    eulers[0][i] = '%.6f'%(eulers[0][i] + gps_rand[0] + start_lat)
-    eulers[1][i] = '%.6f'%(eulers[1][i] + gps_rand[1] + start_lng)
+    eulers[0][i] = eulers[0][i] * m + start_lat
+    eulers[1][i] = eulers[1][i] * m / math.cos(eulers[0][i] * pi / 180.0) + start_lng
+    eulers[0][i] = '%.6f'%(eulers[0][i] + gps_rand[0])
+    eulers[1][i] = '%.6f'%(eulers[1][i] + gps_rand[1])
     eulers[2][i] = '%.8f'%(eulers[2][i] + lidar_rand[0])
 
 noisy_gps_data = []
