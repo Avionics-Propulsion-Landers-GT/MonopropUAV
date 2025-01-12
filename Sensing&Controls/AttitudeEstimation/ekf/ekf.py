@@ -1,4 +1,3 @@
-# Sarang Suman
 import numpy as np
 import sympy as sp
 import pandas as pd
@@ -6,12 +5,12 @@ import csv
 from sklearn.metrics import mean_squared_error
 import matplotlib.pyplot as plt
 
-df = pd.read_csv('monocopter_data.csv')
+df = pd.read_csv('../TestBenches/monocopter_data.csv')
 df = df.iloc[:, [1, 2, 3]]
 # df = df.drop(index = 0)
 arr = df.to_numpy()
 
-validation_df = pd.read_csv('validation.csv')
+validation_df = pd.read_csv('../eulers_data.csv')
 validation_df = validation_df.iloc[: , 1:] # Remove the first column
 validation_data = validation_df.to_numpy()
 
