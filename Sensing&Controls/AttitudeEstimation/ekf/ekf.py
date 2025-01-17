@@ -1,11 +1,12 @@
 import numpy as np
 import sympy as sp
 import pandas as pd
+import copy
 import csv
 from sklearn.metrics import mean_squared_error
 import matplotlib.pyplot as plt
 
-df = pd.read_csv('../TestBenches/monocopter_data.csv')
+df = pd.read_csv('../TestBenches/noisy_monocopter_data.csv')
 df = df.iloc[:, [1, 2, 3]]
 # df = df.drop(index = 0)
 arr = df.to_numpy()
@@ -27,8 +28,9 @@ class EKF():
         # Initialize state vector, covariance matrix, process noise covariance, and measurement noise covariance
         self.x = np.zeros((state_dim, 1))
         self.P = np.eye(state_dim)
-        self.Q = np.eye(state_dim)
-        self.R = np.eye(sensor_dim)
+        self.Q = np.eye(state_dim) * .065
+        self.R = (np.eye(sensor_dim)) * 350
+        self.prevX = np.zeros((state_dim, 1))
 
         self.state_dim = state_dim
         self.sensor_dim = sensor_dim
@@ -38,20 +40,23 @@ class EKF():
     # Function
     def f(self, x):
         # State transition function (non-linear). Modify as per your system's dynamics
-        return x
+        return x + (x - self.prevX)
 
     def h(self, x):
         # Measurement function (non-linear). Modify as per your sensor's model
+        print(x[:self.sensor_dim])
         return x[:self.sensor_dim]
 
     def F_jacobian(self, x):
-        # Takes the Jacobian of the state transition function f
+        '''# Takes the Jacobian of the state transition function f
         f_sym = sp.Matrix(self.f(sp.Matrix(self.x_symbols)))  # Apply the state transition function to the symbolic state vector
         F = f_sym.jacobian(self.x_symbols)  # Compute the Jacobian matrix of the state transition function
         return np.array(F).astype(np.float64)  # Convert the Jacobian matrix to a NumPy array of type float64
-
+        '''
+        return (self.f(x)).T
     def H_jacobian(self, x):
         # Takes Jacobian of the measurement function h
+        print(1)
         h_sym = sp.Matrix(self.h(sp.Matrix(self.x_symbols)))  # Apply the measurement function to the symbolic state vector
         H = h_sym.jacobian(self.x_symbols)  # Compute the Jacobian matrix of the measurement function
         return np.array(H).astype(np.float64)  # Convert the Jacobian matrix to a NumPy array of type float64
@@ -68,10 +73,12 @@ class EKF():
     # z: sensor measurement
     def update(self, z):
         H = self.H_jacobian(self.x)
+        print(2)
         y = z - self.h(self.x)  # Measurement residual (innovation)
         S = H @ self.P @ H.T + self.R  # Innovation covariance
         K = self.P @ H.T @ np.linalg.inv(S)  # Calculate Kalman gain
-
+        
+        self.prevX = copy.deepcopy(self.x)
         self.x = self.x + K @ y  # Updated state estimate
         self.P = (np.eye(self.state_dim) - K @ H) @ self.P  # Updated error covariance
 
