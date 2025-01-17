@@ -28,8 +28,8 @@ class EKF():
         # Initialize state vector, covariance matrix, process noise covariance, and measurement noise covariance
         self.x = np.zeros((state_dim, 1))
         self.P = np.eye(state_dim)
-        self.Q = np.eye(state_dim) * .065
-        self.R = (np.eye(sensor_dim)) * 350
+        self.Q = np.eye(state_dim) * .1
+        self.R = (np.eye(sensor_dim)) * 225
         self.prevX = np.zeros((state_dim, 1))
 
         self.state_dim = state_dim
@@ -44,7 +44,7 @@ class EKF():
 
     def h(self, x):
         # Measurement function (non-linear). Modify as per your sensor's model
-        print(x[:self.sensor_dim])
+        #print(x[:self.sensor_dim])
         return x[:self.sensor_dim]
 
     def F_jacobian(self, x):
@@ -53,10 +53,9 @@ class EKF():
         F = f_sym.jacobian(self.x_symbols)  # Compute the Jacobian matrix of the state transition function
         return np.array(F).astype(np.float64)  # Convert the Jacobian matrix to a NumPy array of type float64
         '''
-        return (self.f(x)).T
+        return ((self.x - self.prevX)).T
     def H_jacobian(self, x):
         # Takes Jacobian of the measurement function h
-        print(1)
         h_sym = sp.Matrix(self.h(sp.Matrix(self.x_symbols)))  # Apply the measurement function to the symbolic state vector
         H = h_sym.jacobian(self.x_symbols)  # Compute the Jacobian matrix of the measurement function
         return np.array(H).astype(np.float64)  # Convert the Jacobian matrix to a NumPy array of type float64
@@ -73,7 +72,6 @@ class EKF():
     # z: sensor measurement
     def update(self, z):
         H = self.H_jacobian(self.x)
-        print(2)
         y = z - self.h(self.x)  # Measurement residual (innovation)
         S = H @ self.P @ H.T + self.R  # Innovation covariance
         K = self.P @ H.T @ np.linalg.inv(S)  # Calculate Kalman gain
