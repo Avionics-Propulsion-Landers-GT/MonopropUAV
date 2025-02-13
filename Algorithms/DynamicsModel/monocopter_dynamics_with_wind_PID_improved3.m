@@ -123,7 +123,7 @@ function monocopter_dynamics_with_wind_PID_improved()
     % Initialize PID controller variables
     previous_error = zeros(3, 1);  % Stores the error from the previous time step for derivative control
                                    % in the PID position control loop.
-    
+        
     % Pre-allocate arrays to store results
     position_history = zeros(3, num_steps);       % Stores the rocket's position (X, Y, Z) over time.
     velocity_history = zeros(3, num_steps);       % Stores the rocket's velocity (X, Y, Z) over time.
@@ -156,7 +156,7 @@ function monocopter_dynamics_with_wind_PID_improved()
             error_derivative = (error - previous_error) / dt;  % Rate of change of position error.
         end
 
-        % PID controller output (desired acceleration in X, Y, Z)
+        % PID controller output (desired acceleration in X, Y, Z)   
         u = Kp_pos .* error + Kd_pos .* error_derivative;  
         % Generates the control signal as desired acceleration based on position error and its derivative.
 

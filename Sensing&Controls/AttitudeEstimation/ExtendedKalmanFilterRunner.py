@@ -5,7 +5,7 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 
-ekf = ExtendedKalmanFilter.ExtendedKalmanFilter(np.array([0,0,0]), np.zeros(9), 0.001, 0.5, 0.8 * 1000000, 100)
+ekf = ExtendedKalmanFilter.ExtendedKalmanFilter(np.array([0,0,0]), np.zeros(9), 0.001, 0.2, 0.5 * 1000000, 100)
 attitudes = []
 
 with open('noisy_monocopter_data.csv', mode ='r') as file:
