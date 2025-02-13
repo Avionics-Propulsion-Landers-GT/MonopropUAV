@@ -12,6 +12,8 @@ class ExtendedKalmanFilterAltitude():
         self.current_time = 0 - delta_time
         self.delta_time = delta_time
         self.measurement_size = np.size(initial_measurements)
+        self.previous_velocity = 0
+        self.velocity = 0
 
         self.process_noise_covariance = np.eye(np.size(self.state)) * q_scalar
         self.measurement_noise_covariance = np.eye(self.measurement_size) * r_scalar
@@ -38,16 +40,6 @@ class ExtendedKalmanFilterAltitude():
 
         # calculate measurement residual
         measurement_prediction = self.measurement_prediction_function()
-
-        normalized_accel = self.euler_normalize(measurement_prediction[3:6])
-        measurement_prediction[3] = normalized_accel[0]
-        measurement_prediction[4] = normalized_accel[1]
-        measurement_prediction[5] = normalized_accel[2]
-        normalized_mag = self.euler_normalize(measurement_prediction[6:9])
-        measurement_prediction[6] = normalized_mag[0]
-        measurement_prediction[7] = normalized_mag[1]
-        measurement_prediction[8] = normalized_mag[2]
-
         measurement_residual = measurement - measurement_prediction
 
         # calculate measurement residual covariance
@@ -55,21 +47,22 @@ class ExtendedKalmanFilterAltitude():
 
         # calculate near-optimal kalman gain
         kalman_gain = self.error_covariance @ self.measurement_prediction_jacobian().T @ np.linalg.inv(measurement_residual_covariance)
-
+        self.previous_velocity = self.velocity
         # update state estimate
         self.previous_state = self.state
-        self.state = self.quaternion_to_euler(self.quaternion_normalize(self.euler_to_quaternion(self.state + kalman_gain @ measurement_residual)))
+        self.state = self.state + kalman_gain @ measurement_residual
 
         # update covariance estimate
         self.error_covariance = (np.eye(np.size(self.state)) - kalman_gain @ self.measurement_prediction_jacobian()) @ self.error_covariance
         return
 
     def state_transition_function(self):
-        velocityz = (self.state - self.previous_state) / self.delta_time
-        return velocityz
+        self.velocity = (self.state - self.previous_state) / self.delta_time
+        return self.state + self.velocity*self.delta_time
     
     def state_transition_jacobian(self):
-        return np.eye(np.size(self.state))
+        acceleration = (self.velocity - self.previous_velocity) / self.delta_time
+        jacobian = np.array([1 + (acceleration/self.velocity)])
     
     def measurement_prediction_function(self):
         return self.state
