@@ -24,7 +24,7 @@ class ExtendedKalmanFilterAltitude():
         self.previous_time = self.current_time
         self.current_time = data[0]
         self.delta_time = self.current_time - self.previous_time
-        return np.array([data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8], data[9]])
+        return np.array([data[1]])
 
     def predict(self):
         # Update state estimate
@@ -62,7 +62,12 @@ class ExtendedKalmanFilterAltitude():
     
     def state_transition_jacobian(self):
         acceleration = (self.velocity - self.previous_velocity) / self.delta_time
-        jacobian = np.array([1 + (acceleration/self.velocity)])
+        if (self.velocity != 0):
+            deriv = acceleration/self.velocity
+        else:
+            deriv = 0
+        jacobian = np.array([1 + (deriv)])
+        return jacobian
     
     def measurement_prediction_function(self):
         return self.state

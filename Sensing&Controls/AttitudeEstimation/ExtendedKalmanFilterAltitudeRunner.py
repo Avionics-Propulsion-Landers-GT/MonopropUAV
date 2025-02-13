@@ -5,19 +5,22 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 
-ekf = ExtendedKalmanFilterAltitude.ExtendedKalmanFilterAltitude(np.array([0,0,0]), np.zeros(9), 0.001, 0.2, 0.5 * 1000000, 100)
+ekf = ExtendedKalmanFilterAltitude.ExtendedKalmanFilterAltitude(np.array([0]), np.zeros(1), 0.001, 0.2, 0.5 * 1000000, 100)
 attitudes = []
 
 with open('noisy_lidar_data.csv', mode ='r') as file:
     csvFile = csv.reader(file)
     firstLine = True
+    timer = 0
     for lines in csvFile:
         if (firstLine):
             firstLine = False
         else:
-            update_arr = np.empty(10)
+            update_arr = np.empty(2)
             for i in range(len(lines)):
-                update_arr[i] = float(lines[i])
+                update_arr[i+1] = float(lines[i])
+            update_arr[0] = timer
+            timer += 0.001
 
             ekf.predict()
             ekf.update(update_arr)
@@ -47,24 +50,4 @@ plt.xlabel('Time step')
 plt.ylabel('x value')
 plt.legend()
 plt.title('Comparison of x values')
-plt.show()
-
-# Plot y values
-plt.figure()
-plt.plot(measurements[measurements.columns[1]], label='Predicted y')
-plt.plot(validation_df[validation_df.columns[1]], label='Actual y')
-plt.xlabel('Time step')
-plt.ylabel('y value')
-plt.legend()
-plt.title('Comparison of y values')
-plt.show()
-
-# Plot z values
-plt.figure()
-plt.plot(measurements[measurements.columns[2]], label='Predicted z')
-plt.plot(validation_df[validation_df.columns[2]], label='Actual z')
-plt.xlabel('Time step')
-plt.ylabel('z value')
-plt.legend()
-plt.title('Comparison of z values')
 plt.show()
