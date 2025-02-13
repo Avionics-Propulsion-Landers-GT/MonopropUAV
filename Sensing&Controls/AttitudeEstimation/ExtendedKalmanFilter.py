@@ -8,8 +8,8 @@ class ExtendedKalmanFilter():
     def __init__(self, initial_state, initial_measurements, delta_time, q_scalar, r_scalar, initial_p):
         self.state = initial_state
         self.previous_state = initial_state
-        self.previous_time = 0
-        self.current_time = delta_time
+        self.previous_time = 0 - 2 * delta_time
+        self.current_time = 0 - delta_time
         self.delta_time = delta_time
         self.measurement_size = np.size(initial_measurements)
 
@@ -38,6 +38,7 @@ class ExtendedKalmanFilter():
 
         # calculate measurement residual
         measurement_prediction = self.measurement_prediction_function()
+
         normalized_accel = self.euler_normalize(measurement_prediction[3:6])
         measurement_prediction[3] = normalized_accel[0]
         measurement_prediction[4] = normalized_accel[1]
@@ -48,15 +49,6 @@ class ExtendedKalmanFilter():
         measurement_prediction[8] = normalized_mag[2]
 
         measurement_residual = measurement - measurement_prediction
-
-        # print(self.current_time)
-        # print('measurement')
-        # print(measurement)
-        # print('measurement prediction')
-        # print(self.measurement_prediction_function())
-        # print('measurement residual')
-        # print(measurement_residual)
-        # print('')
 
         # calculate measurement residual covariance
         measurement_residual_covariance = self.measurement_prediction_jacobian() @ self.error_covariance @ self.measurement_prediction_jacobian().T + self.measurement_noise_covariance
@@ -86,10 +78,8 @@ class ExtendedKalmanFilter():
         return np.eye(np.size(self.state))
     
     def measurement_prediction_function(self):
-        euler_angular_velocity = self.quaternions_to_euler_angular_velocities(self.euler_to_quaternion(self.previous_state), self.euler_to_quaternion(self.state), self.delta_time)
-        #gravity = np.dot(self.euler_to_quaternion(self.state)[1:4], np.array([0, 0, -9.81])) / (9.81 * 9.81) * np.array([0, 0, -9.81])
+        euler_angular_velocity = self.get_extrinsic_rotation_matrix(self.state) @ self.quaternions_to_euler_angular_velocities(self.euler_to_quaternion(self.previous_state), self.euler_to_quaternion(self.state), self.delta_time)
         gravity = self.euler_normalize(self.get_extrinsic_rotation_matrix(self.state) @ np.array([0, 0, -9.81]))
-        #mag = np.dot(self.state, np.array([0.00005, 0, 0])) / (0.00005 * 0.00005) * np.array([0.00005, 0, 0])
         mag = self.euler_normalize(self.get_extrinsic_rotation_matrix(self.state) @ np.array([0.00005, 0, 0]))
 
         return np.array([euler_angular_velocity[0], euler_angular_velocity[1], euler_angular_velocity[2],
@@ -101,19 +91,9 @@ class ExtendedKalmanFilter():
         jacobian[0][0] = 1
         jacobian[1][1] = 1
         jacobian[2][2] = 1
-        # jacobian[3][0] = -1
-        # jacobian[4][1] = -1
-        # jacobian[5][2] = -1
-        # jacobian[6][0] = -1
-        # jacobian[7][1] = -1
-        # jacobian[8][2] = -1
         return jacobian
     
     def quaternions_to_euler_angular_velocities(self, q1, q2, dt):
-        # return (2 / dt) * np.array([
-        #     q1[0]*q2[1] - q1[1]*q2[0] - q1[2]*q2[3] + q1[3]*q2[2],
-        #     q1[0]*q2[2] + q1[1]*q2[3] - q1[2]*q2[0] - q1[3]*q2[1],
-        #     q1[0]*q2[3] - q1[1]*q2[2] + q1[2]*q2[1] - q1[3]*q2[0]])
         return 2 * self.quaternion_multiply(q2, self.quaternion_inverse(q1))[1:4] / dt
 
     # euler in the form (x,y,z)
@@ -127,7 +107,6 @@ class ExtendedKalmanFilter():
     def quaternion_to_euler(self, quaternion):
         return np.array([math.atan2(2 * (quaternion[0] * quaternion[1] + quaternion[2] * quaternion[3]), (1 - 2 * (quaternion[1] * quaternion[1] + quaternion[2] * quaternion[2]))),
                          math.asin(2 * (quaternion[0] * quaternion[2] - quaternion[3] * quaternion[1])),
-                         #-math.pi / 2 + 2 * math.atan2(math.sqrt(1 + 2 * (quaternion[0] * quaternion[2] - quaternion[1] * quaternion[3])), math.sqrt(1 - 2 * (quaternion[0] * quaternion[2] - quaternion[1] * quaternion[3]))), 
                          math.atan2(2 * (quaternion[0] * quaternion[3] + quaternion[1] * quaternion[2]), (1 - 2 * (quaternion[2] * quaternion[2] + quaternion[3] * quaternion[3])))])
     
     def quaternion_normalize(self, quaternion):
