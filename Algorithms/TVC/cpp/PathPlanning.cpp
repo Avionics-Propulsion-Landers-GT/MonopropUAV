@@ -134,7 +134,7 @@ std::tuple<std::vector<double>, std::vector<double>, std::vector<double>> create
 
     // Calculate the two Bezier control points using the initial conditions and endpoint
     Point3D b0 = {p0.x + v0.x / 3.0, p0.y + v0.y / 3.0, p0.z + v0.z / 3.0};
-    Point3D b1 = {0.0, 0.0, b0.z + (p1.z - p0.z) / 3.0};
+    Point3D b1 = {p1.x, p1.y, p0.z + (p1.z - p0.z) / 3.0};
 
     std::vector<double> x, y, z;
 
