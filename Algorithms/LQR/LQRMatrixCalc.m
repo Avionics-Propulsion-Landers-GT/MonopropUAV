@@ -116,8 +116,16 @@ ang_vel_b_WF = R_wf*(ang_vel_b_BF) + angular_vel;
 gyro_torque_a = cross(ang_vel_a_WF, (inertia_a_WF)*(ang_vel_a_WF));
 gyro_torque_b = cross(ang_vel_b_WF, (inertia_b_WF)*(ang_vel_b_WF));
 
+% torque caused on the TVC causing moment on the entire rigid body
+ang_accel_a_BF = [a_dot_dot 0 0]';
+ang_accel_b_BF = [0 b_dot_dot 0]';
+m_torque_a = inertia_a*(ang_accel_a_BF);
+m_torque_b = inertia_b*(ang_accel_b_BF);
+m_torque_a_WF = R_wf*m_torque_a
+m_torque_b_BF = R_wf*m_torque_b
+
 torque_net_world = torque_net_world - (gyro_torque_s + gyro_torque_a + ...
-    gyro_torque_b);
+    gyro_torque_b) + m_torque_a_WF + m_torque_b_BF;
 
 ang_accel_WF = inv(inertia)*(torque_net_world);
 
