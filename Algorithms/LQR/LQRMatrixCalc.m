@@ -155,4 +155,27 @@ B3 = [zeros([3,7])];
 A = [A1 ; A2 ; A3 ; A4]
 B = [B1 ; B2; B3; B4]
 
-%% Conversion to C++ (possibly??)
+%% Conversion to C++ 
+
+%% Numeric substution.
+
+%% Write symbolic matrices to txt file
+
+%% COST FUNCTION (DISCRETE TIME, INFINITE HORIZON)
+
+% define Q (state cost) and R (input cost) matrices
+Q = eye(12);
+R = eye(7);
+
+[K, S, P] = dlqr(A, B, Q, R);
+% this currently does not work because we dont have numeric A and B
+% matrices
+% must be called at every timestep because A and B are NOT invariant
+% K - optimal gain matrix (F in the wikipedia LQR inf horizon disc time section)
+% S - P - solution to the discrete algebraic riccati equation
+% P - poles - I don't know what this means
+% see: https://www.mathworks.com/help/control/ref/lti.dlqr.html
+
+
+
+
