@@ -325,7 +325,7 @@ function drag = get_drag_body(att, vel, v_wind)
     vel_relative = to_body_frame_quaternion(att) * (vel - v_wind);
     drag_force =  - 0.5 * air_density * diag([Cd_x*A_x, Cd_y*A_y, Cd_z*A_z]) * (norm(vel_relative) * vel_relative); %drag force points in opposite direction to relative velocity
     drag_torque = cross(COP_offset, drag_force);
-    drag = [drag_force, drag_torque];
+    drag = {drag_force, drag_torque}; %cell array of force and torque vectors
 end
 
 %% updates th TVC gimbal movement and gets torque from the TVC gimbal movement
@@ -366,7 +366,6 @@ function info = update_TVC(gimbal, gimbal_ang_vel, gimbal_goal, delta_t)
     torque = diag([gimbal_top_I; gimbal_bottom_I; 0]) * current_gimbal_accel;
 
     info = [gimbal; gimbal_ang_vel; torque];
-    drag = {drag_force, drag_torque}; %cell array of force and torque vectors
 end
 
 %% creates a rotation matrix to turn an euler vector into the world frame with a quaternion attitude
