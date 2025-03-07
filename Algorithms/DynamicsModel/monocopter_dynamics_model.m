@@ -75,6 +75,7 @@ global gimbal_speed;
 gimbal_speed = 0; % TODO: set
 global gimbal_acceleration;
 gimbal_acceleration = 0; % TODO: set
+gimbal_speed = pi / 3;
 
 simulate
 %% simulation function
@@ -365,6 +366,7 @@ function info = update_TVC(gimbal, gimbal_ang_vel, gimbal_goal, delta_t)
     torque = diag([gimbal_top_I; gimbal_bottom_I; 0]) * current_gimbal_accel;
 
     info = [gimbal; gimbal_ang_vel; torque];
+    drag = {drag_force, drag_torque}; %cell array of force and torque vectors
 end
 
 %% creates a rotation matrix to turn an euler vector into the world frame with a quaternion attitude
