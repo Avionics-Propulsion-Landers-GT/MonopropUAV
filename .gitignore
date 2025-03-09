@@ -1,6 +1,7 @@
 venv/
 /.venv
-**/.DS_Store
+/.idea
+**/.DS_Store/
 Sensing&Controls/AttitudeEstimation/Fouratis.exe
 Sensing&Controls/AttitudeEstimation/Fouratis.ilk
 Sensing&Controls/AttitudeEstimation/Fouratis.obj
