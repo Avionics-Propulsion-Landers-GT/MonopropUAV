@@ -29,9 +29,9 @@ class Madgwick {
             lastUpdateTime = updateArr[0];
 
             // Read accelerometer, gyroscope, and magnetometer data
-            std::vector accel = {updateArr[1], updateArr[2], updateArr[3]};
-            std::vector gyro = {updateArr[4], updateArr[5], updateArr[6]};
-            std::vector mag = {updateArr[7], updateArr[8], updateArr[9]};
+            std::vector<double> accel = {updateArr[1], updateArr[2], updateArr[3]};
+            std::vector<double> gyro = {updateArr[4], updateArr[5], updateArr[6]};
+            std::vector<double> mag = {updateArr[7], updateArr[8], updateArr[9]};
 
             // Apply Madgwick Filter
             std::vector updatedOrientation = madgwickUpdate(orientation, gyro, accel, mag, dt);
@@ -43,8 +43,12 @@ class Madgwick {
             delete &mag;
             delete &dt;
 
-            // TODO: turn orientation into euler angles and return it
+            // Calculates Attitude in euler angles using quaternion conversion formulas
+            // Source: https://madecalculators.com/quaternion-to-euler-calculator/
+            delete &eulerAttitudeEstimation;
+            eulerAttitudeEstimation = quaternionToEuler(orientation);
 
+            // Returns the attitude estimation
             return eulerAttitudeEstimation;
         }
 
@@ -57,7 +61,37 @@ class Madgwick {
             std::vector<double> step = computeGradient(q, accel, mag);
             normalizeArray(step);
 
-            // TODO: integrate the gyroscope, compute rate of change of quaternion, and integrate that
+            // Integrate Gyroscope
+            // Gyroscope compensation drift
+            std::vector<double> qConj = {q[0], -q[1], -q[2], -q[3]};
+            std::vector<double> integration = quaternionMultiply(qConj, step);
+            for (int i = 0; i < integration.size(); i++) {
+                integration[i] *= 2 * dt * gain * -1;
+            }
+            std::vector<double> gyroQ = {integration[0], gyro[0] + integration[1], gyro[1] + integration[2], gyro[2] + integration[3]};
+
+            // Compute rate of change of quaternion
+            std::vector<double> qGyroQ = quaternionMultiply(q, gyroQ);
+            for (int i = 0; i < qGyroQ.size(); i++) {
+                qGyroQ[i] *= 0.5;
+            }
+            for (int i = 0; i < step.size(); i++) {
+                step[i] *= -beta;
+            }
+            std::vector<double> qdot = {qGyroQ[0] + step[0], qGyroQ[1] + step[1], qGyroQ[2] + step[2], qGyroQ[3] + step[3]};
+
+            // Integrate and yield quaternion
+            std::vector<double> updatedQ = {q[0] + qdot[0] * dt, q[1] + qdot[1] * dt, q[2] + qdot[2] * dt, q[3] + qdot[3] * dt};
+            normalizeArray(updatedQ);
+
+            delete &step;
+            delete &qConj;
+            delete &integration;
+            delete &gyroQ;
+            delete &qGyroQ;
+            delete &qdot;
+
+            return updatedQ;
         }
 
         std::vector<double> computeGradient(std::vector<double>& q, std::vector<double>& accel, std::vector<double>& mag) {
@@ -76,8 +110,28 @@ class Madgwick {
 
             // Calculates objective function and the jacobian of the objective function respectively
             // Formulas sourced from: https://medium.com/@k66115704/imu-madgwick-filter-explanation-556fbe7f02e3
-            
-            // TODO: implement gradient algorithm matrix multiplication method
+            std::vector<double> f = {2 * (q[1] * q[3] - q[0] * q[2]) - accel[0],
+                                    2 * (q[0] * q[1] + q[2] * q[3]) - accel[1],
+                                    2 * (0.5 - q[1] * q[1] - q[2] * q[2]) - accel[2],
+                                    2 * b[1] * (0.5 - q[2] * q[2] - q[3] * q[3]) + 2 * b[3] * (q[1] * q[3] - q[0] * q[2]) - mag[0],
+                                    2 * b[1] * (q[1] * q[2] - q[0] * q[3]) + 2 * b[3] * (q[0] * q[1] + q[2] * q[3]) - mag[1],
+                                    2 * b[1] * (q[0] * q[2] + q[1] * q[3]) + 2 * b[3] * (0.5 - q[1] * q[1] - q[2] * q[2]) - mag[2]};
+            std::vector<std::vector<double>> J = {{-2 * q[2], 2 * q[1], 0, -2 * b[3] * q[2], -2 * b[1] * q[3] + 2 * b[3] * q[1], 2 * b[1] * q[2]},
+                                                {2 * q[3], 2 * q[0], -4 * q[1], 2 * b[3]* q[3], 2 * b[1] * q[2] + 2 * b[3] * q[0], 2 * b[1] * q[3] - 4 * b[3] * q[1]},
+                                                {-2 * q[0], 2 * q[3], -4 * q[2], -4 * b[1] * q[2] - 2 * b[3] * q[0], 2 * b[1] * q[1] + 2 * b[3] * q[3], 2 * b[1] * q[0] - 4 * b[3] * q[2]},
+                                                {2 * q[1], 2 * q[2], 0, -4 * b[1] * q[3] + 2 * b[3] * q[1], -2 * b[1] * q[0] + 2 * b[3] * q[2], 2 * b[1] * q[1]}};
+
+            std::vector<double> gradient(6, 0);
+            for (int i = 0; i < J.size(); i++) {
+                for (int j = 0; j < J[0].size(); j++) {
+                    gradient[i] += J[i][j] * f[j];
+                }
+            }
+
+            delete &f;
+            delete &J;
+
+            return gradient;
         }
 
         std::vector<double> quaternionToEuler(std::vector<double>& quaternion) {
