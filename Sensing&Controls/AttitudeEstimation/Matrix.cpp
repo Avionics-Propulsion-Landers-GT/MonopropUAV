@@ -1,4 +1,5 @@
 #include <stdexcept>
+#include "Matrix.h"
 class Matrix {
     protected:
         //Initialize data pointer to a double which allows for efficient array creation etc. and rows and cols
