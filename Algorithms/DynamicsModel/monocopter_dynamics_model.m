@@ -72,9 +72,9 @@ T_max = 100; % TODO: set
 global T_min;
 T_min = 0;
 global gimbal_speed;
-gimbal_speed = 2; % TODO: set
+gimbal_speed = 5; % TODO: set
 global gimbal_acceleration;
-gimbal_acceleration =30; % TODO: set
+gimbal_acceleration =2; % TODO: set
 
 simulate
 %% simulation function
@@ -86,7 +86,7 @@ function simulate()
     global gimbal_speed;
 
     % Simulation parameters
-    dt = 0.01; % Time step (seconds): Specifies the resolution of the simulation. 
+    dt = 0.001; % Time step (seconds): Specifies the resolution of the simulation. 
     t_end = 40; % Simulation time (seconds): The total duration for which the simulation runs.
     t = 0:dt:t_end; % Time vector: Discretized time values for the simulation, spanning from 0 to t_end with increments of dt.
     num_steps = length(t);  % Number of time steps: Determines the total number of iterations based on the time vector.
@@ -162,14 +162,14 @@ function simulate()
                                % Higher values ensure quicker corrections but may cause instability if set too high.
     Kd_att = [2.0; 2.0; 0.0];  % Derivative gains for Roll, Pitch, Yaw: Provides damping to prevent oscillations in attitude control.
 
-    x = 1:0.01:80;
-    tempGimbalCommands = [0.1*cos(0.1 * x); 0.1*sin(0.1* x); zeros(1, length(x))];
+    x = 1:0.001:80;
+    tempGimbalCommands = [0.1*cos(0.5 * x); 0.1*sin(0.5* x); zeros(1, length(x))];
 
     for step = 1:num_steps
         % Current time
         t_current = t(step);  % Fetch the current time step value.
 
-
+    
         target_position = position_desired(:, step);
         position_error = pos - target_position;
         attitude_error = quaternion_multiply([1; 0; 0; 0;], quaternion_inverse(att));
@@ -364,44 +364,61 @@ function info = update_TVC(gimbal, gimbal_ang_vel, gimbal_goal, delta_t)
 
     prev_gimbal_ang_vel = gimbal_ang_vel;
     gimbal_error = gimbal_goal - gimbal;
-    projected_decel = gimbal_ang_vel.^2 - 2 * diag([gimbal_acceleration * -sign(gimbal_error(1)), gimbal_acceleration * -sign(gimbal_error(2)), 0]) * gimbal_error; %predicting final velocity
-    projected_decel = diag(sign(projected_decel)) * sqrt(abs(projected_decel));
+    %projected_decel = gimbal_ang_vel.^2 + 2 * diag([gimbal_acceleration * -sign(gimbal_error(1)), gimbal_acceleration * -sign(gimbal_error(2)), 0]) * gimbal_error; %predicting final velocity
+    %projected_decel = diag(sign(projected_decel)) * sqrt(abs(projected_decel));
 
-    
-    if projected_decel(1) >= 0
+    prediction_horizon = 0.01; %look 0.01 seconds into the future
+    predicted_angle = gimbal + gimbal_ang_vel * prediction_horizon;
+    predicted_error = gimbal_goal - predicted_angle;
+
+    if predicted_error(1) > 0 
+        gimbal_ang_vel(1) = gimbal_ang_vel(1) + gimbal_acceleration * delta_t; 
+    else
+        gimbal_ang_vel(1) = gimbal_ang_vel(1) - gimbal_acceleration * delta_t; 
+    end
+
+    if predicted_error(2) > 0
+        gimbal_ang_vel(2) = gimbal_ang_vel(2) + gimbal_acceleration * delta_t; 
+    else
+        gimbal_ang_vel(2) = gimbal_ang_vel(2) - gimbal_acceleration * delta_t; 
+    end
+
+    %{
+    if abs(projected_distance(1)) >= abs(gimbal_error(1))
         % decel!!
         %gimbal_ang_vel(1) = gimbal_ang_vel(1) + gimbal_acceleration * -sign(gimbal_error(1)) * delta_t;
         gimbal_ang_vel(1) = gimbal_ang_vel(1) + gimbal_acceleration * sign(gimbal_error(1)) * delta_t; %accelerating in direction of sign seems to give the graph we expect?
     else
         % accel!!
-        if abs(gimbal_ang_vel(1)) < gimbal_speed
-            gimbal_ang_vel(1) = sign(gimbal_error(1)) * min([abs(gimbal_ang_vel(1)) + gimbal_acceleration * delta_t; gimbal_speed]);
-        end
+        
+        gimbal_ang_vel(1) = gimbal_ang_vel(1) + gimbal_acceleration * -sign(gimbal_error(1)) * delta_t; 
+        
     end 
-
     
-    if projected_decel(2) >= 0
+    
+    if abs(projected_distance(2)) >= abs(gimbal_error(2))
         % decel!!
         %gimbal_ang_vel(2) = gimbal_ang_vel(2) + gimbal_acceleration * -sign(gimbal_error(2)) * delta_t;
         gimbal_ang_vel(2) = gimbal_ang_vel(2) + gimbal_acceleration * sign(gimbal_error(2)) * delta_t;
     else
         % accel!!
-        if abs(gimbal_ang_vel(2)) < gimbal_speed
-            gimbal_ang_vel(2) = sign(gimbal_error(2)) * min([abs(gimbal_ang_vel(2)) + gimbal_acceleration * delta_t; gimbal_speed]);
-        end
+       
+        gimbal_ang_vel(2) = gimbal_ang_vel(2) + gimbal_acceleration * -sign(gimbal_error(2)) * delta_t; 
+       
     end
-
+    %}
     
 
     %Maybe the code below is what we want?
     %gimbal_ang_vel(1) = gimbal_ang_vel(1) + gimbal_acceleration * sign(gimbal_error(1)) * delta_t; 
     %gimbal_ang_vel(2) = gimbal_ang_vel(2) + gimbal_acceleration * sign(gimbal_error(2)) * delta_t; 
 
-    %gimbal_ang_vel(1) = clip(gimbal_ang_vel(1), -gimbal_speed, gimbal_speed);
-    %gimbal_ang_vel(2) = clip(gimbal_ang_vel(2), -gimbal_speed, gimbal_speed);
+    gimbal_ang_vel(1) = clip(gimbal_ang_vel(1), -gimbal_speed, gimbal_speed);
+    gimbal_ang_vel(2) = clip(gimbal_ang_vel(2), -gimbal_speed, gimbal_speed);
     
 
     gimbal = gimbal + gimbal_ang_vel * delta_t;
+    gimbal = clip(gimbal, -pi/12, pi/12);
     current_gimbal_accel = (gimbal_ang_vel - prev_gimbal_ang_vel) / delta_t;
 
     torque = diag([gimbal_top_I; gimbal_bottom_I; 0]) * current_gimbal_accel;
