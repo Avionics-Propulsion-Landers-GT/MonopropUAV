@@ -121,8 +121,8 @@ ang_accel_a_BF = [a_dot_dot 0 0]';
 ang_accel_b_BF = [0 b_dot_dot 0]';
 m_torque_a = inertia_a*(ang_accel_a_BF);
 m_torque_b = inertia_b*(ang_accel_b_BF);
-m_torque_a_WF = R_wf*m_torque_a
-m_torque_b_BF = R_wf*m_torque_b
+m_torque_a_WF = R_wf*m_torque_a;
+m_torque_b_BF = R_wf*m_torque_b;
 
 torque_net_world = torque_net_world - (gyro_torque_s + gyro_torque_a + ...
     gyro_torque_b) + m_torque_a_WF + m_torque_b_BF;
@@ -152,22 +152,33 @@ A3 = [zeros([3,9]) eye(3)];
 B1 = [zeros([3,7])];
 B3 = [zeros([3,7])];
 
-A = [A1 ; A2 ; A3 ; A4]
-B = [B1 ; B2; B3; B4]
+% Continuous time A and B matrices -> final output, input to c++ code. 
+A = [A1 ; A2 ; A3 ; A4];
+B = [B1 ; B2; B3; B4];
 
-%% Conversion to C++ 
+C = eye(12);
+D = 0;
 
-%% Numeric substution.
+% converting to discrete time, using zero order hold and timestep t.
+% syms t real; 
+% sys_c = ss(A, B, C, D);
+% sys_d = c2d(sys_c, t, 'zoh');
+% A_d = sys_d.A
+% B_d = sys_d.B
 
-%% Write symbolic matrices to txt file
+%% Conversion to C++ (????)
+
+%% Numeric substution. (???)
+
+%% Write symbolic matrices to txt file (???
 
 %% COST FUNCTION (DISCRETE TIME, INFINITE HORIZON)
 
 % define Q (state cost) and R (input cost) matrices
-Q = eye(12);
-R = eye(7);
-
-[K, S, P] = dlqr(A, B, Q, R);
+% Q = eye(12);
+% R = eye(7);
+% 
+% [K, S, P] = dlqr(A_d, B_d, Q, R);
 % this currently does not work because we dont have numeric A and B
 % matrices
 % must be called at every timestep because A and B are NOT invariant

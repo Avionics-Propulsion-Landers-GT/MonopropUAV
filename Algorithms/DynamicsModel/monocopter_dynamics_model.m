@@ -288,10 +288,10 @@ function info = update_TVC(gimbal, gimbal_ang_vel, gimbal_goal, delta_t)
 
     prev_gimbal_ang_vel = gimbal_ang_vel;
     gimbal_error = gimbal_goal - gimbal;
-    projected_decel = gimbal_ang_vel^2 - 2 * diag([gimbal_acceleration * -sign(gimbal_error(1)) 0 0, gimbal_acceleration * -sign(gimbal_error(2)), 0]) * gimbal_error;
+    projected_decel = gimbal_ang_vel^2 - 2 * diag([gimbal_acceleration * -sign(gimbal_error(1)), gimbal_acceleration * -sign(gimbal_error(2)), 0]) * gimbal_error;
     projected_decel = diag(sign(projected_decel)) * sqrt(abs(projected_decel));
 
-    if projected_decel(1) <= 0
+    if projected_decel(1) >= 0
         % decel!!
         gimbal_ang_vel(1) = gimbal_ang_vel(1) + gimbal_acceleration * -sign(gimbal_error(1)) * delta_t;
     else
@@ -301,7 +301,7 @@ function info = update_TVC(gimbal, gimbal_ang_vel, gimbal_goal, delta_t)
         end
     end
 
-    if projected_decel(2) <= 0
+    if projected_decel(2) >= 0
         % decel!!
         gimbal_ang_vel(2) = gimbal_ang_vel(2) + gimbal_acceleration * -sign(gimbal_error(2)) * delta_t;
     else
