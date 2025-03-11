@@ -1,6 +1,6 @@
 #ifndef VECTOR_H
 #define VECTOR_H
-#include "Matrix.h";
+#include "Matrix.h"
 class Vector : public Matrix {
     public:
         Vector(unsigned int rows, double initVal = 0.0) 
@@ -17,5 +17,6 @@ class Vector : public Matrix {
         double magnitude() const;
         Vector normalize() const;
         Vector crossProduct(const Vector&other) const;
+        void squareRoot();
 };
 #endif
