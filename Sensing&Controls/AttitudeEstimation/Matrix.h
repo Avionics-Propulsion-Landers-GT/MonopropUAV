@@ -17,6 +17,13 @@ class Matrix {
         double& operator()(unsigned int row, unsigned int col);
         const double& operator()(unsigned int row, unsigned int col) const;
 
+        unsigned int getRows() const {
+            return this->rows;
+        }
+        unsigned int getCols() const {
+            return this->cols;
+        }
+
         Matrix add(const Matrix& other) const;
         Matrix multiply(const Matrix& other) const;
         Matrix multiply(double scalar) const;
@@ -31,6 +38,7 @@ class Matrix {
         Matrix power(unsigned int k) const;
         double factorial(unsigned int k) const;
         Matrix exp(unsigned int terms) const;
+
 };
 
 #endif
