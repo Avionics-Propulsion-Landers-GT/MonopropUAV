@@ -1,0 +1,26 @@
+#include <SPI.h>  // includes SPI library
+
+const int DWM1000_CS = 17;
+
+void setup() {
+    // establish communication between devices with given baud
+    Serial.begin(11520);
+    // set chip select pin as output
+    pinMode (DWM1000_CS, OUTPUT);
+    // initialize SPI
+    SPI.begin(); 
+}
+
+void loop() {
+    // periodically update dwm data
+    dwm1000.update();
+    // read data and establish settings
+    SPI.beginTransaction(SPISettings(20000000, MSBFIRST, SPI_MODE0));
+    digitalWrite(DWM1000_CS, LOW);
+    // (maybe look towards printing values here (create an int equal to spi transfer 0, make for loop i iterate through byte, then serial print each bit at index i))
+    // process data and end
+    digitalWrite(DWM1000_CS, HIGH);
+    SPI.endTransaction();
+    // delay to prevent excess polling
+    delay(100);
+}
