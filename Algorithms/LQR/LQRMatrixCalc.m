@@ -1,24 +1,24 @@
 %% Initialization
-syms psi theta phi psi_dot theta_dot phi_dot real; 
+syms psiVar thetaVar phiVar psiVar_dot thetaVar_dot phiVar_dot real; 
 % angular state variables
 
-% psi - about x 
-% theta - about y
-% phi - about z
+% psiVar - about x 
+% thetaVar - about y
+% phiVar - about z
 % global reference frame is x y z
 
 syms r_x r_y r_z v_x v_y v_z real;
 % linear state variables
 
-full_state = [r_x r_y r_z v_x v_y v_z psi theta phi psi_dot theta_dot phi_dot]';
+full_state = [r_x r_y r_z v_x v_y v_z psiVar thetaVar phiVar psiVar_dot thetaVar_dot phiVar_dot]';
 position = [r_x r_y r_z]';
 velocity = [v_x v_y v_z]';
-angle = [psi theta phi]';
-angular_vel = [psi_dot theta_dot phi_dot]';
+angle = [psiVar thetaVar phiVar]';
+angular_vel = [psiVar_dot thetaVar_dot phiVar_dot]';
 
 % state vector and other useful vectors
 
-syms a_x a_y a_z phi_dot_dot theta_dot_dot psi_dot_dot real;
+syms a_x a_y a_z phiVar_dot_dot thetaVar_dot_dot psiVar_dot_dot real;
 % values to be used in the differentiated state vector
 
 syms T a b a_dot b_dot a_dot_dot b_dot_dot real;
@@ -31,8 +31,8 @@ thrust = [T*cos(b)*sin(a) T*sin(b) -T*cos(b)*cos(a)]';
 full_input = [T a b a_dot b_dot a_dot_dot b_dot_dot];
 % full input matrix, used to take partials
 
-syms f cd area real
-% density, coefficient of drag and reference area
+syms f cDrag areaVar real
+% density, coefficient of drag and reference areaVar
 
 syms rc_x rc_y rc_z real;
 % distance from the COM to the COP.
@@ -68,9 +68,9 @@ inertia_b = [Ixx_b Ixy_b Ixz_b; Ixy_b Iyy_b Iyz_b; Ixz_b Iyz_b Izz_b];
 
 %% Rotation, Coordinate Transformations
 % Define rotation matrices
-R_x = [1 0 0; 0 cos(psi) -sin(psi); 0 sin(psi) cos(psi)];
-R_y = [cos(theta) 0 sin(theta); 0 1 0; -sin(theta) 0 cos(theta)];
-R_z = [cos(phi) -sin(phi) 0; sin(phi) cos(phi) 0; 0 0 1];
+R_x = [1 0 0; 0 cos(psiVar) -sin(psiVar); 0 sin(psiVar) cos(psiVar)];
+R_y = [cos(thetaVar) 0 sin(thetaVar); 0 1 0; -sin(thetaVar) 0 cos(thetaVar)];
+R_z = [cos(phiVar) -sin(phiVar) 0; sin(phiVar) cos(phiVar) 0; 0 0 1];
 
 % Composite rotation (from WORLD FRAME to BODY FRAME)
 R_bf = simplify(R_z * R_y * R_x);
@@ -84,9 +84,9 @@ vel_BF = R_bf*velocity;
 angular_vel_BF = R_bf*angular_vel;
 
 % Drag Forces
-Fd_x = (1/2)*f*cd*area*norm(vel_BF)*vel_BF(1);
-Fd_y = (1/2)*f*cd*area*norm(vel_BF)*vel_BF(2);
-Fd_z = (1/2)*f*cd*area*norm(vel_BF)*vel_BF(3);
+Fd_x = (1/2)*f*cDrag*areaVar*norm(vel_BF)*vel_BF(1);
+Fd_y = (1/2)*f*cDrag*areaVar*norm(vel_BF)*vel_BF(2);
+Fd_z = (1/2)*f*cDrag*areaVar*norm(vel_BF)*vel_BF(3);
 Fd = [Fd_x Fd_y Fd_z];
 
 % Torque from Drag Forces and Thrust, Body Frame
@@ -158,6 +158,18 @@ B = [B1 ; B2; B3; B4];
 
 C = eye(12);
 D = 0;
+
+matlabFunction(A, 'File', 'calculateA.m', 'Vars', {m, f, cDrag, areaVar, ...
+    full_state, full_input, rc, rt, inertia, inertia_s, inertia_a, inertia_b}, 'Optimize', false)
+
+disp('function created for A calculation');
+
+matlabFunction(B, File', 'calculateB.m', 'Vars', {m, f, cDrag, areaVar, ...
+    full_state, full_input, rc, rt, inertia, inertia_s, inertia_a, inertia_b}, 'Optimize', false)
+
+codegen calculateA -args {0, 0, 0, 0, zeros(12,1), zeros(1,7), zeros(3,1), zeros(1,3), zeros(3,3), zeros(3,3), zeros(3,3), zeros(3,3)} -lang:c++
+codegen calculateB -args {0, 0, 0, 0, zeros(12,1), zeros(1,7), zeros(3,1), zeros(1,3), zeros(3,3), zeros(3,3), zeros(3,3), zeros(3,3)} -lang:c++
+disp('cpp files created');
 
 % converting to discrete time, using zero order hold and timestep t.
 % syms t real; 
