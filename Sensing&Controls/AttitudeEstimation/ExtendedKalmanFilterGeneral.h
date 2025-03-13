@@ -1,86 +1,75 @@
-#include "ExtendedKalmanFilterGeneral.h"
+#ifndef EXTENDED_KALMAN_FILTER_GENERAL_H
+#define EXTENDED_KALMAN_FILTER_GENERAL_H
 
-ExtendedKalmanFilterGeneral::ExtendedKalmanFilterGeneral(const Vector& initial_state, const Vector& initial_measurement, double delta_time, double q_scalar, double r_scalar, double initial_p)
-    : state(initial_state), previous_state(initial_state), delta_time(delta_time) {
-    previous_time = 0 - 2 * delta_time;
-    current_time = 0 - delta_time;
-    process_noise_covariance = Matrix(state.size()) * q_scalar;
-    measurement_noise_covariance = Matrix(initial_measurement.size()) * r_scalar;
-    error_covariance = Matrix(state.size()) * initial_p;
-}
-   
-/*
-We first need an instantiatated constructor EKF with the following parameters:
-    EKF (vector state, vector measurements, double deltaT, double qScale, double rScale, double initialP) {}
+//#include <Eigen/Dense>
+#include <vector>
+#include "Vector.h"
+#include "Matrix.h"
 
-        Python Constructor (to be directly translated into C++): 
-            def __init__(self, initial_state, initial_measurements, delta_time, q_scalar, r_scalar, initial_p):
-            self.state = initial_state
-            self.previous_state = initial_state
-            self.previous_time = 0 - 2 * delta_time
-            self.current_time = 0 - delta_time
-            self.delta_time = delta_time
-            self.measurement_size = np.size(initial_measurements)
-
-            self.process_noise_covariance = np.eye(np.size(self.state)) * q_scalar
-            self.measurement_noise_covariance = np.eye(self.measurement_size) * r_scalar
-            self.error_covariance = np.eye((np.size(self.state))) * initial_p
-*/
-
-void ExtendedKalmanFilterGeneral::update() {
-    previous_state = state;
-    state = stateTransitionFunction(); //update state
-    error_covariance = stateTransitionJacobian() * error_covariance * stateTransitionJacobian().transpose() + process_noise_covariance; //predict covariance estimate
-}
-
-void ExtendedKalmanFilterGeneral::predict(const Vector& measurement)
-{
-    Vector measurement_prediction = measurementPredictionFunction(); //calculate measurement prediction
-    Vector measurement_residual = measurement - measurement_prediction; 
-    Matrix measurement_residual_covariance = measurementPredictionJacobian() * error_covariance * measurementPredictionJacobian().transpose() + measurement_noise_covariance;
-    Matrix kalman_gain = error_covariance * measurementPredictionJacobian().transpose() * measurement_residual_covariance.inverse();
-    previous_state = state;
-    state = state + kalman_gain * measurement_residual;
-    error_covariance = (Matrix(state.size()) - kalman_gain * measurementPredictionJacobian()) * error_covariance;
-}
-
-/*
-WE NEED THE FOLLOWING FUNCTIONS TO HAVE A DEFAULT IMPLEMENTATION IN THE GENERAL EKF CLASS
-    update()
-    predict()
-
-BELOW ARE PYTHON EQUIVALENT IMPLEMENTATIONS THAT WE NEED TO DIRECTLY TRANSLATE TO C++
-def update(self, data):
-    # Update state estimate
-    self.previous_state = self.state
-    self.state = self.state_transition_function()
-
-    # Predict covariance estimate
-    self.error_covariance = self.state_transition_jacobian() @ self.error_covariance @ self.state_transition_jacobian().T + self.process_noise_covariance
-
-def predict(self):
-    measurement = self.parse_data(data)
-
-    # calculate measurement residual
-    measurement_prediction = self.measurement_prediction_function()
-    measurement_residual = measurement - measurement_prediction
-
-    # calculate measurement residual covariance
-    measurement_residual_covariance = self.measurement_prediction_jacobian() @ self.error_covariance @ self.measurement_prediction_jacobian().T + self.measurement_noise_covariance
-
-    # calculate near-optimal kalman gain
-    kalman_gain = self.error_covariance @ self.measurement_prediction_jacobian().T @ np.linalg.inv(measurement_residual_covariance)
-
-    # update state estimate
-    self.previous_state = self.state
-    self.state = self.state + kalman_gain @ measurement_residual
-
-    # update covariance estimate
-    self.error_covariance = (np.eye(np.size(self.state)) - kalman_gain @ self.measurement_prediction_jacobian()) @ self.error_covariance
-
-*/
-
+class ExtendedKalmanFilterGeneral {
+    protected:
+        double previous_time;
+        double current_time;
+        double delta_time;
+        Matrix process_noise_covariance;
+        Matrix measurement_noise_covariance;
+        Matrix error_covariance;
+        Vector state;
+        Vector previous_state;
+    public:
+        
     /*
+    We first need an instantiatated constructor EKF with the following parameters:
+        EKF (vector state, vector measurements, double deltaT, double qScale, double rScale, double initialP) {}
+
+            Python Constructor (to be directly translated into C++): 
+                def __init__(self, initial_state, initial_measurements, delta_time, q_scalar, r_scalar, initial_p):
+                self.state = initial_state
+                self.previous_state = initial_state
+                self.previous_time = 0 - 2 * delta_time
+                self.current_time = 0 - delta_time
+                self.delta_time = delta_time
+                self.measurement_size = np.size(initial_measurements)
+
+                self.process_noise_covariance = np.eye(np.size(self.state)) * q_scalar
+                self.measurement_noise_covariance = np.eye(self.measurement_size) * r_scalar
+
+                self.error_covariance = np.eye((np.size(self.state))) * initial_p
+    
+    WE NEED THE FOLLOWING FUNCTIONS TO HAVE A DEFAULT IMPLEMENTATION IN THE GENERAL EKF CLASS
+        update()
+        predict()
+
+    BELOW ARE PYTHON EQUIVALENT IMPLEMENTATIONS THAT WE NEED TO DIRECTLY TRANSLATE TO C++
+    def update(self, data):
+        # Update state estimate
+        self.previous_state = self.state
+        self.state = self.state_transition_function()
+
+        # Predict covariance estimate
+        self.error_covariance = self.state_transition_jacobian() @ self.error_covariance @ self.state_transition_jacobian().T + self.process_noise_covariance
+    
+    def predict(self):
+        measurement = self.parse_data(data)
+
+        # calculate measurement residual
+        measurement_prediction = self.measurement_prediction_function()
+        measurement_residual = measurement - measurement_prediction
+
+        # calculate measurement residual covariance
+        measurement_residual_covariance = self.measurement_prediction_jacobian() @ self.error_covariance @ self.measurement_prediction_jacobian().T + self.measurement_noise_covariance
+
+        # calculate near-optimal kalman gain
+        kalman_gain = self.error_covariance @ self.measurement_prediction_jacobian().T @ np.linalg.inv(measurement_residual_covariance)
+
+        # update state estimate
+        self.previous_state = self.state
+        self.state = self.state + kalman_gain @ measurement_residual
+
+        # update covariance estimate
+        self.error_covariance = (np.eye(np.size(self.state)) - kalman_gain @ self.measurement_prediction_jacobian()) @ self.error_covariance
+
+
     WE NEED THE FOLLOWING METHODS AS ABSTRACT METHODS (FORCE CHILD CLASSES TO PROVIDE AN IMPLEMENTATION FOR THESE CLASSES):
         parseData()
         stateTransitionFunction()
@@ -190,5 +179,19 @@ def predict(self):
     
     */
 
+    //Everything Below this should be updated
+    ExtendedKalmanFilterGeneral(const Vector& initial_state, const Vector& initial_measurement, double delta_time, double q_scalar, double r_scalar, double initial_p);
+    virtual ~ExtendedKalmanFilterGeneral() {}
 
+    //void predict();
+    void predict(const Vector& measurement);
+    //void update(const Vector& measurement);
+    void update();
 
+    virtual Matrix parseData() = 0; 
+    virtual Vector stateTransitionFunction() = 0; //uses 'state' to return the next predicted state
+    virtual Matrix stateTransitionJacobian() = 0; //returns the jacobian of the state transition function as matrix
+    virtual Vector measurementPredictionFunction() = 0; //uses 'state' to return the predicted measurement
+    virtual Matrix measurementPredictionJacobian() = 0;//returns the jacobian of the measurement prediction function as matrix
+};
+#endif
