@@ -92,8 +92,11 @@ class Madgwick():
     # Computes the gradient of the error function for the Madgwick filter
     def compute_gradient(self, q, accel, mag):
         # References direction of Earth's magnetic field
-        h = self.quaternion_multiply(self.quaternion_multiply(q,np.array([0,*mag])),
-            np.array([q[0], -q[1], -q[2], -q[3]])
+        # h = self.quaternion_multiply(self.quaternion_multiply(q,np.array([0,*mag])),
+        #     np.array([q[0], -q[1], -q[2], -q[3]])
+        #     )
+        h = self.quaternion_multiply(self.quaternion_multiply(np.array([q[0], -q[1], -q[2], -q[3]]),np.array([0,*mag])),
+            q
             )
          
         b = np.array([0,np.linalg.norm(h[1:3]), 0, h[3]])
