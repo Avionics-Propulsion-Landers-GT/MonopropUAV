@@ -5,8 +5,12 @@
 #include <string>
 #include "init.h"
 #include "Madgwick.h"
-// #include "Matrix.h"
-// #include "Vector.h"
+
+/*
+
+    Header file for loop.cpp
+
+*/
 
 struct LoopOutput {
     std::vector<std::vector<double>> state;   // Updated state (e.g., quaternion q)

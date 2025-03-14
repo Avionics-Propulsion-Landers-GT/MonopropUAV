@@ -4,6 +4,12 @@
 #include <Eigen/Dense>
 #include <vector>
 
+/*
+
+    Header file for ExtendedKalmanFilterGeneral
+
+*/
+
 class ExtendedKalmanFilterGeneral {
 protected:
     double previous_time;

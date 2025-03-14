@@ -3,6 +3,12 @@
 
 #include "ExtendedKalmanFilterGeneral.h"
 
+/*
+
+    Header file for EKF_xy
+
+*/
+
 class EKF_Position : public ExtendedKalmanFilterGeneral {
 public:
     EKF_Position(const Eigen::VectorXd& initial_state, double delta_time, double q_scalar, double r_scalar, double initial_p);
