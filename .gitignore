@@ -10,3 +10,4 @@ Sensing&Controls/AttitudeEstimation/vc140.pdb
 Sensing&Controls/AttitudeEstimation/__pycache__/ExtendedKalmanFilter.cpython-312.pyc
 Algorithms/DynamicsModel/monocopter_dynamics_model.asv
 Sensing&Controls/AttitudeEstimation/__pycache__/ExtendedKalmanFilterAltitude.cpython-312.pyc
+ControlLoop/data_creators/dataEnv/
