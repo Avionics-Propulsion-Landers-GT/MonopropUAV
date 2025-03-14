@@ -4,12 +4,30 @@
 #include <sstream>
 #include <iomanip>
 #include <cmath>
-// #include <Eigen/Geometry>
 
+/*
+
+    loop.cpp
+
+    by spencer boebel
+
+    PURPOSE: This is the main loop file. It's job is to take in the values,
+    estimate a state based on those + previous values, then generate an optimal
+    command based on the current and historical state. 
+
+    THIS CODE IS STILL UNDER CONSTRUCTION.
+
+
+*/
+
+
+// A print function for high precision to debug degree GPS outputs
 void print(double value) {
     std::cout << std::fixed << std::setprecision(8) << value << std::endl;
 }
 
+// Convert degree deltas to actual distances using the WSG84 standard Earth ellipsoid.
+// This assumes a MSL of zero, we have ignored 3d effects here.
 void preciseLatLonToMeters(double lat, double deltaLat, double deltaLon, double &dY, double &dX) {
     // Convert latitude to radians
     double latRad = lat * M_PI / 180.0;
@@ -28,6 +46,7 @@ void preciseLatLonToMeters(double lat, double deltaLat, double deltaLon, double 
     dX = deltaLon * metersPerDegLon;
 }
 
+// Do a weighted average of two vector doubles.
 std::vector<double> weightedAverage(const std::vector<double>& v1, const std::vector<double>& v2, double weight1, double weight2) {
     if (v1.size() != v2.size()) {
         throw std::invalid_argument("Vectors must be the same size.");
@@ -40,6 +59,7 @@ std::vector<double> weightedAverage(const std::vector<double>& v1, const std::ve
     return result;
 }
 
+// Execute the control loop.
 LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vector<std::vector<double>> state, SystemComponents& system, const std::vector<bool>& status, double dt) {
 
     // Read in values
@@ -67,6 +87,7 @@ LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vecto
     std::vector<double> accel1 = {nineAxisIMU[4], nineAxisIMU[5], nineAxisIMU[6]};
     std::vector<double> accel2 = {sixAxisIMU[4], sixAxisIMU[5], sixAxisIMU[6]};
     std::vector<double> mag = {nineAxisIMU[7], nineAxisIMU[8], nineAxisIMU[9]};
+    
     // Weight the 9ax IMU data on a 3:1 ratio with 6ax
     std::vector<double> accel = weightedAverage(accel1, accel2, 3, 1);
     std::vector<double> gyro = weightedAverage(gyro1, gyro2, 3, 1);

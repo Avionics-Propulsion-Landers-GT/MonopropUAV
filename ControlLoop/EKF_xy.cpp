@@ -1,5 +1,13 @@
 #include "EKF_xy.h"
 
+/*
+
+    This is the EKF for the x,y position. It takes data from the GPS
+    and the UWB and returns a best estimated state. GNC people, feel free
+    to edit/tune this. 
+
+*/
+
 EKF_Position::EKF_Position(const Eigen::VectorXd& initial_state, double delta_time, double q_scalar, double r_scalar, double initial_p)
     : ExtendedKalmanFilterGeneral(initial_state, delta_time, q_scalar, r_scalar, initial_p) {}
 

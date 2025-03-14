@@ -3,6 +3,12 @@
 
 #include <vector>
 
+/*
+
+    Header file for updatedMadgwick.cpp filter.
+
+*/
+
 class Madgwick {
 private:
     double gain;

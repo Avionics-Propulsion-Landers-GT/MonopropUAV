@@ -3,6 +3,19 @@ import plotly.graph_objects as go
 import subprocess
 import os
 
+"""
+
+    plot_state.py
+
+    by spencer boebel
+
+    PURPOSE: Plot a Plotly graph of state.csv and display it
+    as a HTML file in the browser. FOR WINDOWS USERS: you will have 
+    to rewrite the bottom half of the code to make this work for you,
+    or open the project in WSL (recommended)
+
+"""
+
 # Load the CSV file
 file_path = "../state.csv"  # Make sure the file is in the same directory
 df = pd.read_csv(file_path)

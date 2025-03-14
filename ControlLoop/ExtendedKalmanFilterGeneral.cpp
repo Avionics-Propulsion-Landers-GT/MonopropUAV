@@ -1,6 +1,12 @@
 #include "ExtendedKalmanFilterGeneral.h"
 #include <iostream>
 
+/*
+
+    General EKF class. Modified and based on the work of @Anyi Lin (ExtendedKalmanFilterGeneral.py)
+
+*/
+
 ExtendedKalmanFilterGeneral::ExtendedKalmanFilterGeneral(const Eigen::VectorXd& initial_state, double delta_time, double q_scalar, double r_scalar, double initial_p)
     : delta_time(delta_time), previous_time(0 - 2 * delta_time), current_time(0 - delta_time), state(initial_state) {
     

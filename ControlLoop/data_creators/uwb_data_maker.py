@@ -2,6 +2,18 @@
 import numpy as np
 import pandas as pd
 
+"""
+
+    uwb_data_maker.py
+
+    by spencer boebel
+
+    PURPOSE: Run this program to generate a new uwb dataset. You
+    can fiddle around with settings like the accel value, standard
+    deviation etc. to test the response of the control loop.
+
+"""
+
 
 # Constants
 num_points = 10001  # Total data points
