@@ -39,12 +39,16 @@ double Vector::squareRoot(unsigned int num) const {
     return guess;
 }
 
+double Vector::size() const {
+    return this->rows;
+}
+
 Vector Vector::normalize() const {
     double length = this->magnitude();
     if (length == 0) {
         return Vector(0, 0.0);
     }
-    Matrix v = this->multiply(1.0/length);
+    Matrix v = (*this) * (1.0/length);
     return Vector(v);
 }
 
