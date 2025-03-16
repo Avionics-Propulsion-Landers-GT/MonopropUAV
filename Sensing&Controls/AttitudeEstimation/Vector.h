@@ -12,6 +12,8 @@ class Vector : public Matrix {
                 *this = Vector(0,0.0); 
             }
         }
+        Vector(unsigned int rows, double* d)
+            : Matrix (rows, 1, d) {}
 
         double& operator[](unsigned int row) {
             return (*this)(row, 0);

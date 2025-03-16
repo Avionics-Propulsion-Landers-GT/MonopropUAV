@@ -30,6 +30,21 @@ Matrix::Matrix(unsigned int n)
         }
 }
 
+//Matrix constructor for a matrix with a given data array
+Matrix::Matrix(unsigned int r, unsigned int c, double* d)
+    : rows(r), cols(c), data(nullptr) {
+        if (r == 0 || c == 0) {
+            throw std::invalid_argument("Number of rows and columns must be greater than zero");
+        }
+        if (d == nullptr) {
+            throw std::invalid_argument("Data array cannot be null");
+        }
+        data = new double[r * c];
+        for (unsigned int i = 0; i < r * c; ++i) {
+            data[i] = d[i];
+        }
+}
+
 Matrix::Matrix(unsigned int r, unsigned int c) 
     : rows(r), cols(c) {
         data = new double[rows * cols];
@@ -234,4 +249,16 @@ Matrix Matrix::exp(unsigned int terms) const {
     }
         
     return result;
+}
+
+bool Matrix::isEqualTo(const Matrix& other) const {
+    if (rows != other.rows || cols != other.cols) {
+        return false;
+    }
+    for (unsigned int i = 0; i < rows * cols; ++i) {
+        if (data[i] != other.data[i]) {
+            return false;
+        }
+    }
+    return true;
 }

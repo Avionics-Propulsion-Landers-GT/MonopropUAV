@@ -10,6 +10,7 @@ class Matrix {
     public:
         Matrix();
         Matrix(unsigned int rows, unsigned int cols, double initVal);
+        Matrix(unsigned int rows, unsigned int cols, double* data);
         Matrix(unsigned int n);
         Matrix(unsigned int r, unsigned int c);
         ~Matrix();
@@ -43,8 +44,9 @@ class Matrix {
         bool isInvertible() const;
         Matrix power(unsigned int k) const;
         double factorial(unsigned int k) const;
-        Matrix exp(unsigned int terms) const;
+        Matrix exp(unsigned int terms) const; 
 
+        bool isEqualTo(const Matrix& other) const;
 };
 
 #endif

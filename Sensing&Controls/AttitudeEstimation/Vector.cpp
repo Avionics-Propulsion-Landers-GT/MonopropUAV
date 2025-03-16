@@ -1,7 +1,8 @@
 #include "Vector.h"
+#include <cmath>
 
 double Vector::dotProduct(const Vector&other) const {
-    if (this -> rows == other.rows) {
+    if (this -> rows != other.rows) {
         return -0.01;
     }
     double result = 0.0;
@@ -16,11 +17,12 @@ double Vector::magnitude() const {
     for (unsigned int i = 0; i < this-> rows; i++) {
         sum += ((*this)(i,0) * (*this)(i,0));
     }
-    return (this->squareRoot(sum));
+    return sqrt(sum);
+    //return (this->sqrt(sum));
 
 }
 
-double Vector::squareRoot(unsigned int num) const {
+double Vector::squareRoot(unsigned int num) const { 
     if (num < 0) {
         return -1.0;  // Error code
     }
