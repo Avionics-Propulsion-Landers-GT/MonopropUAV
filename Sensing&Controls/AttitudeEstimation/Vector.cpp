@@ -2,6 +2,9 @@
 #define VECTOR_H
 #include "Matrix.h";
 class Vector : public Matrix {
+    int main() {
+
+    };
     public:
         Vector(unsigned int rows, double initVal = 0.0) 
             : Matrix (rows, 1, initVal) {}
