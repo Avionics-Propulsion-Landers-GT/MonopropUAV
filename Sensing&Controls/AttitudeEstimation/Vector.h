@@ -3,9 +3,16 @@
 #include "Matrix.h"
 class Vector : public Matrix {
     public:
-        Vector(unsigned int rows, double initVal = 0.0) 
+        Vector(unsigned int rows, double initVal)
             : Matrix (rows, 1, initVal) {}
-        
+        Vector(const Matrix& mat) : Matrix(mat) {
+                
+            if (mat.getCols() == 1 && mat.getRows() > 0) {
+            } else {
+                *this = Vector(0,0.0); 
+            }
+        }
+
         double& operator[](unsigned int row) {
             return (*this)(row, 0);
         }
@@ -17,6 +24,6 @@ class Vector : public Matrix {
         double magnitude() const;
         Vector normalize() const;
         Vector crossProduct(const Vector&other) const;
-        void squareRoot();
+        double squareRoot(unsigned int num) const;
 };
 #endif

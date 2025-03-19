@@ -67,6 +67,14 @@ global gimbal_top_I;
 gimbal_top_I = 1; % TODO: set
 global gimbal_bottom_I;
 gimbal_bottom_I = 1; % TODO: set
+global TVC_top_I;
+TVC_top_I = [0, 0, 0;
+            0, 0, 0;
+            0, 0, 0];
+global TVC_bottom_I;
+TVC_bottom_I = [0, 0, 0;
+            0, 0, 0;
+            0, 0, 0];
 global T_max;
 T_max = 1; % TODO: set
 global T_min;
@@ -190,7 +198,7 @@ function simulate()
         T_gimbal_body = gimbal_info(3);
         T_net = to_world_frame_quaternion(att) * (T_thrust_body + T_drag_body + T_gimbal_body);
     
-        state = update_dynamics(pos, vel, att, ang_vel, F_net, T_net, dt);
+        state = update_dynamics(pos, vel, att, ang_vel, F_net, T_net, thrust_gimbal_ang_vel, dt);
         pos = state(1);
         vel = state(2);
         accel = state(3);
@@ -212,17 +220,20 @@ function simulate()
 end
 
 %% updates the state with a given net force, net torque, and time step
-function state = update_dynamics(pos, vel, att, ang_vel, F_net, T_net, delta_t)
+function state = update_dynamics(pos, vel, att, ang_vel, F_net, T_net, gimbal_ang_vel, delta_t)
     global m;
     global I;
     global I_Inv;
+    global TVC_top_I;
+    global TVC_bottom_I;
 
     % translational component
     accel = F_net / m;
     vel = vel + accel * delta_t;
     pos = pos + vel * delta_t;
     % rotational component
-    ang_accel = I_Inv * (T_net - cross(ang_vel, I * ang_vel));
+    ang_accel = I_Inv * (T_net - cross(ang_vel, I * ang_vel) - cross([gimbal_ang_vel(1); 0; 0], TVC_top_I * [gimbal_ang_vel(1); 0; 0]) - cross(gimbal_ang_vel, TVC_bottom_I * gimbal_ang_vel));
+    ang_accel = I_Inv * (T_net - cross(ang_vel, I * ang_vel)));
     ang_vel = ang_vel + ang_accel * delta_t;
     delta_att = ang_vel * delta_t;
     att = att + 0.5 * quaternion_multiply([0; delta_att(1); delta_att(2); delta_att(3)], att) * delta_t;

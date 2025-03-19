@@ -54,7 +54,7 @@ const double& Matrix::operator()(unsigned int row, unsigned int col) const {
 }
 
 Matrix Matrix::add(const Matrix& other) const {
-    if (rows != other.rows && cols != other.cols) return Matrix(0.0); //Error cannot add if not equal dimensions
+    if (rows != other.rows || cols != other.cols) return Matrix(0.0); //Error cannot add if not equal dimensions
 
     Matrix result(rows, cols, 0.0);
     for (unsigned int i = 0; i < rows * cols; ++i)
