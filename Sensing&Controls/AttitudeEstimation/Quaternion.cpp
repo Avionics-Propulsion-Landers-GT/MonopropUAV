@@ -8,9 +8,6 @@
 
 Quaternion::Quaternion(double w, double x, double y, double z) : w(w), x(x), y(y), z(z) {}
 
-int main() {
-
-}
 
 // Conjugate of the quaternion
 Quaternion Quaternion::conjugate() const {

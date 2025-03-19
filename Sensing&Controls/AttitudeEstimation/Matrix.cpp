@@ -1,18 +1,15 @@
 #include <stdexcept>
 #include "Matrix.h"
 
-int main() {
-
-}
 //Initialize data pointer to a double which allows for efficient array creation etc. and rows and cols
     
 //Matrix is stored in a 1D array because of memory and elements are stored in the array by row
 //Matrix constructor for all 0s, all 1s, or all constants
-Matrix::Matrix(unsigned int rows, unsigned int cols, double initVal)
+Matrix::Matrix(unsigned int rows, unsigned int cols, double initVal = 0.0)
     : rows(rows), cols(cols), data(nullptr) {
         if (rows > 0 && cols > 0) {
             data = new double[rows * cols];
-            for (unsigned int i = 0; i < rows * cols; i++) {
+            for (unsigned int i = 0; i < rows * cols; ++i) {
                 data[i] = initVal;
             }
         }
@@ -25,15 +22,21 @@ Matrix::Matrix(unsigned int n)
         if (n > 0) {
             data = new double[n * n]();
 
-            for (unsigned int i = 0; i < n; i++) {
+            for (unsigned int i = 0; i < n; ++i) {
                 data[i * n + i] = 1.0;
             }
         }
 }
 
-Matrix::Matrix(unsigned int r, unsigned int c) 
-    : rows(r), cols(c) {
+
+
+Matrix::Matrix(const Matrix& other) : rows(other.getRows()), cols(other.getCols()) {
+    if (other.data) {
         data = new double[rows * cols];
+        for (unsigned int i = 0; i < rows * cols; ++ i) {
+            data[i] = other.data[i];
+        }
+    }
 }
         
 Matrix::~Matrix() {
@@ -56,7 +59,7 @@ const double& Matrix::operator()(unsigned int row, unsigned int col) const {
 Matrix Matrix::add(const Matrix& other) const {
     if (rows != other.rows || cols != other.cols) return Matrix(0.0); //Error cannot add if not equal dimensions
 
-    Matrix result(rows, cols, 0.0);
+    Matrix result(rows, cols);
     for (unsigned int i = 0; i < rows * cols; ++i)
         result.data[i] = data[i] + other.data[i];
     return result;

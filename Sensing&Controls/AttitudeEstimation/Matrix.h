@@ -10,7 +10,7 @@ class Matrix {
     public:
         Matrix(unsigned int rows, unsigned int cols, double initVal);
         Matrix(unsigned int n);
-        Matrix(unsigned int r, unsigned int c);
+        Matrix(const Matrix& other);
         ~Matrix();
 
 

@@ -26,6 +26,14 @@ int main() {
 
     // Test addition
     Matrix matrix2 = Matrix(rows, cols, 2);
+    std::cout << "Second Matrix:" << std::endl;
+    for (unsigned int i = 0; i < rows; ++i) {
+        for (unsigned int j = 0; j < cols; ++j) {
+            std::cout << matrix2(i, j) << " ";
+        }
+        std::cout << std::endl;
+    }
+
     Matrix sumMatrix = matrix.add(matrix2);
     std::cout << "\nSum Matrix:" << std::endl;
     for (unsigned int i = 0; i < rows; ++i) {
@@ -72,8 +80,6 @@ int main() {
     } else {
         std::cout << "\nMatrix is not invertible." << std::endl;
     }
-
-    return 0;
 
     // Test Quaternion operations
     Quaternion q1(1.0, 0.0, 1.0, 0.0);
