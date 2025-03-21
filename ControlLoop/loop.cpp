@@ -4,6 +4,15 @@
 #include <sstream>
 #include <iomanip>
 #include <cmath>
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+const double GPS_SANITY_THRESHOLD = 1.5;
+const double LIDAR_ALTITUDE_THRESHOLD = 9.0;
+const double TIMESTAMP_THRESHOLD = 0.001;
+
+LQR lqrController; // Define the LQR controller object
 
 /*
 
@@ -60,7 +69,7 @@ std::vector<double> weightedAverage(const std::vector<double>& v1, const std::ve
 }
 
 // Execute the control loop.
-LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vector<std::vector<double>> state, SystemComponents& system, const std::vector<bool>& status, double dt) {
+LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vector<std::vector<double>>& state, SystemComponents& system, const std::vector<bool>& status, double dt, const Eigen::VectorXd& setPoint) {
 
     // Read in values
     std::vector<double> nineAxisIMU = values[0]; // Time, Gyro<[rad/s]>, Accel<[m/s2]>, Mag<[]>
@@ -129,7 +138,7 @@ LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vecto
 
     // Sanity Check: If x_pos2 or y_pos2 are greater than twice x_pos1 or y_pos1
     // then throw out the gps and only use the UWB
-    if ((x_pos2 > 1.5*x_pos1) || (y_pos2 > 1.5*y_pos1)) {
+    if ((x_pos2 > GPS_SANITY_THRESHOLD*x_pos1) || (y_pos2 > GPS_SANITY_THRESHOLD*y_pos1)) {
         if (!gpsSanityCheck) {
             //std::cout << "The GPS is too inaccurate. gpsSanityCheck failed." << std::endl;
         }
@@ -160,7 +169,7 @@ LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vecto
     double z_pos2 = altitude - INIT_ALTITUDE; // Measure altitude relative to reference position
 
     bool lidarStatus = status[1];
-    lidarStatus = ((z_pos1 > 9.0) || (z_pos2 > 9.0)) ? false : true;
+    lidarStatus = ((z_pos1 > LIDAR_ALTITUDE_THRESHOLD) || (z_pos2 > LIDAR_ALTITUDE_THRESHOLD)) ? false : true;
     double z_pos = lidarStatus ? z_pos1 : z_pos2;
 
     Eigen::VectorXd measurement_z(2);
@@ -181,7 +190,7 @@ LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vecto
     double time2 = sixAxisIMU[0];
     double time3 = uwb[0];
 
-    if ((time1 - time2 >= 0.001) || (time2 - time3 >= 0.001)) {
+    if ((time1 - time2 >= TIMESTAMP_THRESHOLD) || (time2 - time3 >= TIMESTAMP_THRESHOLD)) {
         std::cout << "IMU or UWB timestamps don't match. Continuing, but you have been warned." << std::endl;
     }
 
@@ -194,12 +203,29 @@ LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vecto
 
     // -------------------------- II. LQR --------------------------------------
 
+    //Use LQR to generate a control command based on the state vector and setpoint
+    lqrController.setState((Eigen::VectorXd(12) << 
+        new_attitude[0], new_attitude[1], new_attitude[2], 
+        new_position[0], new_position[1], new_position[2], 
+        angular_velocity[0], angular_velocity[1], angular_velocity[2], 
+        velocity[0], velocity[1], velocity[2]).finished());
 
+    lqrController.setPoint = setPoint;
+    Eigen::VectorXd state_error = lqrController.getState() - lqrController.setPoint;
 
+    //recalculate gain matrix if the system is time variant, otherwise comment out 
+    lqrController.calculateK(); 
 
+    // Compute the new command to drive state_error to zero.
+    Eigen::VectorXd new_command = - lqrController.getK() * state_error; 
 
-    std::vector<double> newCommand = {0,0,0};
+    //copy new_command into std::vector
+    std::vector<double> newCommand(new_command.data(), new_command.data() + new_command.size());
+
+    //copy state_error into std::vector
+    std::vector<double> error(state_error.data(), state_error.data() + state_error.size());
+    
     std::vector<bool> newStatus = {gpsSanityCheck, lidarStatus};
 
-    return {newState, newStatus, newCommand};
+    return {newState, newStatus, newCommand, error};
 }
