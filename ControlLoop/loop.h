@@ -5,6 +5,7 @@
 #include <string>
 #include "init.h"
 #include "Madgwick.h"
+#include "lqr.h"
 
 /*
 
@@ -16,12 +17,17 @@ struct LoopOutput {
     std::vector<std::vector<double>> state;   // Updated state (e.g., quaternion q)
     std::vector<bool> status;
     std::vector<double> command;         // Generated command based on state
+    std::vector<double> error;         // Error between state and setpoint
 };
+
+extern LQR lqrController;
 
 void print(double value);
 void preciseLatLonToMeters(double lat, double deltaLat, double deltaLon, double &dY, double &dX);
 std::vector<double> weightedAverage(const std::vector<double>& v1, const std::vector<double>& v2, double weight1, double weight2);
-LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vector<std::vector<double>> state, SystemComponents& system, const std::vector<bool>& status, double dt);
+
+//set point will vary and is subject to change during flight. It will be passed as a 1x12 vector
+LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vector<std::vector<double>> state, SystemComponents& system, const std::vector<bool>& status, double dt, const std::vector<double>& setPoint);
 
 
 #endif // LOOP_H

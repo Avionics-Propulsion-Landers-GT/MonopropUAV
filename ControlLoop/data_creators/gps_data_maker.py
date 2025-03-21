@@ -45,7 +45,7 @@ for i in range(num_points):
     
     # Apply acceleration for first 1 second, then only gravity
     if t < 1.0:
-        total_acceleration = a_vector - np.array([0, 0, g])  # Include gravity
+        total_acceleration = a_vector + np.array([0, 0, -g])  # Include gravity
     else:
         total_acceleration = np.array([0, 0, -g])  # Only gravity after 1s
 
