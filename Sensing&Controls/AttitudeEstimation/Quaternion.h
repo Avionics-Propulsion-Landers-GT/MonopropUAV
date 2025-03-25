@@ -17,7 +17,8 @@ public:
     Quaternion add(const Quaternion& q) const;
     Quaternion multiply(const Quaternion& q) const;
     double norm() const;
-    void toRotationMatrix(double matrix[3][3]) const;
+    Matrix toRotationMatrix() const;
+    Matrix toEulerMatrix() const;
 };
 
 

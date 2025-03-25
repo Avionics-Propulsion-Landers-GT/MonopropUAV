@@ -2,6 +2,9 @@
 #define MATRIX_H
 
 #include <stdexcept>
+
+#include "Quaternion.h"
+
 class Matrix {
     protected:
         double* data;
@@ -34,10 +37,12 @@ class Matrix {
         Matrix getSubMatrix(unsigned int row, unsigned int col) const;
         Matrix inverse() const;
 
+
         bool isInvertible() const;
         Matrix power(unsigned int k) const;
         double factorial(unsigned int k) const;
         Matrix exp(unsigned int terms) const;
+        Quaternion toQuaternion() const;
 
 };
 

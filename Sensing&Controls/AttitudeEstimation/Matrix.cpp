@@ -1,5 +1,7 @@
 #include <stdexcept>
 #include "Matrix.h"
+#include "Quaternion.h"
+#include <cmath>
 
 //Initialize data pointer to a double which allows for efficient array creation etc. and rows and cols
     
@@ -219,4 +221,44 @@ Matrix Matrix::exp(unsigned int terms) const {
     }
         
     return result;
+
+}
+
+Quaternion Matrix::toQuaternion() const {
+    if (rows != 3 || cols != 3) {
+        throw std::invalid_argument("Matrix must be 3x3 to convert to a Quaternion.");
+    }
+
+    double trace = (*this)(0, 0) + (*this)(1, 1) + (*this)(2, 2);
+    double w, x, y, z;
+
+    if (trace > 0) {
+        double s = sqrt(trace + 1.0) * 2.0;  // 4w
+        w = 0.25 * s;
+        x = ((*this)(2, 1) - (*this)(1, 2)) / s;
+        y = ((*this)(0, 2) - (*this)(2, 0)) / s;
+        z = ((*this)(1, 0) - (*this)(0, 1)) / s;
+    } else {
+        if ((*this)(0, 0) > (*this)(1, 1) && (*this)(0, 0) > (*this)(2, 2)) {
+            double s = sqrt(1.0 + (*this)(0, 0) - (*this)(1, 1) - (*this)(2, 2)) * 2.0;  // 4x
+            w = ((*this)(2, 1) - (*this)(1, 2)) / s;
+            x = 0.25 * s;
+            y = ((*this)(0, 1) + (*this)(1, 0)) / s;
+            z = ((*this)(0, 2) + (*this)(2, 0)) / s;
+        } else if ((*this)(1, 1) > (*this)(2, 2)) {
+            double s = sqrt(1.0 + (*this)(1, 1) - (*this)(0, 0) - (*this)(2, 2)) * 2.0;  // 4y
+            w = ((*this)(0, 2) - (*this)(2, 0)) / s;
+            x = ((*this)(0, 1) + (*this)(1, 0)) / s;
+            y = 0.25 * s;
+            z = ((*this)(1, 2) + (*this)(2, 1)) / s;
+        } else {
+            double s = sqrt(1.0 + (*this)(2, 2) - (*this)(0, 0) - (*this)(1, 1)) * 2.0;  // 4z
+            w = ((*this)(1, 0) - (*this)(0, 1)) / s;
+            x = ((*this)(0, 2) + (*this)(2, 0)) / s;
+            y = ((*this)(1, 2) + (*this)(2, 1)) / s;
+            z = 0.25 * s;
+        }
+    }
+
+    return Quaternion(w, x, y, z);
 }
