@@ -216,8 +216,13 @@ function simulate()
         position_error_history(:, step) = position_error;  % Record position error history.
         attitude_error_history(:, step) = attitude_error;  % Record attitude error history.
     end
+    % Store to CSV file
+        filename = 'histories.csv';
+        writematrix(filename,position_history');
 
 end
+
+simulate()
 
 %% updates the state with a given net force, net torque, and time step
 function state = update_dynamics(pos, vel, att, ang_vel, F_net, T_net, gimbal_ang_vel, delta_t)
@@ -233,7 +238,7 @@ function state = update_dynamics(pos, vel, att, ang_vel, F_net, T_net, gimbal_an
     pos = pos + vel * delta_t;
     % rotational component
     ang_accel = I_Inv * (T_net - cross(ang_vel, I * ang_vel) - cross([gimbal_ang_vel(1); 0; 0], TVC_top_I * [gimbal_ang_vel(1); 0; 0]) - cross(gimbal_ang_vel, TVC_bottom_I * gimbal_ang_vel));
-    ang_accel = I_Inv * (T_net - cross(ang_vel, I * ang_vel)));
+    ang_accel = I_Inv * (T_net - cross(ang_vel, I * ang_vel));
     ang_vel = ang_vel + ang_accel * delta_t;
     delta_att = ang_vel * delta_t;
     att = att + 0.5 * quaternion_multiply([0; delta_att(1); delta_att(2); delta_att(3)], att) * delta_t;
@@ -257,7 +262,7 @@ function calculate_COM_and_COP_offset(thrust_gimbal)
     global COP;
     global COP_offset;
 
-    top_gimbal_COM = (m_gimbal_top / m) * (gimbal_offset + get_extrinsic_x_rotation(thrust_gimbal(1)) * gimbal_top_offset);
+    top_gimbal_COM = (m_gimbal_top / m) * (gimbal_offset + get_extrinsic_x_rotation(thrust_gimbal(1)) .* gimbal_top_offset);
     bottom_gimbal_COM = (m_gimbal_bottom / m) * (gimbal_offset + get_extrinsic_x_rotation(thrust_gimbal(1)) * gimbal_x_distance + get_extrinsic_rotation_matrix(thrust_gimbal) * gimbal_bottom_offset);
     COM_offset = top_gimbal_COM + bottom_gimbal_COM;
     COP_offset = COP - COM_offset;
@@ -299,12 +304,12 @@ function info = update_TVC(gimbal, gimbal_ang_vel, gimbal_goal, delta_t)
 
     prev_gimbal_ang_vel = gimbal_ang_vel;
     gimbal_error = gimbal_goal - gimbal;
-    projected_decel = gimbal_ang_vel^2 - 2 * diag([gimbal_acceleration * -sign(gimbal_error(1)), gimbal_acceleration * -sign(gimbal_error(2)), 0]) * gimbal_error;
+    projected_decel = gimbal_ang_vel.^2 - 2 * diag([gimbal_acceleration * -sign(gimbal_error(1)), gimbal_acceleration * -sign(gimbal_error(2)), 0]) * gimbal_error;
     projected_decel = diag(sign(projected_decel)) * sqrt(abs(projected_decel));
 
     if projected_decel(1) >= 0
         % decel!!
-        gimbal_ang_vel(1) = gimbal_ang_vel(1) + gimbal_acceleration * -sign(gimbal_error(1)) * delta_t;
+        gimbal_ang_vel(1) = gimbal_ang_vel(1) + gimbal_acceleration(1) .* -sign(gimbal_error(1)) * delta_t;
     else
         % accel!!
         if abs(gimbal_ang_vel(1)) < gimbal_speed
