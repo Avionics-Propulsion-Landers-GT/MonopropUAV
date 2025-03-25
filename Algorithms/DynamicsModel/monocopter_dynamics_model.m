@@ -22,15 +22,15 @@ COP_offset = [0; 0; 0];
 global gimbal_offset;
 gimbal_offset = [0; 0; 0]; % TODO: set
 global gimbal_x_distance;
-gimbal_x_distance = 0; % TODO: set
+gimbal_x_distance = [0; 0; 0]; % TODO: set
 global gimbal_y_distance;
-gimbal_y_distance = 0; % TODO: set
+gimbal_y_distance = [0; 0; 0]; % TODO: set
 global Cd_x;
-Cd_x = 0; % TODO: set
+Cd_x = 0.1; % TODO: set
 global Cd_y;
-Cd_y = 0; % TODO: set
+Cd_y = 0.1; % TODO: set
 global Cd_z;
-Cd_z = 0; % TODO: set
+Cd_z = 0.1; % TODO: set
 global Mp_x;
 Mp_x = 0; % TODO: set
 global Mp_y;
@@ -38,11 +38,11 @@ Mp_y = 0; % TODO: set
 global Mp_z;
 Mp_z = 0; % TODO: set
 global A_x;
-A_x = 0; % TODO: set
+A_x = 0.7; % TODO: set
 global A_y;
-A_y = 0; % TODO: set
+A_y = 0.7; % TODO: set
 global A_z;
-A_z = 0; % TODO: set
+A_z = 0.3; % TODO: set
 global air_density;
 air_density = 1.225;
 global I_xx;
@@ -67,32 +67,26 @@ global gimbal_top_I;
 gimbal_top_I = 1; % TODO: set
 global gimbal_bottom_I;
 gimbal_bottom_I = 1; % TODO: set
-global TVC_top_I;
-TVC_top_I = [0, 0, 0;
-            0, 0, 0;
-            0, 0, 0];
-global TVC_bottom_I;
-TVC_bottom_I = [0, 0, 0;
-            0, 0, 0;
-            0, 0, 0];
 global T_max;
-T_max = 1; % TODO: set
+T_max = 100; % TODO: set
 global T_min;
 T_min = 0;
 global gimbal_speed;
-gimbal_speed = 0; % TODO: set
+gimbal_speed = 5; % TODO: set
 global gimbal_acceleration;
-gimbal_acceleration = 0; % TODO: set
+gimbal_acceleration =2; % TODO: set
 
+simulate
 %% simulation function
 function simulate()
     global m;
     global g;
     global T_max;
     global T_min;
+    global gimbal_speed;
 
     % Simulation parameters
-    dt = 0.01; % Time step (seconds): Specifies the resolution of the simulation. 
+    dt = 0.001; % Time step (seconds): Specifies the resolution of the simulation. 
     t_end = 40; % Simulation time (seconds): The total duration for which the simulation runs.
     t = 0:dt:t_end; % Time vector: Discretized time values for the simulation, spanning from 0 to t_end with increments of dt.
     num_steps = length(t);  % Number of time steps: Determines the total number of iterations based on the time vector.
@@ -102,9 +96,9 @@ function simulate()
     vel = [0; 0; 0];
     att = [1; 0; 0; 0];
     ang_vel = [0; 0; 0];
-    thrust_gimbal = [0; 0; 0];
     thrust_gimbal_ang_vel = [0; 0; 0];
     thrust_gimbal_goal = [0; 0; 0];
+    thrust_gimbal = [0; 0; 0]; %testing
 
     % Pre-allocate arrays to store results
     position_history = zeros(3, num_steps);       % Stores the rocket's position (X, Y, Z) over time.
@@ -114,7 +108,10 @@ function simulate()
     angular_velocity_history = zeros(3, num_steps); % Stores the rocket's angular velocity (roll, pitch, yaw) over time.
     angular_acceleration_history = zeros(3, num_steps); % Stores the rocket's angular acceleration (roll, pitch, yaw) over time.
     position_error_history = zeros(3, num_steps);          % Stores the position error (X, Y, Z) at each time step.
-    attitude_error_history = zeros(3, num_steps);          % Stores the position error (X, Y, Z) at each time step.
+    attitude_error_history = zeros(4, num_steps);          % Stores the quaternion attitude error at each time step.
+    attitude_error_history_euler = zeros(3, num_steps); %Stores the euler angle attitude error over time
+    gimbal_cmd_history = zeros(3, num_steps); %Stores the gimbal cmd history over time
+    gimbal_actuation_history = zeros(3, num_steps); %Stores the gimbal's actuated angles over time
 
     % Desired trajectory with hover phases
     position_desired = zeros(3, num_steps); % Desired position trajectory (X, Y, Z) over time, initialized to zero.
@@ -165,46 +162,53 @@ function simulate()
                                % Higher values ensure quicker corrections but may cause instability if set too high.
     Kd_att = [2.0; 2.0; 0.0];  % Derivative gains for Roll, Pitch, Yaw: Provides damping to prevent oscillations in attitude control.
 
+    x = 1:0.001:80;
+    tempGimbalCommands = [0.1*cos(0.5 * x); 0.1*sin(0.5* x); zeros(1, length(x))];
+
     for step = 1:num_steps
         % Current time
         t_current = t(step);  % Fetch the current time step value.
 
+    
+        target_position = position_desired(:, step);
+        position_error = pos - target_position;
+        attitude_error = quaternion_multiply([1; 0; 0; 0;], quaternion_inverse(att));
+        if norm(attitude_error) > 0
+            attitude_error = attitude_error / norm(attitude_error);
+        end
+        euler_attitude_error = quaternion_to_euler(attitude_error);
+        gimbal_goal = [clip(euler_attitude_error(1), -pi/12, pi/12); clip(euler_attitude_error(2), -pi/12, pi/12); 0];
 
-        % target_position = position_desired(:, step);
-        % position_error = position - target_position;
-        % attitude_error = quaternion_multiply([1; 0; 0; 0;], quaternion_inverse(att));
-        % if norm(attitude_error) > 0
-        %     attitude_error = attitude_error / norm(attitude_error);
-        % end
-        % euler_attitude_error = quaternion_to_euler(attitude_error);
-        % gimbal_goal = [clip(euler_attitude_error(1), -pi/12, pi/12); clip(euler_attitude_error(2), -pi/12, pi/12); 0];
+        thrust_gimbal_goal = tempGimbalCommands(:, step); %delete later
 
-        F_thrust_mag = clip(1, T_min, T_max); % TODO: determine thrust via control scheme
         gimbal_info = update_TVC(thrust_gimbal, thrust_gimbal_ang_vel, thrust_gimbal_goal, dt);
-        thrust_gimbal = gimbal_info(1);
-        thrust_gimbal_ang_vel = gimbal_info(2);
+        thrust_gimbal = gimbal_info{1}; %thrust_gimbal needs to be a 3 x 1 vector
+        thrust_gimbal_ang_vel = gimbal_info{2};
+        F_thrust_mag = clip(50, T_min, T_max); % TODO: determine thrust via control scheme
 
         % TODO: look into what forces we need: gravity, thrust, aerodynamic drag, aerodynamic torques
         calculate_COM_and_COP_offset(thrust_gimbal)
         F_gravity = [0; 0; -m * g];
         thrust = get_thrust_body(F_thrust_mag, thrust_gimbal);
-        F_thrust_body = thrust(1);
+        %thrust = get_thrust_body(F_thrust_mag, thrust_gimbal_goal);
+        F_thrust_body = thrust{1};
         drag = get_drag_body(att, vel, v_wind(:, step));
-        F_drag_body = drag(1);
+        F_drag_body = drag{1};
+        
         F_net = F_gravity + to_world_frame_quaternion(att) * (F_thrust_body + F_drag_body);
     
-        T_thrust_body = thrust(2);
-        T_drag_body = drag(2);
-        T_gimbal_body = gimbal_info(3);
+        T_gimbal_body = gimbal_info{3};
+        T_thrust_body = thrust{2};
+        T_drag_body = drag{2};
         T_net = to_world_frame_quaternion(att) * (T_thrust_body + T_drag_body + T_gimbal_body);
     
-        state = update_dynamics(pos, vel, att, ang_vel, F_net, T_net, thrust_gimbal_ang_vel, dt);
-        pos = state(1);
-        vel = state(2);
-        accel = state(3);
-        att = state(4);
-        ang_vel = state(5);
-        ang_accel = state(6);
+        state = update_dynamics(pos, vel, att, ang_vel, F_net, T_net, dt);
+        pos = state{1};
+        vel = state{2};
+        accel = state{3};
+        att = state{4};
+        ang_vel = state{5};
+        ang_accel = state{6};
 
         % Store history
         position_history(:, step) = pos;  % Record position history.
@@ -214,26 +218,94 @@ function simulate()
         angular_velocity_history(:, step) = ang_vel;  % Record angular velocity history.
         angular_acceleration_history(:, step) = ang_accel;  % Record angular acceleration history.
         position_error_history(:, step) = position_error;  % Record position error history.
-        attitude_error_history(:, step) = attitude_error;  % Record attitude error history.
+        attitude_error_history(:, step) = attitude_error;  % Record quaternion attitude error history.
+        attitude_error_history_euler(:, step) = euler_attitude_error; % Record euler angle attitude error history
+        gimbal_cmd_history(:, step) = thrust_gimbal_goal; % Record gimbal command history
+        gimbal_actuation_history(:, step) = thrust_gimbal; % Record actual gimbal actuation history (what its actual position is, not the gimbal cmd)
     end
+    % Store to CSV file
+        filename = 'histories.csv';
+        writematrix(filename,position_history');
 
+    %plot trajectory
+    figure('Name', 'Trajectory Plot')
+    plot3(position_history(1,:), position_history(2,:), position_history(3,:), lineWidth = 2)
+    %plot trajectory coordinates separately
+    figure('Name', 'Trajectory Coordinates over Time')
+    subplot(3, 1, 1)
+    plot(1:num_steps, position_history(1, :))
+    title('X')
+    subplot(3, 1, 2)
+    plot(1:num_steps, position_history(2, :))
+    title('Y')
+    subplot(3, 1, 3)
+    plot(1:num_steps, position_history(3, :))
+    title('Z')
+    %plot acceleration
+    figure('Name', 'Translational Acceleration')
+    subplot(3, 1, 1)
+    plot(1:num_steps, acceleration_history(1, :))
+    title('a_X')
+    subplot(3, 1, 2)
+    plot(1:num_steps, acceleration_history(2, :))
+    title('a_Y')
+    subplot(3, 1, 3)
+    plot(1:num_steps, acceleration_history(3, :))
+    title('a_Z')
+    %plot velocity
+    figure('Name', 'Translational Velocity')
+    subplot(3, 1, 1)
+    plot(1:num_steps, velocity_history(1, :))
+    title('v_X')
+    subplot(3, 1, 2)
+    plot(1:num_steps, velocity_history(2, :))
+    title('v_Y')
+    subplot(3, 1, 3)
+    plot(1:num_steps, velocity_history(3, :))
+    title('v_Z')
+    %plot angular velocity
+    %plot angular acceleration
+    %plot attitude
+    figure('Name', 'Gimbal')
+    subplot(3, 1, 1)
+    plot(1:num_steps, gimbal_cmd_history(1, :) * (180/pi))
+    hold on
+    plot(1:num_steps, gimbal_actuation_history(1, :) * (180/pi))
+    title('X gimbal')
+    legend('CMD', 'Actual')
+    subplot(3, 1, 2)
+    plot(1:num_steps,  gimbal_cmd_history(2, :) * (180/pi))
+    hold on
+    plot(1:num_steps,  gimbal_actuation_history(2, :) * (180/pi))
+    title('Y gimbal')
+    legend('CMD', 'Actual')
+    subplot(3, 1, 3)
+    plot(1:num_steps,  gimbal_cmd_history(3, :) * (180/pi))
+    hold on
+    plot(1:num_steps,  gimbal_actuation_history(3, :) * (180/pi))
+    legend('CMD', 'Actual')
+    title('Z gimbal')
 end
 
+simulate()
+
 %% updates the state with a given net force, net torque, and time step
-function state = update_dynamics(pos, vel, att, ang_vel, F_net, T_net, gimbal_ang_vel, delta_t)
+function state = update_dynamics(pos, vel, att, ang_vel, F_net, T_net, delta_t)
     global m;
     global I;
-    global I_Inv;
-    global TVC_top_I;
-    global TVC_bottom_I;
+    global Inv_I;
 
-    % translational component
+    % translational components
     accel = F_net / m;
     vel = vel + accel * delta_t;
     pos = pos + vel * delta_t;
     % rotational component
+<<<<<<< HEAD
     ang_accel = I_Inv * (T_net - cross(ang_vel, I * ang_vel) - cross([gimbal_ang_vel(1); 0; 0], TVC_top_I * [gimbal_ang_vel(1); 0; 0]) - cross(gimbal_ang_vel, TVC_bottom_I * gimbal_ang_vel));
-    ang_accel = I_Inv * (T_net - cross(ang_vel, I * ang_vel)));
+    ang_accel = I_Inv * (T_net - cross(ang_vel, I * ang_vel));
+=======
+    ang_accel = Inv_I * (T_net - cross(ang_vel, I * ang_vel));
+>>>>>>> 3f38792a6d954d89f4573c4e68cd85a6d058724e
     ang_vel = ang_vel + ang_accel * delta_t;
     delta_att = ang_vel * delta_t;
     att = att + 0.5 * quaternion_multiply([0; delta_att(1); delta_att(2); delta_att(3)], att) * delta_t;
@@ -241,7 +313,7 @@ function state = update_dynamics(pos, vel, att, ang_vel, F_net, T_net, gimbal_an
         att = att / norm(att);
     end
     
-    state = [pos, vel, accel, att, ang_vel, ang_accel];
+    state = {pos, vel, accel, att, ang_vel, ang_accel}; %cell array of state variables (variables are of different size so can't concatenate)
 end
 
 %% calculates the center of mass offset from the static center of mass
@@ -250,15 +322,21 @@ function calculate_COM_and_COP_offset(thrust_gimbal)
     global m_gimbal_top;
     global m_gimbal_bottom;
     global gimbal_offset;
-    global gimbal_top_offset;
-    global gimbal_bottom_offset;
+    global gimbal_top_COM_offset;
+    global gimbal_bottom_COM_offset;
     global gimbal_x_distance;
     global COM_offset;
     global COP;
     global COP_offset;
 
-    top_gimbal_COM = (m_gimbal_top / m) * (gimbal_offset + get_extrinsic_x_rotation(thrust_gimbal(1)) * gimbal_top_offset);
+<<<<<<< HEAD
+    top_gimbal_COM = (m_gimbal_top / m) * (gimbal_offset + get_extrinsic_x_rotation(thrust_gimbal(1)) .* gimbal_top_offset);
     bottom_gimbal_COM = (m_gimbal_bottom / m) * (gimbal_offset + get_extrinsic_x_rotation(thrust_gimbal(1)) * gimbal_x_distance + get_extrinsic_rotation_matrix(thrust_gimbal) * gimbal_bottom_offset);
+=======
+    top_gimbal_COM = (m_gimbal_top / m) * (gimbal_offset + get_extrinsic_x_rotation(thrust_gimbal(1)) * gimbal_top_COM_offset); 
+    bottom_gimbal_COM = (m_gimbal_bottom / m) * (gimbal_offset + get_extrinsic_x_rotation(thrust_gimbal(1)) * gimbal_x_distance + get_extrinsic_rotation_matrix(thrust_gimbal) * gimbal_bottom_COM_offset); %still unsure abt this line
+
+>>>>>>> 3f38792a6d954d89f4573c4e68cd85a6d058724e
     COM_offset = top_gimbal_COM + bottom_gimbal_COM;
     COP_offset = COP - COM_offset;
 end
@@ -268,10 +346,11 @@ function thrust = get_thrust_body(F_thrust_mag, thrust_gimbal)
     global gimbal_offset;
     global gimbal_x_distance;
     global gimbal_y_distance;
-
-    thrust_force_vector = F_thrust_mag * ([0; 0; 1] * get_extrinsic_rotation_matrix(thrust_gimbal));
+    global COM_offset;
+    
+    thrust_force_vector = F_thrust_mag * (get_extrinsic_rotation_matrix(thrust_gimbal) * [0;0;1]); 
     thrust_torque_vector = cross(COM_offset + gimbal_offset + get_extrinsic_x_rotation(thrust_gimbal(1)) * gimbal_x_distance + get_extrinsic_rotation_matrix(thrust_gimbal) * gimbal_y_distance, thrust_force_vector);
-    thrust = [thrust_force_vector; thrust_torque_vector];
+    thrust = {thrust_force_vector, thrust_torque_vector}; %cell array of force and torque vectors
 end
 
 %% gets drag force in the body frame
@@ -285,12 +364,13 @@ function drag = get_drag_body(att, vel, v_wind)
     global A_z;
     global COP_offset;
     
-    drag_force = 0.5 * air_density * diag([Cd_x*A_x, Cd_y*A_y, Cd_z*A_z]) * (to_body_frame_quaternion(att) * (vel - v_wind))^2;
+    vel_relative = to_body_frame_quaternion(att) * (vel - v_wind);
+    drag_force =  - 0.5 * air_density * diag([Cd_x*A_x, Cd_y*A_y, Cd_z*A_z]) * (norm(vel_relative) * vel_relative); %drag force points in opposite direction to relative velocity
     drag_torque = cross(COP_offset, drag_force);
-    drag = [drag_force, drag_torque];
+    drag = {drag_force, drag_torque}; %cell array of force and torque vectors
 end
 
-%% updates th TVC gimbal movement and gets torque from the TVC gimbal movement
+%% updates the TVC gimbal movement and gets torque from the TVC gimbal movement
 function info = update_TVC(gimbal, gimbal_ang_vel, gimbal_goal, delta_t)
     global gimbal_speed;
     global gimbal_acceleration;
@@ -299,35 +379,75 @@ function info = update_TVC(gimbal, gimbal_ang_vel, gimbal_goal, delta_t)
 
     prev_gimbal_ang_vel = gimbal_ang_vel;
     gimbal_error = gimbal_goal - gimbal;
-    projected_decel = gimbal_ang_vel^2 - 2 * diag([gimbal_acceleration * -sign(gimbal_error(1)), gimbal_acceleration * -sign(gimbal_error(2)), 0]) * gimbal_error;
+<<<<<<< HEAD
+    projected_decel = gimbal_ang_vel.^2 - 2 * diag([gimbal_acceleration * -sign(gimbal_error(1)), gimbal_acceleration * -sign(gimbal_error(2)), 0]) * gimbal_error;
     projected_decel = diag(sign(projected_decel)) * sqrt(abs(projected_decel));
 
     if projected_decel(1) >= 0
         % decel!!
-        gimbal_ang_vel(1) = gimbal_ang_vel(1) + gimbal_acceleration * -sign(gimbal_error(1)) * delta_t;
+        gimbal_ang_vel(1) = gimbal_ang_vel(1) + gimbal_acceleration(1) .* -sign(gimbal_error(1)) * delta_t;
+=======
+    %projected_decel = gimbal_ang_vel.^2 + 2 * diag([gimbal_acceleration * -sign(gimbal_error(1)), gimbal_acceleration * -sign(gimbal_error(2)), 0]) * gimbal_error; %predicting final velocity
+    %projected_decel = diag(sign(projected_decel)) * sqrt(abs(projected_decel));
+
+    prediction_horizon = 0.01; %look 0.01 seconds into the future
+    predicted_angle = gimbal + gimbal_ang_vel * prediction_horizon;
+    predicted_error = gimbal_goal - predicted_angle;
+
+    if predicted_error(1) > 0 
+        gimbal_ang_vel(1) = gimbal_ang_vel(1) + gimbal_acceleration * delta_t; 
+>>>>>>> 3f38792a6d954d89f4573c4e68cd85a6d058724e
     else
-        % accel!!
-        if abs(gimbal_ang_vel(1)) < gimbal_speed
-            gimbal_ang_vel(1) = sign(gimbal_error(1)) * min([abs(gimbal_ang_vel(1)) + gimbal_acceleration * delta_t; gimbal_speed]);
-        end
+        gimbal_ang_vel(1) = gimbal_ang_vel(1) - gimbal_acceleration * delta_t; 
     end
 
-    if projected_decel(2) >= 0
+    if predicted_error(2) > 0
+        gimbal_ang_vel(2) = gimbal_ang_vel(2) + gimbal_acceleration * delta_t; 
+    else
+        gimbal_ang_vel(2) = gimbal_ang_vel(2) - gimbal_acceleration * delta_t; 
+    end
+
+    %{
+    if abs(projected_distance(1)) >= abs(gimbal_error(1))
         % decel!!
-        gimbal_ang_vel(2) = gimbal_ang_vel(2) + gimbal_acceleration * -sign(gimbal_error(2)) * delta_t;
+        %gimbal_ang_vel(1) = gimbal_ang_vel(1) + gimbal_acceleration * -sign(gimbal_error(1)) * delta_t;
+        gimbal_ang_vel(1) = gimbal_ang_vel(1) + gimbal_acceleration * sign(gimbal_error(1)) * delta_t; %accelerating in direction of sign seems to give the graph we expect?
     else
         % accel!!
-        if abs(gimbal_ang_vel(2)) < gimbal_speed
-            gimbal_ang_vel(2) = sign(gimbal_error(2)) * min([abs(gimbal_ang_vel(2)) + gimbal_acceleration * delta_t; gimbal_speed]);
-        end
+        
+        gimbal_ang_vel(1) = gimbal_ang_vel(1) + gimbal_acceleration * -sign(gimbal_error(1)) * delta_t; 
+        
+    end 
+    
+    
+    if abs(projected_distance(2)) >= abs(gimbal_error(2))
+        % decel!!
+        %gimbal_ang_vel(2) = gimbal_ang_vel(2) + gimbal_acceleration * -sign(gimbal_error(2)) * delta_t;
+        gimbal_ang_vel(2) = gimbal_ang_vel(2) + gimbal_acceleration * sign(gimbal_error(2)) * delta_t;
+    else
+        % accel!!
+       
+        gimbal_ang_vel(2) = gimbal_ang_vel(2) + gimbal_acceleration * -sign(gimbal_error(2)) * delta_t; 
+       
     end
+    %}
+    
+
+    %Maybe the code below is what we want?
+    %gimbal_ang_vel(1) = gimbal_ang_vel(1) + gimbal_acceleration * sign(gimbal_error(1)) * delta_t; 
+    %gimbal_ang_vel(2) = gimbal_ang_vel(2) + gimbal_acceleration * sign(gimbal_error(2)) * delta_t; 
+
+    gimbal_ang_vel(1) = clip(gimbal_ang_vel(1), -gimbal_speed, gimbal_speed);
+    gimbal_ang_vel(2) = clip(gimbal_ang_vel(2), -gimbal_speed, gimbal_speed);
+    
 
     gimbal = gimbal + gimbal_ang_vel * delta_t;
+    gimbal = clip(gimbal, -pi/12, pi/12);
     current_gimbal_accel = (gimbal_ang_vel - prev_gimbal_ang_vel) / delta_t;
 
     torque = diag([gimbal_top_I; gimbal_bottom_I; 0]) * current_gimbal_accel;
 
-    info = [gimbal; gimbal_ang_vel; torque];
+    info = {gimbal; gimbal_ang_vel; torque}; % cell array of gimbal info
 end
 
 %% creates a rotation matrix to turn an euler vector into the world frame with a quaternion attitude
