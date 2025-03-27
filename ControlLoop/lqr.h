@@ -1,40 +1,42 @@
 #ifndef LQR_H
 #define LQR_H
 
-#include <Eigen/Dense>
-#include <vector>
+#include "Vector.h"
+#include "Matrix.h"
 
 class LQR {
-    public:
-        LQR();
-        ~LQR();
-        
-        Eigen::VectorXd setPoint;
-        
-        const Eigen::VectorXd& getState() const { return state; }
-        const Eigen::MatrixXd& getK() const { return K;}
+public:
+    LQR();
+    ~LQR();
 
-        void setA(const Eigen::MatrixXd& A);
-        void setA(Eigen::MatrixXd&& A);
-        void setB(const Eigen::MatrixXd& B);
-        void setB(Eigen::MatrixXd&& B);
-        void setQ(const Eigen::MatrixXd& Q);
-        void setQ(Eigen::MatrixXd&& Q);
-        void setR(const Eigen::MatrixXd& R);
-        void setR(Eigen::MatrixXd&& R);
-        void setK(const Eigen::MatrixXd& K);
-        void setK(Eigen::MatrixXd&& K);
-        void setState(const Eigen::VectorXd& state);
-        void setState(Eigen::VectorXd&& state);
+    Vector setPoint;
 
-        void calculateK(); //calculate K matrix
-        
-    private:
-        Eigen::VectorXd state;
-        Eigen::MatrixXd A;
-        Eigen::MatrixXd B;
-        Eigen::MatrixXd Q;
-        Eigen::MatrixXd R;
-        Eigen::MatrixXd K;
+    const Vector& getState() const { return state; }
+    const Matrix& getK() const { return K; }
+
+    // Lvalue setters
+    void setA(const Matrix& A);
+    void setA(Matrix&& A);
+    void setB(const Matrix& B);
+    void setB(Matrix&& B);
+    void setQ(const Matrix& Q);
+    void setQ(Matrix&& Q);
+    void setR(const Matrix& R);
+    void setR(Matrix&& R);
+    void setK(const Matrix& K);
+    void setK(Matrix&& K);
+    void setState(const Vector& state);
+    void setState(Vector&& state);
+
+    void calculateK(); // Calculate K matrix
+
+private:
+    Vector state;
+    Matrix A;
+    Matrix B;
+    Matrix Q;
+    Matrix R;
+    Matrix K;
 };
-#endif
+
+#endif // LQR_H
