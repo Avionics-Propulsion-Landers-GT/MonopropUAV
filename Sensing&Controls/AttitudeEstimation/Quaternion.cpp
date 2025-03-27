@@ -1,5 +1,7 @@
 #include "Quaternion.h"
 #include <cmath>
+#include <vector>
+#include "Matrix.h"
 
 Quaternion::Quaternion() : data(new double[4] {0, 0, 0, 0}) {} //default constructor
 
@@ -102,4 +104,45 @@ Quaternion Quaternion::rotate(const Quaternion& q) const {
     return *this * q * this->inverse();
 }
 
+// Convert quaternion to rotation matrix
+Matrix Quaternion::toRotationMatrix() const {
+    Matrix matrix(3, 3, 0);
+    matrix(0, 0) = 1 - 2 * (data[2] * data[2] + data[3] * data[3]);
+    matrix(0, 1) = 2 * (data[1] * data[2] - data[3] * data[0]);
+    matrix(0, 2) = 2 * (data[1] * data[3] + data[2] * data[0]);
 
+    matrix(1, 0) = 2 * (data[1] * data[2] + data[3] * data[0]);
+    matrix(1, 1) = 1 - 2 * (data[1] * data[1] + data[3] * data[3]);
+    matrix(1, 2) = 2 * (data[2] * data[3] - data[1] * data[0]);
+
+    matrix(2, 0) = 2 * (data[1] * data[3] - data[2] * data[0]);
+    matrix(2, 1) = 2 * (data[2] * data[3] + data[1] * data[0]);
+    matrix(2, 2) = 1 - 2 * (data[1] * data[1] + data[2] * data[2]);
+
+    return matrix;
+}
+
+
+// Convert quaternion to Euler angles (roll, pitch, yaw)
+Matrix Quaternion::toEulerMatrix() const {
+    Matrix eulerMatrix(3, 1, 0);
+
+    // Roll (x-axis rotation)
+    double sinr_cosp = 2 * (data[0] * data[1] + data[2] * data[3]);
+    double cosr_cosp = 1 - 2 * (data[1] * data[1] + data[2] * data[2]);
+    eulerMatrix(0, 0) = std::atan2(sinr_cosp, cosr_cosp);
+
+    // Pitch (y-axis rotation)
+    double sinp = 2 * (data[0] * data[2] - data[3] * data[1]);
+    if (std::abs(sinp) >= 1)
+        eulerMatrix(1, 0) = std::copysign(M_PI / 2, sinp); // Use 90 degrees if out of range
+    else
+        eulerMatrix(1, 0) = std::asin(sinp);
+
+    // Yaw (z-axis rotation)
+    double siny_cosp = 2 * (data[0] * data[3] + data[1] * data[2]);
+    double cosy_cosp = 1 - 2 * (data[2] * data[2] + data[3] * data[3]);
+    eulerMatrix(2, 0) = std::atan2(siny_cosp, cosy_cosp);
+
+    return eulerMatrix;
+}

@@ -28,5 +28,6 @@ class Vector : public Matrix {
         Vector crossProduct(const Vector&other) const;
         double squareRoot(unsigned int num) const;
         double size() const;
+        Quaternion toQuaternion() const;
 };
 #endif

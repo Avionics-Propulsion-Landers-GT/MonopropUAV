@@ -263,6 +263,15 @@ function monocopter_dynamics_with_wind_PID_improved()
     % - t: Time vector for the simulation.
     % - position_desired: Desired position trajectory in the inertial frame (X, Y, Z coordinates).
     plot_results(position_history, velocity_history, acceleration_history, quaternion_history, angular_velocity_history, error_history, dt, t, position_desired);
+
+    % Store to CSV file
+    csvwrite('position_history.csv',[t', position_history']);
+    csvwrite('velocity_history.csv',[t', velocity_history']);
+    csvwrite('acceleration_history.csv',[t', acceleration_history']);
+    csvwrite('quaternion_history.csv',[t', quaternion_history']);
+    csvwrite('angular_velocity_history.csv',[t', angular_velocity_history']);
+    csvwrite('error_history.csv',[t', error_history']);
+    csvwrite('position_desired.csv',[t', position_desired']);
 end  % End of main function
 
 %% Function to compute rotation matrix from Euler angles

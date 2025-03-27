@@ -27,6 +27,8 @@ class Quaternion {
         Vector toEuler() const;
         Matrix toRotationMatrix() const;
         Quaternion fromRotationMatrix(const Matrix& rot) const;
+        Matrix toRotationMatrix() const;
+        Matrix toEulerMatrix() const;
 
 };
 #endif

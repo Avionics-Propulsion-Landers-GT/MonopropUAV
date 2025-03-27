@@ -1,5 +1,8 @@
 #include <stdexcept>
 #include "Matrix.h"
+#include "Quaternion.h"
+#include <cmath>
+
 //Initialize data pointer to a double which allows for efficient array creation etc. and rows and cols
     
 //Matrix is stored in a 1D array because of memory and elements are stored in the array by row
@@ -7,11 +10,11 @@
 Matrix::Matrix() : rows (0), cols (0), data(nullptr) {}
 
 //Matrix constructor for all 0s, all 1s, or all constants
-Matrix::Matrix(unsigned int rows, unsigned int cols, double initVal)
+Matrix::Matrix(unsigned int rows, unsigned int cols, double initVal = 0.0)
     : rows(rows), cols(cols), data(nullptr) {
         if (rows > 0 && cols > 0) {
             data = new double[rows * cols];
-            for (unsigned int i = 0; i < rows * cols; i++) {
+            for (unsigned int i = 0; i < rows * cols; ++i) {
                 data[i] = initVal;
             }
         }
@@ -24,11 +27,12 @@ Matrix::Matrix(unsigned int n)
         if (n > 0) {
             data = new double[n * n]();
 
-            for (unsigned int i = 0; i < n; i++) {
+            for (unsigned int i = 0; i < n; ++i) {
                 data[i * n + i] = 1.0;
             }
         }
 }
+
 
 //Matrix constructor for a matrix with a given data array
 Matrix::Matrix(unsigned int r, unsigned int c, double* d)
@@ -45,9 +49,14 @@ Matrix::Matrix(unsigned int r, unsigned int c, double* d)
         }
 }
 
-Matrix::Matrix(unsigned int r, unsigned int c) 
-    : rows(r), cols(c) {
+
+Matrix::Matrix(const Matrix& other) : rows(other.getRows()), cols(other.getCols()) {
+    if (other.data) {
         data = new double[rows * cols];
+        for (unsigned int i = 0; i < rows * cols; ++ i) {
+            data[i] = other.data[i];
+        }
+    }
 }
         
 Matrix::~Matrix() {
@@ -262,3 +271,41 @@ bool Matrix::isEqualTo(const Matrix& other) const {
     }
     return true;
 }
+      
+Quaternion Matrix::toQuaternion() const {
+    if (rows != 3 || cols != 3) {
+        throw std::invalid_argument("Matrix must be 3x3 to convert to a Quaternion.");
+    }
+
+    double trace = (*this)(0, 0) + (*this)(1, 1) + (*this)(2, 2);
+    double w, x, y, z;
+
+    if (trace > 0) {
+        double s = sqrt(trace + 1.0) * 2.0;  // 4w
+        w = 0.25 * s;
+        x = ((*this)(2, 1) - (*this)(1, 2)) / s;
+        y = ((*this)(0, 2) - (*this)(2, 0)) / s;
+        z = ((*this)(1, 0) - (*this)(0, 1)) / s;
+    } else {
+        if ((*this)(0, 0) > (*this)(1, 1) && (*this)(0, 0) > (*this)(2, 2)) {
+            double s = sqrt(1.0 + (*this)(0, 0) - (*this)(1, 1) - (*this)(2, 2)) * 2.0;  // 4x
+            w = ((*this)(2, 1) - (*this)(1, 2)) / s;
+            x = 0.25 * s;
+            y = ((*this)(0, 1) + (*this)(1, 0)) / s;
+            z = ((*this)(0, 2) + (*this)(2, 0)) / s;
+        } else if ((*this)(1, 1) > (*this)(2, 2)) {
+            double s = sqrt(1.0 + (*this)(1, 1) - (*this)(0, 0) - (*this)(2, 2)) * 2.0;  // 4y
+            w = ((*this)(0, 2) - (*this)(2, 0)) / s;
+            x = ((*this)(0, 1) + (*this)(1, 0)) / s;
+            y = 0.25 * s;
+            z = ((*this)(1, 2) + (*this)(2, 1)) / s;
+        } else {
+            double s = sqrt(1.0 + (*this)(2, 2) - (*this)(0, 0) - (*this)(1, 1)) * 2.0;  // 4z
+            w = ((*this)(1, 0) - (*this)(0, 1)) / s;
+            x = ((*this)(0, 2) + (*this)(2, 0)) / s;
+            y = ((*this)(1, 2) + (*this)(2, 1)) / s;
+            z = 0.25 * s;
+        }
+    }
+
+    return Quaternion(w, x, y, z);
