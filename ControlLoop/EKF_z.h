@@ -5,22 +5,21 @@
 
 /*
 
-    Header file for EKF_z.h
+    Header file for EKF_Altitude (formerly EKF_z)
 
 */
 
 class EKF_Altitude : public ExtendedKalmanFilterGeneral {
 public:
-    EKF_Altitude(const Eigen::VectorXd& initial_state, double delta_time, double q_scalar, double r_scalar, double initial_p);
-    
-    Eigen::VectorXd parseData(const std::vector<double>& data) override;
-    Eigen::VectorXd stateTransitionFunction() override;
-    Eigen::MatrixXd stateTransitionJacobian() override;
-    Eigen::VectorXd measurementPredictionFunction() override;
-    Eigen::MatrixXd measurementPredictionJacobian() override;
+    EKF_Altitude(const Vector& initial_state, double delta_time, double q_scalar, double r_scalar, double initial_p);
 
-    Eigen::VectorXd getState() const { return state; } // Returns current state
+    Vector parseData(const std::vector<double>& data) override;
+    Vector stateTransitionFunction() override;
+    Matrix stateTransitionJacobian() override;
+    Vector measurementPredictionFunction() override;
+    Matrix measurementPredictionJacobian() override;
 
+    Vector getState() const { return state; } // Returns current state
 };
 
 #endif // EKF_Z_H

@@ -181,10 +181,15 @@ int main() {
     // is a struct with {state, status, command}.
     LoopOutput out;
 
+    // Initialize setpoint
+    std::vector<double> setPoint = {0,0,0,0,0,0,0,0,0,0,0,0};
+
     // The state vector is {eulerAngles, position, angularVelocity, velocity}
     out.state = {{0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}};
-    // The command output is 3 PWMs
-    out.command = {0,0,0};
+    
+    // The command output is thrust, gimbal angle a, gimbal angle b, adot, bdot, ddot{a}, ddot{b}
+    // We only use the first 3 outside the LQR
+    out.command = {0,0,0, 0,0,0,0};
 
     // Read the initial GPS readings via the function at the beginning of this program & print it
     std::vector<double> gps_init = readGPSInit(files[2]);
@@ -199,6 +204,7 @@ int main() {
     SystemComponents system = init(gps_init, out.state, dt); // Initialize all filters
 
     // Begin the loop!
+    // std::cout << "Beginning loop!" << std::endl;
     while (allFilesHaveData) {
         // Clear the data from the previous loop.
         values.clear();
@@ -253,7 +259,9 @@ int main() {
                 state. dt is obviously just a constant (set at 0.001s nominally)
                 
             */
-            out = loop(values, out.state, system, status, dt);
+            // std::cout << "[DEBUG] Entered loop() " << iteration << std::endl;
+            out = loop(values, out.state, system, status, dt, setPoint, out.command);
+           
 
             // End clock
             auto end = std::chrono::high_resolution_clock::now();

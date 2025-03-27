@@ -221,7 +221,6 @@ Matrix Matrix::exp(unsigned int terms) const {
     }
         
     return result;
-
 }
 
 Quaternion Matrix::toQuaternion() const {
@@ -261,4 +260,3 @@ Quaternion Matrix::toQuaternion() const {
     }
 
     return Quaternion(w, x, y, z);
-}
