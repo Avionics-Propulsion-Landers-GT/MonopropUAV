@@ -62,9 +62,9 @@ Vector Vector::crossProduct(const Vector&other) const {
 
 }
 
-// Quaternion Vector::toQuaternion() const {
-//     if (this->rows != 3) {
-//         throw std::invalid_argument("Vector must have 3 elements to convert to Quaternion");
-//     }
-//     return Quaternion(0.0, (*this)(0, 0), (*this)(1, 0), (*this)(2, 0));
-// }
+Quaternion Vector::toQuaternion() const {
+    if (this->rows != 3) {
+        throw std::invalid_argument("Vector must have 3 elements to convert to Quaternion");
+    }
+    return Quaternion(0.0, (*this)(0, 0), (*this)(1, 0), (*this)(2, 0));
+}
