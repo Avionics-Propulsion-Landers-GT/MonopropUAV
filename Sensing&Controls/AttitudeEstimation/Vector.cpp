@@ -1,8 +1,9 @@
 #include "Vector.h"
+#include <cmath>
 #include "Quaternion.h"
 
 double Vector::dotProduct(const Vector&other) const {
-    if (this -> rows == other.rows) {
+    if (this -> rows != other.rows) {
         return -0.01;
     }
     double result = 0.0;
@@ -17,11 +18,12 @@ double Vector::magnitude() const {
     for (unsigned int i = 0; i < this-> rows; i++) {
         sum += ((*this)(i,0) * (*this)(i,0));
     }
-    return (this->squareRoot(sum));
+    return sqrt(sum);
+    //return (this->sqrt(sum));
 
 }
 
-double Vector::squareRoot(unsigned int num) const {
+double Vector::squareRoot(unsigned int num) const { 
     if (num < 0) {
         return -1.0;  // Error code
     }
@@ -40,12 +42,16 @@ double Vector::squareRoot(unsigned int num) const {
     return guess;
 }
 
+double Vector::size() const {
+    return this->rows;
+}
+
 Vector Vector::normalize() const {
     double length = this->magnitude();
     if (length == 0) {
         return Vector(0, 0.0);
     }
-    Matrix v = this->multiply(1.0/length);
+    Matrix v = (*this) * (1.0/length);
     return Vector(v);
 }
 

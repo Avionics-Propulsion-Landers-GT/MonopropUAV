@@ -11,7 +11,9 @@ class Matrix {
         unsigned int rows, cols;
 
     public:
+        Matrix();
         Matrix(unsigned int rows, unsigned int cols, double initVal);
+        Matrix(unsigned int rows, unsigned int cols, double* data);
         Matrix(unsigned int n);
         Matrix(const Matrix& other);
         ~Matrix();
@@ -27,9 +29,14 @@ class Matrix {
             return this->cols;
         }
 
-        Matrix add(const Matrix& other) const;
-        Matrix multiply(const Matrix& other) const;
-        Matrix multiply(double scalar) const;
+        //Matrix add(const Matrix& other) const;
+        //Matrix multiply(const Matrix& other) const;
+        //Matrix multiply(double scalar) const;
+        Matrix operator+(const Matrix& other) const;
+        Matrix operator-(const Matrix& other) const;
+        Matrix operator*(const Matrix& other) const;
+        Matrix operator*(double scalar) const;
+        friend Matrix operator*(double scalar, const Matrix& m);
 
         Matrix transpose() const;
         double determinant() const;
@@ -44,6 +51,8 @@ class Matrix {
         Matrix exp(unsigned int terms) const;
         Quaternion toQuaternion() const;
 
+
+        bool isEqualTo(const Matrix& other) const;
 };
 
 #endif
