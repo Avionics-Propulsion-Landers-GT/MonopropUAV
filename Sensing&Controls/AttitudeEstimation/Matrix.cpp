@@ -1,9 +1,14 @@
 #include <stdexcept>
 #include "Matrix.h"
+#include "Quaternion.h"
+#include <cmath>
 
 //Initialize data pointer to a double which allows for efficient array creation etc. and rows and cols
     
 //Matrix is stored in a 1D array because of memory and elements are stored in the array by row
+//Default constructor
+Matrix::Matrix() : rows (0), cols (0), data(nullptr) {}
+
 //Matrix constructor for all 0s, all 1s, or all constants
 Matrix::Matrix(unsigned int rows, unsigned int cols, double initVal = 0.0)
     : rows(rows), cols(cols), data(nullptr) {
@@ -28,6 +33,21 @@ Matrix::Matrix(unsigned int n)
         }
 }
 
+
+//Matrix constructor for a matrix with a given data array
+Matrix::Matrix(unsigned int r, unsigned int c, double* d)
+    : rows(r), cols(c), data(nullptr) {
+        if (r == 0 || c == 0) {
+            throw std::invalid_argument("Number of rows and columns must be greater than zero");
+        }
+        if (d == nullptr) {
+            throw std::invalid_argument("Data array cannot be null");
+        }
+        data = new double[r * c];
+        for (unsigned int i = 0; i < r * c; ++i) {
+            data[i] = d[i];
+        }
+}
 
 
 Matrix::Matrix(const Matrix& other) : rows(other.getRows()), cols(other.getCols()) {
@@ -56,24 +76,36 @@ const double& Matrix::operator()(unsigned int row, unsigned int col) const {
     return data[row * cols + col];
 }
 
-Matrix Matrix::add(const Matrix& other) const {
+//defining matrix addition
+Matrix Matrix::operator+(const Matrix& other) const { 
     if (rows != other.rows || cols != other.cols) return Matrix(0.0); //Error cannot add if not equal dimensions
-
-    Matrix result(rows, cols);
-    for (unsigned int i = 0; i < rows * cols; ++i)
+    Matrix result(rows, cols, 0.0);
+    for (unsigned int i = 0; i < rows * cols; ++i) {
         result.data[i] = data[i] + other.data[i];
+    }
     return result;
 }
 
-Matrix Matrix::multiply(const Matrix& other) const {
-    if (cols != other.rows) return Matrix(0.0); //Error can't multiply matrix of these dimensions
+//defining matrix subtraction
+Matrix Matrix::operator-(const Matrix& other) const {  
+    if (rows != other.rows || cols != other.cols) return Matrix(0.0); //Error cannot add if not equal dimensions
+    Matrix result(rows, cols, 0.0);
+    for (unsigned int i = 0; i < rows * cols; ++i) {
+        result.data[i] = data[i] - other.data[i];
+    }
+    return result;
+}
+
+//defining matrix multiplication
+Matrix Matrix::operator*(const Matrix& other) const {
+    if (cols != other.rows) return Matrix(0,0); //Error can't multiply matrix of these dimensions
 
     Matrix result(rows, other.cols, 0.0);
     for (unsigned int i = 0; i < rows; ++i) {
         for (unsigned int j = 0; j < other.cols; ++j) {
             double sum = 0.0;
             for (unsigned int k = 0; k < cols; ++k) {
-                sum += operator()(i,k) * other(k,j);
+                sum += (*this)(i,k) * other(k,j);
             }
             result(i, j) = sum;
         }
@@ -81,13 +113,20 @@ Matrix Matrix::multiply(const Matrix& other) const {
     return result;
 }
 
-Matrix Matrix::multiply(double scalar) const {
+//defining matrix multiplication by scalar on the right
+Matrix Matrix::operator*(double scalar) const {
     Matrix result(rows, cols, 0.0);
     for (unsigned int i = 0; i < rows * cols; ++i) {
         result.data[i] = data[i] * scalar;
-    }
+    } 
     return result;
 }
+
+//defining matrix multiplication by scalar on the left
+Matrix operator*(double scalar, const Matrix& m) {
+    return m * scalar;
+}
+
 
 Matrix Matrix::transpose() const {
     Matrix result(cols, rows);
@@ -177,16 +216,16 @@ Matrix Matrix::power(unsigned int k) const {
         throw std::invalid_argument("Matrix must be square for exponentiation");
     }
     
-    Matrix result(rows);
+    Matrix result(rows); //create identity matrix
     Matrix temp = *this;
     
     
     // Compute X^k using exponentiation by squaring
     while (k > 0) {
         if (k % 2 == 1) {
-            result = result.multiply(temp);
+            result = result * temp;
         }
-        temp = temp.multiply(temp);
+        temp = temp * temp;
         k /= 2;
     }
     return result;
@@ -214,9 +253,59 @@ Matrix Matrix::exp(unsigned int terms) const {
         
     // Compute e^X using Taylor series expansion
     for (unsigned int k = 1; k <= terms; ++k) {
-        term = this->power(k).multiply(1.0 / factorial(k));
-        result = result.add(term);
+        term = this->power(k) * (1.0 / factorial(k));
+        result = result + term;
     }
         
     return result;
 }
+
+bool Matrix::isEqualTo(const Matrix& other) const {
+    if (rows != other.rows || cols != other.cols) {
+        return false;
+    }
+    for (unsigned int i = 0; i < rows * cols; ++i) {
+        if (data[i] != other.data[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+      
+Quaternion Matrix::toQuaternion() const {
+    if (rows != 3 || cols != 3) {
+        throw std::invalid_argument("Matrix must be 3x3 to convert to a Quaternion.");
+    }
+
+    double trace = (*this)(0, 0) + (*this)(1, 1) + (*this)(2, 2);
+    double w, x, y, z;
+
+    if (trace > 0) {
+        double s = sqrt(trace + 1.0) * 2.0;  // 4w
+        w = 0.25 * s;
+        x = ((*this)(2, 1) - (*this)(1, 2)) / s;
+        y = ((*this)(0, 2) - (*this)(2, 0)) / s;
+        z = ((*this)(1, 0) - (*this)(0, 1)) / s;
+    } else {
+        if ((*this)(0, 0) > (*this)(1, 1) && (*this)(0, 0) > (*this)(2, 2)) {
+            double s = sqrt(1.0 + (*this)(0, 0) - (*this)(1, 1) - (*this)(2, 2)) * 2.0;  // 4x
+            w = ((*this)(2, 1) - (*this)(1, 2)) / s;
+            x = 0.25 * s;
+            y = ((*this)(0, 1) + (*this)(1, 0)) / s;
+            z = ((*this)(0, 2) + (*this)(2, 0)) / s;
+        } else if ((*this)(1, 1) > (*this)(2, 2)) {
+            double s = sqrt(1.0 + (*this)(1, 1) - (*this)(0, 0) - (*this)(2, 2)) * 2.0;  // 4y
+            w = ((*this)(0, 2) - (*this)(2, 0)) / s;
+            x = ((*this)(0, 1) + (*this)(1, 0)) / s;
+            y = 0.25 * s;
+            z = ((*this)(1, 2) + (*this)(2, 1)) / s;
+        } else {
+            double s = sqrt(1.0 + (*this)(2, 2) - (*this)(0, 0) - (*this)(1, 1)) * 2.0;  // 4z
+            w = ((*this)(1, 0) - (*this)(0, 1)) / s;
+            x = ((*this)(0, 2) + (*this)(2, 0)) / s;
+            y = ((*this)(1, 2) + (*this)(2, 1)) / s;
+            z = 0.25 * s;
+        }
+    }
+
+    return Quaternion(w, x, y, z);
