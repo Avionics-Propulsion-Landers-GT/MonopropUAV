@@ -23,6 +23,18 @@ int main() {
         }
         std::cout << std::endl;
     }
+    //identity matrix
+    Matrix idMatrix = Matrix(rows);
+    std::cout << "Identity Matrix:" << std::endl;
+    for (unsigned int i = 0; i < rows; ++i) {
+        for (unsigned int j = 0; j < rows; ++j) {
+            std::cout << idMatrix(i, j) << " ";
+        }
+        std::cout << std::endl;
+    }
+    //det if identity matrix
+    double det2 = idMatrix.determinant();
+    std::cout << "\nIdentity Determinant: " << det2 << std::endl;
 
     // Test addition
     Matrix matrix2 = Matrix(rows, cols, 2);
