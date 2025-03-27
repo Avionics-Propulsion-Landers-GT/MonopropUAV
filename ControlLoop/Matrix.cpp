@@ -7,7 +7,7 @@
     
 //Matrix is stored in a 1D array because of memory and elements are stored in the array by row
 //Matrix constructor for all 0s, all 1s, or all constants
-Matrix::Matrix(unsigned int rows, unsigned int cols, double initVal = 0.0)
+Matrix::Matrix(unsigned int rows, unsigned int cols, double initVal)
     : rows(rows), cols(cols), data(nullptr) {
         if (rows > 0 && cols > 0) {
             data = new double[rows * cols];
@@ -29,8 +29,6 @@ Matrix::Matrix(unsigned int n)
             }
         }
 }
-
-
 
 Matrix::Matrix(const Matrix& other) : rows(other.getRows()), cols(other.getCols()) {
     if (other.data) {
