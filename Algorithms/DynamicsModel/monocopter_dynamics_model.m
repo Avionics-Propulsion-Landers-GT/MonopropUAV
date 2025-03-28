@@ -163,8 +163,9 @@ function simulate()
     Kd_att = [2.0; 2.0; 0.0];  % Derivative gains for Roll, Pitch, Yaw: Provides damping to prevent oscillations in attitude control.
 
     x = 1:0.001:80;
-    % tempGimbalCommands = [0.1*cos(0.5 * x); 0.1*sin(0.5* x); zeros(1, length(x))];
-    tempGimbalCommands = [clip(x.*x.*0.0001, -pi/12, pi/12); clip(x.*x.*0.0001, -pi/12, pi/12); zeros(1, length(x))];
+    
+    tempGimbalCommands = [0.1*cos(0.5 * x); 0.1*sin(0.5* x); zeros(1, length(x))];
+    %tempGimbalCommands = [clip(x.*x.*0.0001, -pi/12, pi/12); clip(x.*x.*0.0001, -pi/12, pi/12); zeros(1, length(x))];
 
     for step = 1:num_steps
         % Current time
@@ -371,20 +372,23 @@ function info = update_TVC(gimbal, gimbal_ang_vel, gimbal_goal, delta_t)
 
     prev_gimbal_ang_vel = gimbal_ang_vel;
     gimbal_error = gimbal_goal - gimbal;
-    projected_decel = gimbal_ang_vel.^2 + 2 * diag([gimbal_acceleration * -sign(gimbal_error(1)), gimbal_acceleration * -sign(gimbal_error(2)), 0]) * gimbal_error;
-    if projected_decel(1) > 0
+    stop_distance_x = (gimbal_ang_vel(1))^2 / (2 * gimbal_acceleration);
+    stop_distance_y = (gimbal_ang_vel(2))^2 / (2 * gimbal_acceleration);
+    %projected_decel = gimbal_ang_vel.^2 + 2 * diag([gimbal_acceleration * -sign(gimbal_error(1)), gimbal_acceleration * -sign(gimbal_error(2)), 0]) * gimbal_error;
+    if abs(gimbal_error(1)) <= abs(stop_distance_x) && gimbal_ang_vel(1) ~= 0
         % decel
-        gimbal_ang_vel(1) = gimbal_ang_vel(1) + gimbal_acceleration .* -sign(gimbal_error(1)) * delta_t;
-    elseif projected_decel(1) < 0
+        gimbal_ang_vel(1) = gimbal_ang_vel(1) + gimbal_acceleration * -sign(gimbal_ang_vel(1)) * delta_t;
+    else
         % accel
-        gimbal_ang_vel(1) = gimbal_ang_vel(1) + gimbal_acceleration .* sign(gimbal_error(1)) * delta_t;
+        gimbal_ang_vel(1) = gimbal_ang_vel(1) + gimbal_acceleration * sign(gimbal_error(1)) * delta_t;
     end
-    if projected_decel(2) > 0
+
+    if abs(gimbal_error(2)) <= abs(stop_distance_y) && gimbal_ang_vel(2) ~= 0
         % decel
-        gimbal_ang_vel(2) = gimbal_ang_vel(2) + gimbal_acceleration .* -sign(gimbal_error(2)) * delta_t;
-    elseif projected_decel(2) < 0
-        % accel
-        gimbal_ang_vel(2) = gimbal_ang_vel(2) + gimbal_acceleration .* sign(gimbal_error(2)) * delta_t;
+        gimbal_ang_vel(2) = gimbal_ang_vel(2) + gimbal_acceleration * -sign(gimbal_ang_vel(2)) * delta_t;
+    else
+        % acel
+        gimbal_ang_vel(2) = gimbal_ang_vel(2) + gimbal_acceleration * sign(gimbal_error(2)) * delta_t;
     end
     
 % <<<<<<< HEAD
