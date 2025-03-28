@@ -10,7 +10,7 @@
 Matrix::Matrix() : rows (0), cols (0), data(nullptr) {}
 
 //Matrix constructor for all 0s, all 1s, or all constants
-Matrix::Matrix(unsigned int rows, unsigned int cols, double initVal = 0.0)
+Matrix::Matrix(unsigned int rows, unsigned int cols, double initVal = 0)
     : rows(rows), cols(cols), data(nullptr) {
         if (rows > 0 && cols > 0) {
             data = new double[rows * cols];
@@ -33,20 +33,18 @@ Matrix::Matrix(unsigned int n)
         }
 }
 
-
-//Matrix constructor for a matrix with a given data array
-Matrix::Matrix(unsigned int r, unsigned int c, double* d)
+Matrix::Matrix(unsigned int r, unsigned int c, const double* d, FromArrayTag)
     : rows(r), cols(c), data(nullptr) {
-        if (r == 0 || c == 0) {
-            throw std::invalid_argument("Number of rows and columns must be greater than zero");
-        }
-        if (d == nullptr) {
-            throw std::invalid_argument("Data array cannot be null");
-        }
-        data = new double[r * c];
-        for (unsigned int i = 0; i < r * c; ++i) {
-            data[i] = d[i];
-        }
+    if (r == 0 || c == 0) {
+        throw std::invalid_argument("Rows and columns must be greater than zero");
+    }
+    if (d == nullptr) {
+        throw std::invalid_argument("Data pointer cannot be null");
+    }
+    data = new double[r * c];
+    for (unsigned int i = 0; i < r * c; ++i) {
+        data[i] = d[i];
+    }
 }
 
 
@@ -98,7 +96,7 @@ Matrix Matrix::operator-(const Matrix& other) const {
 
 //defining matrix multiplication
 Matrix Matrix::operator*(const Matrix& other) const {
-    if (cols != other.rows) return Matrix(0,0); //Error can't multiply matrix of these dimensions
+    if (cols != other.rows) return Matrix(0,0,0); //Error can't multiply matrix of these dimensions
 
     Matrix result(rows, other.cols, 0.0);
     for (unsigned int i = 0; i < rows; ++i) {
@@ -181,11 +179,11 @@ Matrix Matrix::getSubMatrix(unsigned int row, unsigned int col) const {
 
 Matrix Matrix::inverse() const {
     if (rows != cols) {
-        return Matrix(0,0); //can't compute inverse if matrix is not square
+        return Matrix(0,0,0); //can't compute inverse if matrix is not square
     } else {
         double det = determinant();
         if (det == 0) {
-            return Matrix(0,0);
+            return Matrix(0,0,0);
         }
 
         Matrix adj(rows, cols);

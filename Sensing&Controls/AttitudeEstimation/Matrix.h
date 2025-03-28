@@ -5,6 +5,10 @@
 
 #include "Quaternion.h"
 
+// Dummy struct to tell constructor it's reading from array
+struct FromArrayTag {};
+constexpr FromArrayTag FromArray{};
+
 class Matrix {
     protected:
         double* data;
@@ -13,7 +17,7 @@ class Matrix {
     public:
         Matrix();
         Matrix(unsigned int rows, unsigned int cols, double initVal);
-        Matrix(unsigned int rows, unsigned int cols, double* data);
+        Matrix(unsigned int rows, unsigned int cols, const double* data, FromArrayTag);
         Matrix(unsigned int n);
         Matrix(const Matrix& other);
         ~Matrix();
