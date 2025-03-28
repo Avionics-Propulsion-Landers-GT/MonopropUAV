@@ -163,7 +163,8 @@ function simulate()
     Kd_att = [2.0; 2.0; 0.0];  % Derivative gains for Roll, Pitch, Yaw: Provides damping to prevent oscillations in attitude control.
 
     x = 1:0.001:80;
-    tempGimbalCommands = [0.1*cos(0.5 * x); 0.1*sin(0.5* x); zeros(1, length(x))];
+     tempGimbalCommands = [0.1*cos(0.5 * x); 0.1*sin(0.5* x); zeros(1, length(x))];
+    %tempGimbalCommands = [clip(x.*x.*0.0001, -pi/12, pi/12); clip(x.*x.*0.0001, -pi/12, pi/12); zeros(1, length(x))];
 
     for step = 1:num_steps
         % Current time
@@ -225,7 +226,7 @@ function simulate()
     end
     % Store to CSV file
         filename = 'histories.csv';
-        writematrix(filename,position_history');
+        % writematrix(filename,position_history');
 
     %plot trajectory
     figure('Name', 'Trajectory Plot')
@@ -300,12 +301,7 @@ function state = update_dynamics(pos, vel, att, ang_vel, F_net, T_net, delta_t)
     vel = vel + accel * delta_t;
     pos = pos + vel * delta_t;
     % rotational component
-<<<<<<< HEAD
-    ang_accel = I_Inv * (T_net - cross(ang_vel, I * ang_vel) - cross([gimbal_ang_vel(1); 0; 0], TVC_top_I * [gimbal_ang_vel(1); 0; 0]) - cross(gimbal_ang_vel, TVC_bottom_I * gimbal_ang_vel));
-    ang_accel = I_Inv * (T_net - cross(ang_vel, I * ang_vel));
-=======
-    ang_accel = Inv_I * (T_net - cross(ang_vel, I * ang_vel));
->>>>>>> 3f38792a6d954d89f4573c4e68cd85a6d058724e
+    ang_accel = Inv_I * (T_net - cross(ang_vel, I * ang_vel));% - cross([gimbal_ang_vel(1); 0; 0], TVC_top_I * [gimbal_ang_vel(1); 0; 0]) - cross(gimbal_ang_vel, TVC_bottom_I * gimbal_ang_vel));
     ang_vel = ang_vel + ang_accel * delta_t;
     delta_att = ang_vel * delta_t;
     att = att + 0.5 * quaternion_multiply([0; delta_att(1); delta_att(2); delta_att(3)], att) * delta_t;
@@ -329,14 +325,8 @@ function calculate_COM_and_COP_offset(thrust_gimbal)
     global COP;
     global COP_offset;
 
-<<<<<<< HEAD
-    top_gimbal_COM = (m_gimbal_top / m) * (gimbal_offset + get_extrinsic_x_rotation(thrust_gimbal(1)) .* gimbal_top_offset);
-    bottom_gimbal_COM = (m_gimbal_bottom / m) * (gimbal_offset + get_extrinsic_x_rotation(thrust_gimbal(1)) * gimbal_x_distance + get_extrinsic_rotation_matrix(thrust_gimbal) * gimbal_bottom_offset);
-=======
     top_gimbal_COM = (m_gimbal_top / m) * (gimbal_offset + get_extrinsic_x_rotation(thrust_gimbal(1)) * gimbal_top_COM_offset); 
-    bottom_gimbal_COM = (m_gimbal_bottom / m) * (gimbal_offset + get_extrinsic_x_rotation(thrust_gimbal(1)) * gimbal_x_distance + get_extrinsic_rotation_matrix(thrust_gimbal) * gimbal_bottom_COM_offset); %still unsure abt this line
-
->>>>>>> 3f38792a6d954d89f4573c4e68cd85a6d058724e
+    bottom_gimbal_COM = (m_gimbal_bottom / m) * (gimbal_offset + get_extrinsic_x_rotation(thrust_gimbal(1)) * gimbal_x_distance + get_extrinsic_rotation_matrix(thrust_gimbal) * gimbal_bottom_COM_offset);
     COM_offset = top_gimbal_COM + bottom_gimbal_COM;
     COP_offset = COP - COM_offset;
 end
@@ -377,35 +367,56 @@ function info = update_TVC(gimbal, gimbal_ang_vel, gimbal_goal, delta_t)
     global gimbal_top_I;
     global gimbal_bottom_I
 
+
+
     prev_gimbal_ang_vel = gimbal_ang_vel;
     gimbal_error = gimbal_goal - gimbal;
-<<<<<<< HEAD
-    projected_decel = gimbal_ang_vel.^2 - 2 * diag([gimbal_acceleration * -sign(gimbal_error(1)), gimbal_acceleration * -sign(gimbal_error(2)), 0]) * gimbal_error;
-    projected_decel = diag(sign(projected_decel)) * sqrt(abs(projected_decel));
-
-    if projected_decel(1) >= 0
-        % decel!!
-        gimbal_ang_vel(1) = gimbal_ang_vel(1) + gimbal_acceleration(1) .* -sign(gimbal_error(1)) * delta_t;
-=======
-    %projected_decel = gimbal_ang_vel.^2 + 2 * diag([gimbal_acceleration * -sign(gimbal_error(1)), gimbal_acceleration * -sign(gimbal_error(2)), 0]) * gimbal_error; %predicting final velocity
-    %projected_decel = diag(sign(projected_decel)) * sqrt(abs(projected_decel));
-
-    prediction_horizon = 0.01; %look 0.01 seconds into the future
-    predicted_angle = gimbal + gimbal_ang_vel * prediction_horizon;
-    predicted_error = gimbal_goal - predicted_angle;
-
-    if predicted_error(1) > 0 
-        gimbal_ang_vel(1) = gimbal_ang_vel(1) + gimbal_acceleration * delta_t; 
->>>>>>> 3f38792a6d954d89f4573c4e68cd85a6d058724e
+    stop_distance_x = (gimbal_ang_vel(1))^2 / (2 * gimbal_acceleration);
+    stop_distance_y = (gimbal_ang_vel(2))^2 / (2 * gimbal_acceleration);
+    %projected_decel = gimbal_ang_vel.^2 + 2 * diag([gimbal_acceleration * -sign(gimbal_error(1)), gimbal_acceleration * -sign(gimbal_error(2)), 0]) * gimbal_error;
+    if abs(gimbal_error(1)) <= abs(stop_distance_x) && gimbal_ang_vel(1) ~= 0
+        % decel
+        gimbal_ang_vel(1) = gimbal_ang_vel(1) + gimbal_acceleration * -sign(gimbal_ang_vel(1)) * delta_t;
     else
-        gimbal_ang_vel(1) = gimbal_ang_vel(1) - gimbal_acceleration * delta_t; 
+        % accel
+        gimbal_ang_vel(1) = gimbal_ang_vel(1) + gimbal_acceleration * sign(gimbal_error(1)) * delta_t;
     end
 
-    if predicted_error(2) > 0
-        gimbal_ang_vel(2) = gimbal_ang_vel(2) + gimbal_acceleration * delta_t; 
+    if abs(gimbal_error(2)) <= abs(stop_distance_y) && gimbal_ang_vel(2) ~= 0
+        % decel
+        gimbal_ang_vel(2) = gimbal_ang_vel(2) + gimbal_acceleration * -sign(gimbal_ang_vel(2)) * delta_t;
     else
-        gimbal_ang_vel(2) = gimbal_ang_vel(2) - gimbal_acceleration * delta_t; 
+        % acel
+        gimbal_ang_vel(2) = gimbal_ang_vel(2) + gimbal_acceleration * sign(gimbal_error(2)) * delta_t;
     end
+    
+% <<<<<<< HEAD
+%     projected_decel = gimbal_ang_vel.^2 - 2 * diag([gimbal_acceleration * -sign(gimbal_error(1)), gimbal_acceleration * -sign(gimbal_error(2)), 0]) * gimbal_error;
+%     projected_decel = diag(sign(projected_decel)) * sqrt(abs(projected_decel));
+% 
+%     if projected_decel(1) >= 0
+%         % decel!!
+%         gimbal_ang_vel(1) = gimbal_ang_vel(1) + gimbal_acceleration(1) .* -sign(gimbal_error(1)) * delta_t;
+% =======
+%     %projected_decel = gimbal_ang_vel.^2 + 2 * diag([gimbal_acceleration * -sign(gimbal_error(1)), gimbal_acceleration * -sign(gimbal_error(2)), 0]) * gimbal_error; %predicting final velocity
+%     %projected_decel = diag(sign(projected_decel)) * sqrt(abs(projected_decel));
+% 
+%     prediction_horizon = 0.01; %look 0.01 seconds into the future
+%     predicted_angle = gimbal + gimbal_ang_vel * prediction_horizon;
+%     predicted_error = gimbal_goal - predicted_angle;
+% 
+%     if predicted_error(1) > 0 
+%         gimbal_ang_vel(1) = gimbal_ang_vel(1) + gimbal_acceleration * delta_t; 
+% >>>>>>> 3f38792a6d954d89f4573c4e68cd85a6d058724e
+%     else
+%         gimbal_ang_vel(1) = gimbal_ang_vel(1) - gimbal_acceleration * delta_t; 
+%     end
+% 
+%     if predicted_error(2) > 0
+%         gimbal_ang_vel(2) = gimbal_ang_vel(2) + gimbal_acceleration * delta_t; 
+%     else
+%         gimbal_ang_vel(2) = gimbal_ang_vel(2) - gimbal_acceleration * delta_t; 
+%     end
 
     %{
     if abs(projected_distance(1)) >= abs(gimbal_error(1))
