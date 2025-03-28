@@ -23,6 +23,18 @@ int main() {
         }
         std::cout << std::endl;
     }
+    //identity matrix
+    Matrix idMatrix = Matrix(rows);
+    std::cout << "Identity Matrix:" << std::endl;
+    for (unsigned int i = 0; i < rows; ++i) {
+        for (unsigned int j = 0; j < rows; ++j) {
+            std::cout << idMatrix(i, j) << " ";
+        }
+        std::cout << std::endl;
+    }
+    //det if identity matrix
+    double det2 = idMatrix.determinant();
+    std::cout << "\nIdentity Determinant: " << det2 << std::endl;
 
     // Test addition
     Matrix matrix2 = Matrix(rows, cols, 2);
@@ -34,7 +46,7 @@ int main() {
         std::cout << std::endl;
     }
 
-    Matrix sumMatrix = matrix.add(matrix2);
+    Matrix sumMatrix = matrix + matrix2;
     std::cout << "\nSum Matrix:" << std::endl;
     for (unsigned int i = 0; i < rows; ++i) {
         for (unsigned int j = 0; j < cols; ++j) {
@@ -44,7 +56,7 @@ int main() {
     }
 
     // Test multiplication by scalar
-    Matrix scalarMatrix = matrix.multiply(2.0);
+    Matrix scalarMatrix = matrix*2.0;
     std::cout << "\nScalar Multiplication Matrix:" << std::endl;
     for (unsigned int i = 0; i < rows; ++i) {
         for (unsigned int j = 0; j < cols; ++j) {
@@ -86,24 +98,23 @@ int main() {
     Quaternion q2(1.0, 0.5, 0.5, 0.75);
 
     // Test Quaternion addition
-    Quaternion qSum = q1.add(q2);
-    std::cout << "\nQuaternion Sum: (" << qSum.w << ", " << qSum.x << ", " << qSum.y << ", " << qSum.z << ")" << std::endl;
+    Quaternion qSum = q1+q2;
+    std::cout << "\nQuaternion Sum: (" << qSum[0] << ", " << qSum[1] << ", " << qSum[2] << ", " << qSum[3] << ")" << std::endl;
 
     // Test Quaternion multiplication
-    Quaternion qProduct = q1.multiply(q2);
-    std::cout << "Quaternion Product: (" << qProduct.w << ", " << qProduct.x << ", " << qProduct.y << ", " << qProduct.z << ")" << std::endl;
+    Quaternion qProduct = q1*q2;
+    std::cout << "Quaternion Product: (" << qProduct[0] << ", " << qProduct[1] << ", " << qProduct[2] << ", " << qProduct[3] << ")" << std::endl;
 
     // Test Quaternion norm
-    double qNorm = q1.norm();
+    double qNorm = q1.magnitude();
     std::cout << "Quaternion Norm: " << qNorm << std::endl;
 
     // Test Quaternion to rotation matrix
-    double rotationMatrix[3][3];
-    q1.toRotationMatrix(rotationMatrix);
+    Matrix rotationMatrix = q1.toRotationMatrix();
     std::cout << "Quaternion to Rotation Matrix:" << std::endl;
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 3; ++j) {
-            std::cout << rotationMatrix[i][j] << " ";
+            std::cout << rotationMatrix(i,j) << " ";
         }
         std::cout << std::endl;
     }

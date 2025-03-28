@@ -163,7 +163,8 @@ function simulate()
     Kd_att = [2.0; 2.0; 0.0];  % Derivative gains for Roll, Pitch, Yaw: Provides damping to prevent oscillations in attitude control.
 
     x = 1:0.001:80;
-     tempGimbalCommands = [0.1*cos(0.5 * x); 0.1*sin(0.5* x); zeros(1, length(x))];
+    
+    tempGimbalCommands = [0.1*cos(0.5 * x); 0.1*sin(0.5* x); zeros(1, length(x))];
     %tempGimbalCommands = [clip(x.*x.*0.0001, -pi/12, pi/12); clip(x.*x.*0.0001, -pi/12, pi/12); zeros(1, length(x))];
 
     for step = 1:num_steps
