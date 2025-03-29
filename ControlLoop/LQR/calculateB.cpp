@@ -1,6 +1,7 @@
 #include <Eigen/Dense>
 #include "../Matrix.h"
 #include "../Vector.h"
+#include <iostream>
 
 using Eigen::Matrix3d;
 using Eigen::MatrixXd;
@@ -656,13 +657,12 @@ Matrix calculateB(
     Matrix B(12, 7, 0.0);  // 12 rows, 7 columns
 
     // Fill the matrix with the flattened vector data (7x12)
-    for (unsigned int i = 0; i < 7; ++i) {   // Iterate over rows (7 rows)
-        for (unsigned int j = 0; j < 12; ++j) {  // Iterate over columns (12 columns)
-            B(j, i) = B_flat[i * 12 + j];  // Transpose the data: swap i and j
+    for (unsigned int i = 0; i < 7; ++i) {   // Iterate over columns (7 columns)
+        for (unsigned int j = 0; j < 12; ++j) {  // Iterate over rows (12 rows)
+            B(j, i) = B_flat[i * 12 + j];  
         }
     }
-
-
-    return B.transpose(); // work on MAtrix transpose
+    
+    return B;
     
 }

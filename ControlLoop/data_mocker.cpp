@@ -8,6 +8,10 @@
 #include <numeric>
 #include "loop.h"
 #include "init.h"
+#include "LQR/calculateA.h"
+#include "LQR/calculateB.h"
+#include "Matrix.h"
+#include "Vector.h"
 
 /*
 
@@ -107,7 +111,69 @@ bool isHeader(const std::string& line) {
 
 int main() {
 
-    double dt = 0.001; // s
+    double dt = 0.001;
+
+    // Test A and B matrix generation
+
+    // // Test data
+    // double m = 10.0;
+    // double f = 5.0;
+    // double cDrag = 0.2;
+    // double areaVar = 1.0;
+
+    // Vector full_state(12, 0.0); // State vector (12x1)
+    // full_state[0] = 1.0; full_state[1] = 2.0; full_state[2] = 3.0;  // Position
+    // full_state[3] = 4.0; full_state[4] = 5.0; full_state[5] = 6.0;  // Velocity
+    // full_state[6] = 0.1; full_state[7] = 0.2; full_state[8] = 0.3;  // Euler Angles
+    // full_state[9] = 0.01; full_state[10] = 0.02; full_state[11] = 0.03;  // Angular Velocities
+
+    // Vector full_input(7, 0.0);  // Input vector (7x1)
+    // full_input[0] = 0.5; full_input[1] = 0.4; full_input[2] = 0.3;  // Inputs
+    // full_input[3] = 0.1; full_input[4] = 0.2; full_input[5] = 0.05;
+    // full_input[6] = 0.06;
+
+    // Vector rc(3, 0.0);  // Position vector
+    // rc[0] = 0.1; rc[1] = 0.2; rc[2] = 0.3;
+
+    // Vector rt(3, 0.0);  // Rotation vector
+    // rt[0] = 1.0; rt[1] = 2.0; rt[2] = 3.0;
+
+    // // Inertia matrices
+    // Matrix inertia(3, 3, 0.0);
+    // inertia(0, 0) = 1.0;
+    // inertia(1, 1) = 2.0;
+    // inertia(2, 2) = 3.0;
+
+    // Matrix inertia_s(3, 3, 0.0);
+    // inertia_s(0, 0) = 1.1; inertia_s(1, 1) = 2.1; inertia_s(2, 2) = 3.1;
+
+    // Matrix inertia_a(3, 3, 0.0);
+    // inertia_a(0, 0) = 1.2; inertia_a(1, 1) = 2.2; inertia_a(2, 2) = 3.2;
+
+    // Matrix inertia_b(3, 3, 0.0);
+    // inertia_b(0, 0) = 1.3; inertia_b(1, 1) = 2.3; inertia_b(2, 2) = 3.3;
+
+    // // Call calculateA function
+    // Matrix B_out = calculateB(m, f, cDrag, areaVar, full_state, full_input, rc, rt, inertia, inertia_s, inertia_a, inertia_b);
+    // Matrix A_out = calculateA(m, f, cDrag, areaVar, full_state, full_input, rc, rt, inertia, inertia_s, inertia_a, inertia_b);
+
+    // // Print the resulting A matrix
+    // std::cout << "Calculated A matrix:" << std::endl;
+    // for (unsigned int i = 0; i < A_out.getRows(); ++i) {  // Iterate over rows (12 rows)
+    //     for (unsigned int j = 0; j < A_out.getCols(); ++j) {  // Iterate over columns (12 columns)
+    //         std::cout << A_out(i, j) << " ";  // Print each element of A
+    //     }
+    //     std::cout << std::endl;  // New line after each row
+    // }
+
+    // // Print the resulting B matrix
+    // std::cout << "Calculated B matrix:" << std::endl;
+    // for (unsigned int i = 0; i < B_out.getRows(); ++i) {  // Iterate over rows (12 rows)
+    //     for (unsigned int j = 0; j < B_out.getCols(); ++j) {  // Iterate over columns (12 columns)
+    //         std::cout << B_out(i, j) << " ";  // Print each element of A
+    //     }
+    //     std::cout << std::endl;  // New line after each row
+    // }
 
     // Note to anyone using this: CHECK THESE PATHS!!
     std::vector<std::string> files = {

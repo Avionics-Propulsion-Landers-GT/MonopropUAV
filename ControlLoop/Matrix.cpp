@@ -84,7 +84,7 @@ const double& Matrix::operator()(unsigned int row, unsigned int col) const {
 Matrix Matrix::add(const Matrix& other) const {
     if (rows != other.rows || cols != other.cols) return Matrix(0.0); //Error cannot add if not equal dimensions
 
-    Matrix result(rows, cols);
+    Matrix result(rows, cols, 0);
     for (unsigned int i = 0; i < rows * cols; ++i)
         result.data[i] = data[i] + other.data[i];
     return result;
@@ -115,7 +115,7 @@ Matrix Matrix::multiply(double scalar) const {
 }
 
 Matrix Matrix::transpose() const {
-    Matrix result(cols, rows);
+    Matrix result(cols, rows, 0);
     for (unsigned int i = 0; i < rows; ++i) {
         for (unsigned int j = 0; j < cols; ++j) {
             result(j, i) = (*this)(i,j);
@@ -146,7 +146,7 @@ double Matrix::cofactor (unsigned int row, unsigned int col) const {
 }
 
 Matrix Matrix::getSubMatrix(unsigned int row, unsigned int col) const {
-    Matrix subMatrix (rows - 1, cols - 1);
+    Matrix subMatrix (rows - 1, cols - 1, 0);
     unsigned int subRow = 0;
     for (unsigned int i = 0; i < rows; ++i) {
         if (i == row) {
@@ -167,20 +167,20 @@ Matrix Matrix::getSubMatrix(unsigned int row, unsigned int col) const {
 
 Matrix Matrix::inverse() const {
     if (rows != cols) {
-        return Matrix(0,0); //can't compute inverse if matrix is not square
+        return Matrix(0,0, 0); //can't compute inverse if matrix is not square
     } else {
         double det = determinant();
         if (det == 0) {
-            return Matrix(0,0);
+            return Matrix(0,0, 0);
         }
 
-        Matrix adj(rows, cols);
+        Matrix adj(rows, cols, 0);
         for (unsigned int i = 0; i < rows; ++i) {
             for (unsigned int j = 0; j < rows; ++j) {
                 adj(j, i) = cofactor(i,j);
             }
         }
-        Matrix inv(rows, cols);
+        Matrix inv(rows, cols, 0);
         for (unsigned int i = 0; i < rows; ++i) {
             for (unsigned int j = 0; j < cols; ++j) {
                 inv(i,j) = adj(i,j) / det;
@@ -194,7 +194,7 @@ Matrix Matrix::inverse() const {
 Matrix Matrix::luInverse() const {
     if (rows != cols) {
         std::cout << "[ERROR] Matrix must be square to invert.\n";
-        return Matrix(0, 0);
+        return Matrix(0, 0, 0);
     }
 
     unsigned int n = rows;
@@ -204,7 +204,7 @@ Matrix Matrix::luInverse() const {
 
     if (!luDecompose(L, U, P)) {
         std::cerr << "[ERROR] LU decomposition failed. Matrix may be singular.\n";
-        return Matrix(0, 0);
+        return Matrix(0, 0, 0);
     }
 
     Matrix inverse(n, n, 0.0);
@@ -341,7 +341,7 @@ Matrix Matrix::exp(unsigned int terms) const {
     }
         
     Matrix result(rows); // Initialize result as the identity matrix
-    Matrix term(rows, cols);   // Temporary matrix for intermediate results
+    Matrix term(rows, cols, 0);   // Temporary matrix for intermediate results
         
     // Initialize result as the identity matrix
     for (unsigned int i = 0; i < rows; ++i) {
