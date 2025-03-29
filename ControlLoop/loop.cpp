@@ -7,9 +7,9 @@
 #include <iomanip>
 #include <cmath>
 #include <cppad/cppad.hpp>
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
+// #ifndef M_PI
+// #define M_PI 3.14159265358979323846
+// #endif
 
 const double GPS_SANITY_THRESHOLD = 1.5;
 const double LIDAR_ALTITUDE_THRESHOLD = 9.0;
@@ -51,7 +51,7 @@ void print(double value) {
 // This assumes a MSL of zero, we have ignored 3d effects here.
 void preciseLatLonToMeters(double lat, double deltaLat, double deltaLon, double &dY, double &dX) {
     // Convert latitude to radians
-    double latRad = lat * M_PI / 180.0;
+    double latRad = lat * 3.14159265358979323846 / 180.0;
 
     // Compute accurate meters per degree for latitude
     double metersPerDegLat = 111132.92 - 559.82 * std::cos(2 * latRad) + 
@@ -248,37 +248,40 @@ LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vecto
 
     // ---------- ii. Use state matrices to compute optimal controls -----------
 
-    Vector current_state(12, 0.0);
-    current_state(0, 0) = new_attitude[0];
-    current_state(1, 0) = new_attitude[1];
-    current_state(2, 0) = new_attitude[2];
-    current_state(3, 0) = new_position[0];
-    current_state(4, 0) = new_position[1];
-    current_state(5, 0) = new_position[2];
-    current_state(6, 0) = angular_velocity[0];
-    current_state(7, 0) = angular_velocity[1];
-    current_state(8, 0) = angular_velocity[2];
-    current_state(9, 0) = velocity[0];
-    current_state(10, 0) = velocity[1];
-    current_state(11, 0) = velocity[2];
+    // Vector current_state(12, 0.0);
+    // current_state(0, 0) = new_attitude[0];
+    // current_state(1, 0) = new_attitude[1];
+    // current_state(2, 0) = new_attitude[2];
+    // current_state(3, 0) = new_position[0];
+    // current_state(4, 0) = new_position[1];
+    // current_state(5, 0) = new_position[2];
+    // current_state(6, 0) = angular_velocity[0];
+    // current_state(7, 0) = angular_velocity[1];
+    // current_state(8, 0) = angular_velocity[2];
+    // current_state(9, 0) = velocity[0];
+    // current_state(10, 0) = velocity[1];
+    // current_state(11, 0) = velocity[2];
 
-    // Set state and setpoint in LQR controller
-    lqrController.setState(current_state);
-    lqrController.setPoint = toVector(setPoint); // Assuming setPoint is already a Vector
+    // // Set state and setpoint in LQR controller
+    // lqrController.setState(current_state);
+    // lqrController.setPoint = toVector(setPoint); // Assuming setPoint is already a Vector
 
-    // Compute error between current state and desired state
-    Matrix neg_setpoint = lqrController.setPoint.multiply(-1.0);
-    Vector state_error = lqrController.getState().add(Vector(neg_setpoint));
+    // // Compute error between current state and desired state
+    // Matrix neg_setpoint = lqrController.setPoint.multiply(-1.0);
+    // Vector state_error = lqrController.getState().add(Vector(neg_setpoint));
 
-    // Recalculate K if needed (e.g., time-varying system)
-    lqrController.calculateK();
+    // // Recalculate K if needed (e.g., time-varying system)
+    // lqrController.calculateK();
 
-    // Compute control command: u = -K * state_error
-    Matrix negative_K = lqrController.getK().multiply(-1.0);
-    Matrix control_command = negative_K.multiply(state_error);  // result is 12x1 Matrix
+    // // Compute control command: u = -K * state_error
+    // Matrix negative_K = lqrController.getK().multiply(-1.0);
+    // Matrix control_command = negative_K.multiply(state_error);  // result is 12x1 Matrix
 
-    std::vector<double> newCommand = toStdVector(control_command);  // control_command is a Matrix (12x1)
-    std::vector<double> error = toStdVector(state_error);           // state_error is a Vector
+    // std::vector<double> newCommand = toStdVector(control_command);  // control_command is a Matrix (12x1)
+    // std::vector<double> error = toStdVector(state_error);           // state_error is a Vector
+
+    std::vector<double> newCommand = {0,0,0};
+    std::vector<double> error = {0,0,0};
 
     std::vector<bool> newStatus = {gpsSanityCheck, lidarStatus};
 
