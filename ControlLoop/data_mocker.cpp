@@ -181,7 +181,7 @@ int main() {
         "../Sensing&Controls/AttitudeEstimation/noisy_monocopter_data.csv",
         "../Sensing&Controls/AttitudeEstimation/gps_data.csv",
         "../Sensing&Controls/AttitudeEstimation/noisy_lidar_data.csv",
-        "../Sensing&Controls/AttitudeEstimation/uwb_data.csv"
+        "uwb_combined_distances.csv"
     };
 
     std::vector<std::ifstream> fileStreams;

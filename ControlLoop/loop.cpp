@@ -6,7 +6,7 @@
 #include <fstream>
 #include <iomanip>
 #include <cmath>
-#include <cppad/cppad.hpp>
+// #include <cppad/cppad.hpp>
 // #ifndef M_PI
 // #define M_PI 3.14159265358979323846
 // #endif
@@ -14,6 +14,17 @@
 const double GPS_SANITY_THRESHOLD = 1.5;
 const double LIDAR_ALTITUDE_THRESHOLD = 9.0;
 const double TIMESTAMP_THRESHOLD = 0.001;
+
+Matrix initAnchors() {
+    Matrix anchors(3, 3, 0.0);
+    anchors(0, 0) = 10;   anchors(0, 1) = 10;   anchors(0, 2) = 0;
+    anchors(1, 0) = -10;  anchors(1, 1) = 10;   anchors(1, 2) = 0;
+    anchors(2, 0) = 0;    anchors(2, 1) = -14;  anchors(2, 2) = 0;
+    return anchors;
+}
+
+const Matrix ANCHORS = initAnchors();
+
 
 // Define Constants 
 
@@ -80,6 +91,59 @@ std::vector<double> weightedAverage(const std::vector<double>& v1, const std::ve
     return result;
 }
 
+Vector trilaterateXY(const Matrix& anchors, double d1, double d2, double d3) {
+    if (anchors.getRows() != 3 || anchors.getCols() != 3) {
+        throw std::invalid_argument("Anchors matrix must be 3x3: [3 anchors x (x, y, z)]");
+    }
+
+    // Extract anchor positions into Vector objects (one row per anchor)
+    Vector p1(3, 0.0), p2(3, 0.0), p3(3, 0.0);
+    for (int i = 0; i < 3; ++i) {
+        p1(i, 0) = anchors(0, i);
+        p2(i, 0) = anchors(1, i);
+        p3(i, 0) = anchors(2, i);
+    }
+
+    // ex = normalize(p2 - p1)
+    Vector p2_minus_p1 = Vector(p2.add(p1.multiply(-1)));
+    Vector ex = p2_minus_p1.normalize();
+
+    // i = dot(ex, p3 - p1)
+    Vector p3_minus_p1 = Vector(p3.add(p1.multiply(-1)));
+    double i = ex.dotProduct(p3_minus_p1);
+    std::cout << "i " << i << std::endl;
+
+    // ey = normalize((p3 - p1) - ex * i)
+    Vector ex_i = Vector(ex.multiply(i));
+    Vector ey_raw = Vector(p3_minus_p1.add(ex_i.multiply(-1)));
+    Vector ey = ey_raw.normalize();
+
+    // j = dot(ey, p3 - p1)
+    double j = ey.dotProduct(p3_minus_p1);
+    std::cout << "j " << j << std::endl;
+
+
+    // d = |p2 - p1|
+    double d = p2_minus_p1.magnitude();
+    std::cout << "d: " << d << std::endl;
+
+
+    // Trilateration equations
+    double x = (d1 * d1 - d2 * d2 + d * d) / (2 * d);
+    double y = (d1 * d1 - d3 * d3 + i * i + j * j - 2 * i * x) / (2 * j);
+
+    // result3D = p1 + ex * x + ey * y
+    Vector ex_x = Vector(ex.multiply(x));
+    Vector ey_y = Vector(ey.multiply(y));
+    Vector result3D = Vector(p1.add(ex_x).add(ey_y));
+
+    // Extract XY only
+    Vector resultXY(2, 0.0);
+    resultXY(0, 0) = result3D(0, 0);
+    resultXY(1, 0) = result3D(1, 0);
+    return resultXY;
+}
+
 Vector toVector(const std::vector<double>& v) {
     Vector result(v.size(), 0.0);
     for (unsigned int i = 0; i < v.size(); ++i) {
@@ -105,7 +169,7 @@ LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vecto
     std::vector<double> sixAxisIMU = values[1]; // Time, Gyro<[rad/s]>, Accel<[m/s2]>
     std::vector<double> gps = values[2]; // latitude [deg], longitude[deg], altitude[m above MSL]
     std::vector<double> lidar = values[3]; // altitude [m above ground]
-    std::vector<double> uwb = values[4]; // Time, X [m], Y [m]
+    std::vector<double> uwb = values[4]; // Time, Distance1 [m] Distance2 [m] Distance3 [m] 
 
     // Read in filters
     Madgwick& madgwickFilter = system.madgwickFilter;
@@ -114,6 +178,10 @@ LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vecto
     
 
     // -------------------- I. SENSOR FUSION ALGORITHM ------------------------
+
+    // Preprocessing: Triangulation Algorithm
+
+    Vector uwb_xy = trilaterateXY(ANCHORS, uwb[1], uwb[2], uwb[3]);
 
 
     // --------------- i. Madgwick Filter for Attitude ------------------------
@@ -150,8 +218,8 @@ LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vecto
     
     // -------------------------------- (a) ----------------------------
     std::vector<double> position = state[1];
-    double x_pos1 = uwb[1];
-    double y_pos1 = uwb[2];
+    double x_pos1 = uwb_xy[0];
+    double y_pos1 = uwb_xy[1];
     double lat = gps[0];
     double lon = gps[1];
 
@@ -242,7 +310,7 @@ LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vecto
     // ----------------------- i. set up key quantities ------------------------
 
     
-
+    
     
 
 

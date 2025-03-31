@@ -1,7 +1,7 @@
 #include "Vector.h"
 
 double Vector::dotProduct(const Vector&other) const {
-    if (this -> rows == other.rows) {
+    if (this -> rows != other.rows) {
         return -0.01;
     }
     double result = 0.0;

@@ -1,12 +1,7 @@
-#include <Eigen/Dense>
 #include "../Matrix.h"
 #include "../Vector.h"
-
-using Eigen::Matrix3d;
-using Eigen::MatrixXd;
-using Eigen::Vector3d;
-using Eigen::VectorXd;
-
+#include <vector>
+#include <iostream>
 #include <cmath>
 
 inline double sign(double x) {
