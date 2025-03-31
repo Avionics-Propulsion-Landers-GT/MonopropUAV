@@ -1,33 +1,51 @@
 #ifndef LOOP_H
 #define LOOP_H
 
-#include <vector>
-#include <string>
+#include <stdbool.h>  // for `bool`
 #include "init.h"
 #include "Madgwick.h"
 #include "lqr.h"
 
 /*
-
-    Header file for loop.cpp
-
+    Header file for loop.cpp — STL-Free Edition
 */
 
-struct LoopOutput {
-    std::vector<std::vector<double>> state;   // Updated state (e.g., quaternion q)
-    std::vector<bool> status;
-    std::vector<double> command;         // Generated command based on state
-    std::vector<double> error;         // Error between state and setpoint
-};
+// ==== Constants ====
+#define STATE_ROWS    4      // eulerAngles, position, angularVelocity, velocity
+#define STATE_COLS    3
+#define COMMAND_SIZE  7
+#define ERROR_SIZE    12
+#define STATUS_FLAGS  2
+#define SENSOR_ROWS   5      // 9-axis IMU, 6-axis IMU, GPS, LIDAR, UWB
+#define SENSOR_COLS   10     // max column width across all sensors
 
+// ==== Structs ====
+
+typedef struct {
+    double state[STATE_ROWS][STATE_COLS];   // 4 groups of 3D vectors
+    bool status[STATUS_FLAGS];              // gps + lidar
+    double command[COMMAND_SIZE];           // thrust, gimbal a/b, adot, bdot, ddot a/b
+    double error[STATE_ROWS][STATE_COLS];               // state - setPoint diff
+} LoopOutput;
+
+// ==== Globals ====
 extern LQR lqrController;
 
-void print(double value);
-void preciseLatLonToMeters(double lat, double deltaLat, double deltaLon, double &dY, double &dX);
-std::vector<double> weightedAverage(const std::vector<double>& v1, const std::vector<double>& v2, double weight1, double weight2);
+// ==== Function Prototypes ====
+void preciseLatLonToMeters(double lat, double deltaLat, double deltaLon, double* dY, double* dX);
 
-//set point will vary and is subject to change during flight. It will be passed as a 1x12 vector
-LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vector<std::vector<double>>& state, SystemComponents& system, const std::vector<bool>& status, double dt, const std::vector<double>& setPoint, const std::vector<double>& command);
+// Weighted average of 2 equal-length arrays
+void weightedAverage(const double* v1, const double* v2, double* out, int length, double w1, double w2);
 
+// Loop function
+LoopOutput loop(
+    double values[SENSOR_ROWS][SENSOR_COLS],
+    double inputState[STATE_ROWS][STATE_COLS],
+    SystemComponents* system,
+    const bool status[STATUS_FLAGS],
+    double dt,
+    const double setPoint[ERROR_SIZE],
+    const double command[COMMAND_SIZE]
+);
 
 #endif // LOOP_H

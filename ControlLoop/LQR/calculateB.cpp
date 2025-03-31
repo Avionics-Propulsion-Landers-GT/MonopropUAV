@@ -1,9 +1,7 @@
 #include "../Matrix.h"
 #include "../Vector.h"
-#include <vector>
-#include <iostream>
+#include <math.h>
 
-#include <cmath>
 
 inline double sign(double x) {
     return (x > 0) - (x < 0);
@@ -588,7 +586,7 @@ Matrix calculateB(
     double t404 = t365 + t372 + t384 + t395;
     double t409 = t393 + t398 + t400 + t403;
 
-    std::vector<double> mt1 = {
+    double mt1[] = {
         0.0, 0.0, 0.0,
         t42 * (t2 * t3 * t12 + t8 * t9 * t10 + t3 * t5 * t7 * t9),
         -t42 * (-t8 * t119 + t3 * t7 * t137 + t2 * t3 * t9 * t11),
@@ -606,7 +604,7 @@ Matrix calculateB(
         -t103 * t216 * t231 + t101 * t216 * t294 - t108 * t216 * t295
     };
 
-    std::vector<double> mt2 = {
+    double mt2[] = {
         -t102 * t216 * t231 + t101 * t216 * t295 - t107 * t216 * t294,
         0.0, 0.0, 0.0,
         -t42 * (T * t2 * t8 * t12 - T * t3 * t9 * t10 + T * t5 * t7 * t8 * t9),
@@ -621,7 +619,7 @@ Matrix calculateB(
         -t108 * t216 * (t364 + t371 - t380 - t390) + t101 * t216 * t406 - t103 * t216 * t408
     };
 
-    std::vector<double> mt3 = {
+    double mt3[] = {
         t101 * t216 * (t364 + t371 - t380 - t390) - t102 * t216 * t408 - t107 * t216 * t406,
        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
        -t102 * t216 * t404 - t103 * t216 * t407 - t109 * t216 * t409,
@@ -636,17 +634,18 @@ Matrix calculateB(
        -t103 * t181 * t216 - t101 * t216 * t241 + t108 * t216 * t235
     };
 
-    std::vector<double> mt4 = {
+    double mt4[] = {
         -t102 * t181 * t216 - t101 * t216 * t235 + t107 * t216 * t241
     };
 
-    std::vector<double> B_flat;
-    B_flat.reserve(84);  // 12 rows * 7 columns
+    Matrix B_flat(144, 1, 0.0);  // Or whatever your total count is
+    unsigned int idx = 0;
+    
 
-    B_flat.insert(B_flat.end(), mt1.begin(), mt1.end());
-    B_flat.insert(B_flat.end(), mt2.begin(), mt2.end());
-    B_flat.insert(B_flat.end(), mt3.begin(), mt3.end());
-    B_flat.insert(B_flat.end(), mt4.begin(), mt4.end());
+    for (size_t i = 0; i < sizeof(mt1) / sizeof(mt1[0]); ++i) B_flat(idx++, 0) = mt1[i];
+    for (size_t i = 0; i < sizeof(mt2) / sizeof(mt2[0]); ++i) B_flat(idx++, 0) = mt2[i];
+    for (size_t i = 0; i < sizeof(mt3) / sizeof(mt3[0]); ++i) B_flat(idx++, 0) = mt3[i];
+    for (size_t i = 0; i < sizeof(mt4) / sizeof(mt4[0]); ++i) B_flat(idx++, 0) = mt4[i];
 
     // Create the B matrix (12 rows, 7 columns)
     Matrix B(12, 7, 0.0);  // 12 rows, 7 columns
@@ -654,7 +653,7 @@ Matrix calculateB(
     // Fill the matrix with the flattened vector data (7x12)
     for (unsigned int i = 0; i < 7; ++i) {   // Iterate over columns (7 columns)
         for (unsigned int j = 0; j < 12; ++j) {  // Iterate over rows (12 rows)
-            B(j, i) = B_flat[i * 12 + j];  
+            B(j, i) = B_flat(i * 12 + j, 0);  
         }
     }
     

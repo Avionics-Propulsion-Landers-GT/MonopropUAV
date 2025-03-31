@@ -4,27 +4,24 @@
 #include "Madgwick.h"
 #include "EKF_xy.h"
 #include "EKF_z.h"
+#include "Vector.h"  // Include your custom Vector class
 
-/*
-
-    Header file for init.cpp
-
-*/
-
-// Struct to hold filters
-struct SystemComponents {
+// === Filter Wrapper Struct ===
+typedef struct {
     Madgwick madgwickFilter;
     EKF_Position ekf_xy;
     EKF_Altitude ekf_z;
-};
+} SystemComponents;
 
-
-// Initial GPS data
+// === Initial GPS globals ===
 extern double INIT_ALTITUDE;
 extern double INIT_LON;
 extern double INIT_LAT;
 
-// Function prototype for initializing multiple components
-SystemComponents init(std::vector<double> gpsInit, std::vector<std::vector<double>> state, double dt);
+
+
+// gpsInit is a Vector (3x1: lat, lon, alt)
+// state is a 4x3 raw double array: {euler, position, angularVelocity, velocity}
+SystemComponents init(const Vector& gpsInit, double state[4][3], double dt);
 
 #endif // INIT_H

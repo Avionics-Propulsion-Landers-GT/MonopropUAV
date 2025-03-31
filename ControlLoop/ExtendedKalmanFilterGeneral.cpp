@@ -1,5 +1,5 @@
 #include "ExtendedKalmanFilterGeneral.h"
-#include <iostream>
+// #include <iostream>
 
 ExtendedKalmanFilterGeneral::ExtendedKalmanFilterGeneral(
     const Vector& initial_state,
@@ -37,7 +37,7 @@ void ExtendedKalmanFilterGeneral::update(const Vector& measurement) {
     Matrix S = H.multiply(error_covariance).multiply(Ht).add(measurement_noise_covariance);
 
     if (!S.isInvertible()) {
-        std::cerr << "[EKF] Error: Residual covariance matrix is not invertible!" << std::endl;
+        //std::cerr << "[EKF] Error: Residual covariance matrix is not invertible!" << std::endl;
         return;
     }
 

@@ -11,11 +11,11 @@
 EKF_Altitude::EKF_Altitude(const Vector& initial_state, double delta_time, double q_scalar, double r_scalar, double initial_p)
     : ExtendedKalmanFilterGeneral(initial_state, delta_time, q_scalar, r_scalar, initial_p) {}
 
-Vector EKF_Altitude::parseData(const std::vector<double>& data) {
-    Vector parsed_data(2, 0.0);  // Adjust size for [z, vz]
-    // Fill in actual parsing logic if needed
-    return parsed_data;
-}
+// Vector EKF_Altitude::parseData(const std::vector<double>& data) {
+//     Vector parsed_data(2, 0.0);  // Adjust size for [z, vz]
+//     // Fill in actual parsing logic if needed
+//     return parsed_data;
+// }
 
 Vector EKF_Altitude::stateTransitionFunction() {
     Vector new_state(2, 0.0);

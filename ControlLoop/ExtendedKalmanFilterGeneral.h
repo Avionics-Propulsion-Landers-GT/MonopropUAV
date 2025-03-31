@@ -3,7 +3,7 @@
 
 #include "Matrix.h"
 #include "Vector.h"
-#include <vector>
+// #include <vector>
 
 /*
 
@@ -44,7 +44,7 @@ public:
     void update(const Vector& measurement);
 
     // Abstract methods to be implemented by subclasses
-    virtual Vector parseData(const std::vector<double>& data) = 0;
+    // virtual Vector parseData(const std::vector<double>& data) = 0;
     virtual Vector stateTransitionFunction() = 0;
     virtual Matrix stateTransitionJacobian() = 0;
     virtual Vector measurementPredictionFunction() = 0;

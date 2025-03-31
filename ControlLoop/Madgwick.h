@@ -1,12 +1,10 @@
 #ifndef MADGWICK_H
 #define MADGWICK_H
 
-#include <vector>
+#include "Vector.h"
 
 /*
-
-    Header file for updatedMadgwick.cpp filter.
-
+    Header file for updatedMadgwick.cpp filter — STL-Free
 */
 
 class Madgwick {
@@ -14,27 +12,31 @@ private:
     double gain;
     double beta;
     float lastUpdateTime;
-    std::vector<double> eulerAttitudeEstimation;
-    std::vector<double> orientation;
+
+    Vector eulerAttitudeEstimation;  // size = 3
+    Vector orientation;              // size = 4 (quaternion)
 
 public:
-    Madgwick(double setGain, double setBeta, double startTime, std::vector<double>& initialOrientation);
+    Madgwick(double setGain, double setBeta, double startTime, const Vector& initialOrientation);
 
-    std::vector<double> update(std::vector<double>& updateArr);
-    std::vector<double> madgwickUpdate(std::vector<double>& q, 
-                                       std::vector<double>& gyro, 
-                                       std::vector<double>& accel, 
-                                       std::vector<double>& mag, 
-                                       double dt);
+    Vector update(const Vector& updateArr);
 
-    void normalizeArray(std::vector<double>& array);
-    double magnitude(std::vector<double>& array);
-    std::vector<double> computeGradient(std::vector<double>& q, 
-                                        std::vector<double>& accel, 
-                                        std::vector<double>& mag);
-    std::vector<double> quaternionToEuler(std::vector<double>& quaternion);
-    std::vector<double> eulerToQuaternion(std::vector<double>& euler);
-    std::vector<double> quaternionMultiply(std::vector<double>& q1, std::vector<double>& q2);
+    Vector madgwickUpdate(const Vector& q,
+                          const Vector& gyro,
+                          const Vector& accel,
+                          const Vector& mag,
+                          double dt);
+
+    void normalizeArray(Vector& array);
+    double magnitude(const Vector& array);
+
+    Vector computeGradient(const Vector& q,
+                           const Vector& accel,
+                           const Vector& mag);
+
+    Vector quaternionToEuler(const Vector& quaternion);
+    Vector eulerToQuaternion(const Vector& euler);
+    Vector quaternionMultiply(const Vector& q1, const Vector& q2);
 };
 
 #endif // MADGWICK_H

@@ -1,7 +1,8 @@
-#include <stdexcept>
-#include <iostream>
+// #include <stdexcept>
+// #include <iostream>
 #include "Matrix.h"
 #include "Vector.h"
+#include <math.h>
 
 //Initialize data pointer to a double which allows for efficient array creation etc. and rows and cols
     
@@ -10,7 +11,7 @@
 Matrix::Matrix(unsigned int rows, unsigned int cols, double initVal)
     : rows(rows), cols(cols), data(nullptr) {
         if (rows > 0 && cols > 0) {
-            data = new double[rows * cols];
+            data = (double*)malloc(rows * cols * sizeof(double));
             for (unsigned int i = 0; i < rows * cols; ++i) {
                 data[i] = initVal;
             }
@@ -22,7 +23,7 @@ Matrix::Matrix(unsigned int n)
     : rows(n), cols(n), data(nullptr) {
         //may need exception here for 0 case
         if (n > 0) {
-            data = new double[n * n]();
+            data = (double*)malloc(n * n * sizeof(double));
 
             for (unsigned int i = 0; i < n; ++i) {
                 data[i * n + i] = 1.0;
@@ -32,7 +33,7 @@ Matrix::Matrix(unsigned int n)
 
 Matrix::Matrix(const Matrix& other) : rows(other.getRows()), cols(other.getCols()) {
     if (other.data) {
-        data = new double[rows * cols];
+        data = (double*)malloc(rows * cols * sizeof(double));
         for (unsigned int i = 0; i < rows * cols; ++ i) {
             data[i] = other.data[i];
         }
@@ -45,12 +46,12 @@ Matrix& Matrix::operator=(const Matrix& other) {
     if (this == &other) return *this;  // Protect against self-assignment
 
     // Clean up existing memory
-    delete[] data;
+    free(data);
 
     // Copy dimensions and allocate new memory
     rows = other.rows;
     cols = other.cols;
-    data = new double[rows * cols];
+    data = (double*)malloc(rows * cols * sizeof(double));
 
     // Deep copy the contents
     for (unsigned int i = 0; i < rows * cols; ++i) {
@@ -63,7 +64,7 @@ Matrix& Matrix::operator=(const Matrix& other) {
 // Spencer -- Protected destructor, I was getting errors
 Matrix::~Matrix() {
     if (data != nullptr) {
-        delete[] data;
+        free(data);
         data = nullptr;
     }
 }
@@ -193,7 +194,7 @@ Matrix Matrix::inverse() const {
 // Spencer ~ Created fast inverse with LU Dc
 Matrix Matrix::luInverse() const {
     if (rows != cols) {
-        std::cout << "[ERROR] Matrix must be square to invert.\n";
+        // std::cout << "[ERROR] Matrix must be square to invert.\n";
         return Matrix(0, 0, 0);
     }
 
@@ -203,7 +204,7 @@ Matrix Matrix::luInverse() const {
     Matrix P(n, n, 0.0);
 
     if (!luDecompose(L, U, P)) {
-        std::cerr << "[ERROR] LU decomposition failed. Matrix may be singular.\n";
+        // std::cerr << "[ERROR] LU decomposition failed. Matrix may be singular.\n";
         return Matrix(0, 0, 0);
     }
 
@@ -250,34 +251,42 @@ bool Matrix::luDecompose(Matrix& L, Matrix& U, Matrix& P) const {
     if (rows != cols) return false;
 
     unsigned int n = rows;
-    P = Matrix(n); // Identity matrix
-    Matrix A(*this);
+    P = Matrix(n);         // Identity matrix
+    Matrix A(*this);       // Copy of original matrix
     L = Matrix(n, n, 0.0);
     U = Matrix(n, n, 0.0);
 
-    // Partial pivoting
+    // === Partial Pivoting ===
     for (unsigned int i = 0; i < n; ++i) {
-        // Find pivot
-        double max_val = std::abs(A(i, i));
+        double max_val = fabs(A(i, i));
         unsigned int pivot = i;
+
         for (unsigned int j = i + 1; j < n; ++j) {
-            if (std::abs(A(j, i)) > max_val) {
-                max_val = std::abs(A(j, i));
+            double current_val = fabs(A(j, i));
+            if (current_val > max_val) {
+                max_val = current_val;
                 pivot = j;
             }
         }
 
-        if (max_val == 0.0) return false; // Singular matrix
+        if (max_val == 0.0) return false; // Matrix is singular
 
-        // Swap rows in A and P
+        // === Swap rows in A and P ===
         if (pivot != i) {
             for (unsigned int k = 0; k < n; ++k) {
-                std::swap(A(i, k), A(pivot, k));
-                std::swap(P(i, k), P(pivot, k));
+                // Swap A(i,k) ↔ A(pivot,k)
+                double tempA = A(i, k);
+                A(i, k) = A(pivot, k);
+                A(pivot, k) = tempA;
+
+                // Swap P(i,k) ↔ P(pivot,k)
+                double tempP = P(i, k);
+                P(i, k) = P(pivot, k);
+                P(pivot, k) = tempP;
             }
         }
 
-        // Decompose
+        // === Decompose into U and L ===
         for (unsigned int j = i; j < n; ++j) {
             double sum = 0.0;
             for (unsigned int k = 0; k < i; ++k)
@@ -286,9 +295,9 @@ bool Matrix::luDecompose(Matrix& L, Matrix& U, Matrix& P) const {
         }
 
         for (unsigned int j = i; j < n; ++j) {
-            if (i == j)
+            if (i == j) {
                 L(i, i) = 1.0;
-            else {
+            } else {
                 double sum = 0.0;
                 for (unsigned int k = 0; k < i; ++k)
                     sum += L(j, k) * U(k, i);
@@ -310,7 +319,7 @@ bool Matrix::isInvertible() const {
 
 Matrix Matrix::power(unsigned int k) const {
     if (rows != cols) {
-        throw std::invalid_argument("Matrix must be square for exponentiation");
+        // throw std::invalid_argument("Matrix must be square for exponentiation");
     }
     
     Matrix result(rows);
@@ -337,7 +346,7 @@ double Matrix::factorial(unsigned int k) const {
 
 Matrix Matrix::exp(unsigned int terms) const {
     if (rows != cols) {
-        throw std::invalid_argument("Matrix must be square for exponentiation");
+        // throw std::invalid_argument("Matrix must be square for exponentiation");
     }
         
     Matrix result(rows); // Initialize result as the identity matrix

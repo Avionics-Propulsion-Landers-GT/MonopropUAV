@@ -13,7 +13,7 @@ class EKF_Altitude : public ExtendedKalmanFilterGeneral {
 public:
     EKF_Altitude(const Vector& initial_state, double delta_time, double q_scalar, double r_scalar, double initial_p);
 
-    Vector parseData(const std::vector<double>& data) override;
+    // Vector parseData(const std::vector<double>& data) override;
     Vector stateTransitionFunction() override;
     Matrix stateTransitionJacobian() override;
     Vector measurementPredictionFunction() override;

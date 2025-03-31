@@ -1,17 +1,25 @@
-#include <iostream>
-#include <fstream>
-#include <sstream>
-#include <vector>
-#include <string>
-#include <iomanip> 
-#include <chrono>
-#include <numeric>
+// #include <iostream>
+// #include <fstream>
+// #include <sstream>
+// #include <vector>
+// #include <string>
+// #include <iomanip> 
+// #include <chrono>
+// #include <numeric>
 #include "loop.h"
 #include "init.h"
 #include "LQR/calculateA.h"
 #include "LQR/calculateB.h"
 #include "Matrix.h"
 #include "Vector.h"
+#include <string.h>
+#include <ctype.h> 
+#include <stdio.h>
+#include <time.h>
+#include "print.h"
+
+#define MAX_LINE_LENGTH 1024
+#define MAX_GPS_COLUMNS 10
 
 /*
 
@@ -40,74 +48,102 @@ a serious danger of program lag and the timestep will have to be increased to 0.
 
 */
 
-std::vector<double> readGPSInit(const std::string& filename) {
-    /*
-        Read the first line of the GPS CSV file to get 
-    */
-    std::ifstream file(filename);
-    std::vector<double> gpsInit;
-
-    if (!file.is_open()) {
-        std::cerr << "Error: Could not open GPS CSV file: " << filename << std::endl;
-        return gpsInit;
+Vector readGPSInit(const char* filename) {
+    FILE* file = fopen(filename, "r");
+    if (!file) {
+        fputs("Error: Could not open GPS CSV file\n", stderr);
+        return Vector(0, 0.0);
     }
 
-    std::string line;
-    
+    char line[MAX_LINE_LENGTH];
+
     // Skip the header line
-    if (!std::getline(file, line)) {
-        std::cerr << "Error: GPS CSV file is empty or header missing!" << std::endl;
-        return gpsInit;
+    if (!fgets(line, sizeof(line), file)) {
+        fputs("Error: GPS CSV file is empty or header missing!\n", stderr);
+        fclose(file);
+        return Vector(0, 0.0);
     }
 
     // Read the first data line
-    if (std::getline(file, line)) {  // Read second line (first data row) to get init values
-        std::stringstream ss(line);
-        std::string value;
-        
-        while (std::getline(ss, value, ',')) { // Parse comma-separated values
-            try {
-                gpsInit.push_back(std::stod(value));  // Convert to double
-            } catch (const std::exception& e) {
-                std::cerr << "Error parsing GPS CSV: " << e.what() << std::endl;
-                return {};
-            }
-        }
-    } else {
-        std::cerr << "Error: No data found in GPS CSV!" << std::endl;
+    if (!fgets(line, sizeof(line), file)) {
+        fputs("Error: No data found in GPS CSV!\n", stderr);
+        fclose(file);
+        return Vector(0, 0.0);
     }
 
-    file.close();
-    return gpsInit;  // Returns {longitude, latitude, altitude}
+    // Trim newline
+    line[strcspn(line, "\r\n")] = '\0';
+
+    char* token = strtok(line, ",");
+    double values[MAX_GPS_COLUMNS];
+    int count = 0;
+
+    while (token && count < MAX_GPS_COLUMNS) {
+        values[count++] = strtod(token, NULL);
+        token = strtok(NULL, ",");
+    }
+
+    fclose(file);
+
+    // Create and populate the custom Vector
+    Vector gpsInit(count, 0.0);
+    for (int i = 0; i < count; ++i) {
+        gpsInit(i, 0) = values[i];
+    }
+
+    return gpsInit;
 }
 
-bool isNumber(const std::string& str) {
+bool isNumber(const char* s) {
+    if (!s || *s == '\0') return false;
+
+    // Skip leading +/- sign
+    if (*s == '+' || *s == '-') ++s;
+
+    bool hasDigits = false;
     bool hasDecimal = false;
 
-    for (size_t i = 0; i < str.length(); ++i) {
-        if (std::isdigit(str[i]) || (str[i] == '-' && i == 0)) {
-            continue;  // Allow digits and a negative sign at the start
+    while (*s) {
+        if (*s == '.') {
+            if (hasDecimal) return false;  // multiple dots = not a number
+            hasDecimal = true;
+        } else if (!isdigit(*s)) {
+            return false;
+        } else {
+            hasDigits = true;
         }
-        if (str[i] == '.' && !hasDecimal) {
-            hasDecimal = true;  // Allow one decimal point
-            continue;
-        }
-        return false;  // If we hit a non-numeric character, return false
+        ++s;
     }
-    return !str.empty();  // Empty strings are not numbers
+
+    return hasDigits;
 }
 
-bool isHeader(const std::string& line) {
-    std::stringstream ss(line);
-    std::string cell;
-    
-    while (std::getline(ss, cell, ',')) {
-        if (!isNumber(cell)) {
-            return true;  // If any cell is not numeric, it's a header
+bool isHeader(const char* line) {
+    // Make a copy because strtok modifies the input
+    char lineCopy[1024];
+    strncpy(lineCopy, line, sizeof(lineCopy));
+    lineCopy[sizeof(lineCopy) - 1] = '\0';  // Ensure null-termination
+
+    char* token = strtok(lineCopy, ",");
+
+    while (token != NULL) {
+        if (!isNumber(token)) {
+            return true;  // found a non-numeric field
+        }
+        token = strtok(NULL, ",");
+    }
+
+    return false;  // all tokens are numeric
+}
+
+inline void clearSensorValues(double values[SENSOR_ROWS][SENSOR_COLS], const int* sizes, int sensorCount) {
+    for (int row = 0; row < sensorCount; ++row) {
+        for (int col = 0; col < sizes[row]; ++col) {
+            values[row][col] = 0.0;
         }
     }
-    return false;  // If all cells are numbers, it's a data row
 }
+
 
 int main() {
 
@@ -176,38 +212,57 @@ int main() {
     // }
 
     // Note to anyone using this: CHECK THESE PATHS!!
-    std::vector<std::string> files = {
+    const char* files[] = {
         "../Sensing&Controls/AttitudeEstimation/monocopter_data.csv",
         "../Sensing&Controls/AttitudeEstimation/noisy_monocopter_data.csv",
         "../Sensing&Controls/AttitudeEstimation/gps_data.csv",
         "../Sensing&Controls/AttitudeEstimation/noisy_lidar_data.csv",
         "uwb_combined_distances.csv"
     };
+    
+    const int NUM_FILES = sizeof(files) / sizeof(files[0]);
 
-    std::vector<std::ifstream> fileStreams;
+    FILE* fileStreams[NUM_FILES] = {nullptr};
     
     // Open files
-    for (const std::string& file : files) {
-        std::ifstream fs(file);
-        if (!fs.is_open()) {
-            std::cerr << "Error: Could not open " << file << std::endl;
-            return 1;  // Exit the program if a file cannot be opened
+    for (int i = 0; i < NUM_FILES; ++i) {
+        fileStreams[i] = fopen(files[i], "r");
+        if (!fileStreams[i]) {
+            printerr_open_fail(files[i]);
+            return 1;  // Exit if any file can't be opened
         }
-        fileStreams.emplace_back(std::move(fs)); 
     }
 
-    std::string line;
+    char line[1024];
 
     // Initialize the values array; this takes all the values
     // at any given time and feeds them to the loop.
-    std::vector<std::vector<double>> values;
+    int sizes[] = { 10,    6,     3,     1,     4 };   
+    const int sensorCount = 5;
+
+    double imu9[10]   = { /* Time, Gyro x/y/z, Accel x/y/z, Mag x/y/z */ };
+    double imu6[6]    = { /* Time, Gyro x/y/z, Accel x/y/z */ };
+    double gps[3]     = { /* Lat, Lon, Alt */ };
+    double lidar[1]   = { /* Altitude */ };
+    double uwb[4]     = { /* Time, D1, D2, D3 */ };
+    
+    double values[SENSOR_ROWS][SENSOR_COLS] = {0};  // Initialize all to 0.0
 
     // Skip header text
-    for (auto& fs : fileStreams) {
-        if (std::getline(fs, line)) {
+    for (int i = 0; i < NUM_FILES; ++i) {
+        FILE* fs = fileStreams[i];
+    
+        if (fs && fgets(line, sizeof(line), fs)) {
+            // Remove newline characters (optional)
+            line[strcspn(line, "\r\n")] = '\0';
+    
             if (isHeader(line)) {
-                std::cout << "Skipping header: " << line << std::endl;
-                std::getline(fs, line); 
+                print_str("Skipping header: ");
+                print_str(line);
+                fputc('\n', stdout);
+    
+                // Read and discard next line (actual data starts after header)
+                fgets(line, sizeof(line), fs);
             }
         }
     }
@@ -215,12 +270,23 @@ int main() {
     // Create a file called latency.csv where we will store
     // performance data. It and state.csv initialize
     // in the cwd (/ControlLoop/)
-    std::ofstream latencyFile("latency.csv");
-    latencyFile << "Iteration,Latency (ms)\n";
 
-    // Create a file called state.csv to store the state.
-    std::ofstream dataFile("state.csv");
-    dataFile << "Iteration,x,y,z\n";
+    FILE* latencyFile = fopen("latency.csv", "w");
+    if (!latencyFile) {
+        fputs("Error: Could not create latency.csv\n", stderr);
+        // handle error or return
+    } else {
+        fputs("Iteration,Latency (ms)\n", latencyFile);
+    }
+
+    FILE* dataFile = fopen("state.csv", "w");
+    if (!dataFile) {
+        fputs("Error: Could not create state.csv\n", stderr);
+        // handle error or return
+    } else {
+        fputs("Iteration,x,y,z\n", dataFile);
+    }
+
 
     // This is the loop boolean. If it goes false, theloop stops.
     // The program sets this to false only once the data runs out,
@@ -233,33 +299,61 @@ int main() {
     int iteration = 0;
 
     // Track the latency.
+    #define MAX_LATENCY_SAMPLES 12000
     double latency_ms;
-    std::vector<double> latencies; 
+    double latencies[MAX_LATENCY_SAMPLES];
+    int latencyCount = 0;
+    double latencySum = 0.0;
+
 
     // status consists of: < gpsSanityCheck, lidarStatus, >. It controls some
     // logic in the loop.
-    std::vector<bool> status = {false, true};
+    bool status[2] = { false, true };
 
     // Start the clock for processing time
-    auto startProcessing = std::chrono::high_resolution_clock::now();
+    struct timespec startProcessing;
+    clock_gettime(CLOCK_MONOTONIC, &startProcessing);
 
     // Initialize state vector and command output. LoopOutput
     // is a struct with {state, status, command}.
     LoopOutput out;
 
     // Initialize setpoint
-    std::vector<double> setPoint = {0,0,0,0,0,0,0,0,0,0,0,0};
+    double setPoint[12] = {0}; 
 
-    // The state vector is {eulerAngles, position, angularVelocity, velocity}
-    out.state = {{0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}};
+    out = {
+        // state
+        {
+            {0, 0, 0},
+            {0, 0, 0},
+            {0, 0, 0},
+            {0, 0, 0}
+        },
+        // status
+        { false, true },
+        // command
+        { 0, 0, 0, 0, 0, 0, 0 },
+        // error
+        {
+            {0, 0, 0},
+            {0, 0, 0},
+            {0, 0, 0},
+            {0, 0, 0}
+        },
+    };
     
-    // The command output is thrust, gimbal angle a, gimbal angle b, adot, bdot, ddot{a}, ddot{b}
-    // We only use the first 3 outside the LQR
-    out.command = {0,0,0, 0,0,0,0};
 
     // Read the initial GPS readings via the function at the beginning of this program & print it
-    std::vector<double> gps_init = readGPSInit(files[2]);
-    std::cout << "gps init: " << gps_init[0] << ", " << gps_init[1] << ", " << gps_init[2] << std::endl; 
+    Vector gps_init = readGPSInit(files[2]);
+
+    print_str("gps init: ");
+    print_dbl(gps_init(0, 0));
+    print_str(", ");
+    print_dbl(gps_init(1, 0));
+    print_str(", ");
+    print_dbl(gps_init(2, 0));
+    fputc('\n', stdout);  // newline
+
 
     /*  
         Initialize the system. This is a wrapper for what's happening
@@ -269,116 +363,133 @@ int main() {
     */
     SystemComponents system = init(gps_init, out.state, dt); // Initialize all filters
 
+
     // Begin the loop!
     // std::cout << "Beginning loop!" << std::endl;
+    int currentRow = 0;
     while (allFilesHaveData) {
         // Clear the data from the previous loop.
-        values.clear();
+        clearSensorValues(values, sizes, sensorCount);
+
 
         // Ensure the loop stops if no more data is found.
         allFilesHaveData = false;
 
         // Get the data from the CSVs by looping through them
         size_t maxColumns = 0; 
-        for (size_t i = 0; i < fileStreams.size(); ++i) {
-            std::vector<double> rowValues;
-            if (fileStreams[i].good() && std::getline(fileStreams[i], line)) {  // ✅ Only read valid lines
-                std::stringstream ss(line);
-                std::string cell;
-                while (std::getline(ss, cell, ',')) {
-                    try {
-                        rowValues.push_back(std::stod(cell));
-                    } catch (const std::invalid_argument&) {
-                        rowValues.push_back(0.0);  // Default to zero if conversion fails
+        for (int i = 0; i < NUM_FILES; ++i) {
+            if (fileStreams[i] != NULL && fgets(line, sizeof(line), fileStreams[i]) != NULL) {
+                // Tokenize line
+                char* token = strtok(line, ",");
+                int col = 0;
+        
+                while (token != NULL && col < SENSOR_COLS) {
+                    char* endptr;
+                    double val = strtod(token, &endptr);
+        
+                    if (endptr == token) {
+                        val = 0.0;  // conversion failed
                     }
+        
+                    values[currentRow][col] = val;
+                    token = strtok(NULL, ",");
+                    col++;
                 }
-                // If the files have read data, continue the loop.
-                allFilesHaveData = true;  
-                if (rowValues.size() > maxColumns) maxColumns = rowValues.size();
-            }
-            if (!rowValues.empty()) {
-                values.push_back(rowValues);
+        
+                // Fill missing values with zeros
+                for (; col < SENSOR_COLS; ++col) {
+                    values[currentRow][col] = 0.0;
+                }
+        
+                if (col > maxColumns) maxColumns = col;
+                allFilesHaveData = true;
+                currentRow++;
             }
         }
+        
 
         // If allFilesHaveData is false then break out of the loop.
         if (!allFilesHaveData) break;
 
         // Ensure missing values are filled in with zero.
         // It might be possible to get rid of this.
-        for (auto& row : values) {
-            while (row.size() < maxColumns) {
-                row.push_back(0.0);  // Fill missing values with 0.0
-            }
-        }
+        // for (int r = 0; r < SENSOR_ROWS; ++r) {
+        //     for (int c = maxColumns; c < SENSOR_COLS; ++c) {
+        //         values[r][c] = 0.0;
+        //     }
+        // }
 
         // Basic check on the values to make sure they are sane.
-        if (values.size() > 1 && !values[1].empty()) {
 
-            //Start clock
-            auto start = std::chrono::high_resolution_clock::now();
+        struct timespec start;
+        clock_gettime(CLOCK_MONOTONIC, &start);
 
-            /*
-                This is the loop. The output is a struct with {state, status, command.}
-                We put in the data values, the last known state, the system (aka filter
-                objects), the status (which is a vector bool) controls the system sanity
-                state. dt is obviously just a constant (set at 0.001s nominally)
-                
-            */
-            // std::cout << "[DEBUG] Entered loop() " << iteration << std::endl;
-            out = loop(values, out.state, system, status, dt, setPoint, out.command);
-           
+        /*
+            This is the loop. The output is a struct with {state, status, command.}
+            We put in the data values, the last known state, the system (aka filter
+            objects), the status (which is a vector bool) controls the system sanity
+            state. dt is obviously just a constant (set at 0.001s nominally)
+            
+        */
+        // std::cout << "[DEBUG] Entered loop() " << iteration << std::endl;
+        out = loop(values, out.state, &system, status, dt, setPoint, out.command);
+        
 
-            // End clock
-            auto end = std::chrono::high_resolution_clock::now();
+        // End clock
+        struct timespec end;
+        clock_gettime(CLOCK_MONOTONIC, &end);
 
-            // Compute the latency from the loop clock.
-            latency_ms = std::chrono::duration<double, std::milli>(end - start).count();
-            latencies.push_back(latency_ms);
+        // Compute the latency from the loop clock.
+        latency_ms = (end.tv_sec - start.tv_sec) * 1000.0 +
+             (end.tv_nsec - start.tv_nsec) / 1e6;
 
-            // Compute the frequency in Hz.
-            double frequency_hz = latency_ms > 0 ? 1000.0 / latency_ms : 0.0;
-           
-            // Log to a latency file to make sure there are no spikes in compute time. A safe value is >2000 Hz. Anything below that is dangerous!
-            latencyFile << iteration << "," << std::fixed << std::setprecision(6) << latency_ms << "," << frequency_hz << "\n";
+        latencySum += latency_ms;
+        latencyCount++;
 
-            // Log the state to a data file for review & filter testing vs. original data
-            dataFile << iteration << "," << std::fixed << std::setprecision(6) << out.state[1][0] << "," << out.state[1][1] << "," << out.state[1][2] << "\n";
-            iteration++;
+        // Compute the frequency in Hz.
+        double frequency_hz = latency_ms > 0 ? 1000.0 / latency_ms : 0.0;
+        
+        // Log to a latency file to make sure there are no spikes in compute time. A safe value is >2000 Hz. Anything below that is dangerous!
+        fprintf(latencyFile, "%d,%.6f,%.6f\n", iteration, latency_ms, frequency_hz);
 
-        } else {
-            // If that basic check fails start a new loop and
-            // hope for the best.
-            std::cerr << "EOF" << std::endl;
-        }
+        // Log the state to a data file for review & filter testing vs. original data
+        fprintf(dataFile, "%d,%.6f,%.6f,%.6f\n", iteration, out.state[1][0], out.state[1][1], out.state[1][2]);
+        
+        iteration++;
+
     } // End loop
 
     // End processing clock
-    auto endProcessing = std::chrono::high_resolution_clock::now();
-
+    struct timespec endProcessing;
+    clock_gettime(CLOCK_MONOTONIC, &endProcessing);
 
     // Print performance summary
-    if (!latencies.empty()) {
-        double avg_latency = std::accumulate(latencies.begin(), latencies.end(), 0.0) / latencies.size();
-        double avg_frequency = avg_latency > 0 ? 1000.0 / avg_latency : 0.0;
-        double processingTime = std::chrono::duration<double, std::milli>(endProcessing - startProcessing).count();
-
-        latencyFile << "\nAverage Latency (ms)," << std::fixed << std::setprecision(6) << avg_latency << "\n";
-        latencyFile << "Average Frequency (Hz)," << avg_frequency << "\n";
-
-        std::cout << "\n=== Performance Summary ===" << std::endl;
-        std::cout << "Average Latency: " << avg_latency << " ms" << std::endl;
-        std::cout << "Average Frequency: " << avg_frequency << " Hz" << std::endl;
-        std::cout << "Total Processing Time: " << processingTime << " ms" << std::endl;
+    if (latencyCount > 0) {
+        double avg_latency = latencySum / latencyCount;
+        double avg_frequency = avg_latency > 0.0 ? 1000.0 / avg_latency : 0.0;
+    
+        double processingTime = (endProcessing.tv_sec - startProcessing.tv_sec) * 1000.0 +
+                                (endProcessing.tv_nsec - startProcessing.tv_nsec) / 1e6;
+    
+        fprintf(latencyFile, "\nAverage Latency (ms),%.6f\n", avg_latency);
+        fprintf(latencyFile, "Average Frequency (Hz),%.6f\n", avg_frequency);
+    
+        printf("\n=== Performance Summary ===\n");
+        printf("Average Latency: %.6f ms\n", avg_latency);
+        printf("Average Frequency: %.6f Hz\n", avg_frequency);
+        printf("Total Processing Time: %.6f ms\n", processingTime);
     }
 
     // Close files
-    latencyFile.close(); 
-    for (auto& fs : fileStreams) {
-        if (fs.is_open()) {
-            fs.close();
+    fclose(latencyFile);
+    fclose(dataFile);
+
+    for (int i = 0; i < NUM_FILES; ++i) {
+        if (fileStreams[i] != NULL) {
+            fclose(fileStreams[i]);
         }
     }
+
 
     return 0;
 }

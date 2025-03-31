@@ -1,8 +1,13 @@
 #include "../Matrix.h"
 #include "../Vector.h"
-#include <vector>
-#include <iostream>
-#include <cmath>
+#include <math.h>
+
+template <size_t N>
+void insert_flat(Matrix& dest, unsigned int& idx, const double (&arr)[N]) {
+    for (size_t i = 0; i < N; ++i) {
+        dest(idx++, 0) = arr[i];
+    }
+}
 
 inline double sign(double x) {
     return (x > 0) - (x < 0);
@@ -23,7 +28,7 @@ inline double sign(double x) {
  * @param inertia_s    Inertia tensor of static part (3x3)
  * @param inertia_a    Inertia tensor of TVC element a (3x3)
  * @param inertia_b    Inertia tensor of TVC element b (3x3)
- * @return std::pair<MatrixXd, MatrixXd>  A and B matrices (12x12, 12x7)
+ * @return Matrix A matrix
  */
 Matrix calculateA(
     double m,
@@ -110,21 +115,22 @@ Matrix calculateA(
     double rt_z = rt[2];
 
     // cos & sin
-    double t2 = std::cos(a);
-    double t3 = std::cos(b);
-    double t4 = m;  // assuming m is scalar, not complex
-    double t5 = std::cos(phiVar);
-    double t6 = std::cos(psiVar);
-    double t7 = std::sin(a);
-    double t8 = std::sin(b);
-    double t9 = std::cos(thetaVar);
-    double t10 = std::sin(phiVar);
-    double t11 = std::sin(psiVar);
-    double t12 = std::sin(thetaVar);
+    double t2  = cos(a);
+    double t3  = cos(b);
+    double t4  = m;  // Assuming m is a scalar
+    double t5  = cos(phiVar);
+    double t6  = cos(psiVar);
+    double t7  = sin(a);
+    double t8  = sin(b);
+    double t9  = cos(thetaVar);
+    double t10 = sin(phiVar);
+    double t11 = sin(psiVar);
+    double t12 = sin(thetaVar);
 
-    double t13 = std::pow(Ixy, 2);
-    double t14 = std::pow(Ixz, 2);
-    double t15 = std::pow(Iyz, 2);
+    // Powers (squared values)
+    double t13 = Ixy * Ixy;
+    double t14 = Ixz * Ixz;
+    double t15 = Iyz * Iyz;
     double t16 = Ixy * Ixz;
     double t17 = Ixx * Iyy;
     double t18 = Ixx * Iyz;
@@ -134,7 +140,7 @@ Matrix calculateA(
     double t22 = Ixx * Izz;
     double t23 = Ixy * Izz;
     double t24 = Iyy * Izz;
-    double t25 = std::pow(t9, 2);
+    double t25 = t9 * t9;
     double t26 = Izz * t17;
     double t27 = Ixz_a * t9;
     double t28 = Ixz_b * t9;
@@ -643,8 +649,8 @@ Matrix calculateA(
     double t614 = t9 * t10 * t458;
     double t615 = t9 * t10 * t459;
 
-    double t624 = std::abs(t590);
-    double t625 = std::copysign(1.0, t590); // mimics MATLAB's sign()
+    double t624 = fabs(t590);         // fabs() is for floating-point absolute value
+    double t625 = copysign(1.0, t590);
     double t628 = t590 * t590;
 
     double t638 = t6 * t9 * t556;
@@ -2035,7 +2041,7 @@ Matrix calculateA(
     double t1966 = t503 + t507 + t566 + t571 + t1455 + t1461 + t1574 + t1583 + t1585 + t1717 + t1723 + t1757 + t1819 + t1834 + t1877 + t1888 + t1891 + t1928 + t1929;
     double t1971 = t64 + t65 + t233 + t237 + t241 + t243 + t1558 + t1562 + t1600 + t1808 + t1809 + t1831 + t1832 + t1838 + t1839 + t1863 + t1883 + t1884 + t1943 + t1947 + t1948 + t1950;
 
-    std::vector<double> mt1 = {
+    double mt1[] = {
         0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
         0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
         0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
@@ -2067,7 +2073,7 @@ Matrix calculateA(
         0.0
     };
 
-    std::vector<double> mt2 = {
+    double mt2[] = {
         0.0, 0.0,
     
         // Index 2
@@ -2102,7 +2108,7 @@ Matrix calculateA(
         )
     };
 
-    std::vector<double> mt3 = {
+    double mt3[] = {
         // Index 0
         -t57 * (
             t1343 - t1401 - t1402 +
@@ -2137,7 +2143,7 @@ Matrix calculateA(
         )
     };
 
-    std::vector<double> mt4 = {
+    double mt4[] = {
         // Index 0
         -t57 * (
             (areaVar * cDrag * f * pow(t453, 2) * t1320) / 2.0 +
@@ -2168,7 +2174,7 @@ Matrix calculateA(
         )
     };
     
-    std::vector<double> mt5 = {
+    double mt5[] = {
         -t57 * (
             T * t8 * t501
             - T * t3 * t7 * t453
@@ -2188,7 +2194,7 @@ Matrix calculateA(
         )
     };
 
-    std::vector<double> mt6 = {
+    double mt6[] = {
         -t57 * (
             T * t8 * t452
             - T * t3 * t7 * t502
@@ -2219,7 +2225,7 @@ Matrix calculateA(
         + t423 * t779 * t1970
     };
 
-    std::vector<double> mt7 = {
+    double mt7[] = {
         -t422 * t779 * (
             -t229 - t231 + t564 + t565 + t569 + t570
             + t1571 + t1578 + t1584 + t1605
@@ -2239,7 +2245,7 @@ Matrix calculateA(
         0.0, 0.0, 0.0
     };
 
-    std::vector<double> mt8 = {
+    double mt8[] = {
         -t57 * (
             -T * t2 * t3 * t9
             + T * t8 * t10 * t12
@@ -2259,7 +2265,7 @@ Matrix calculateA(
         )
     };
 
-    std::vector<double> mt9 = {
+    double mt9[] = {
         t57 * (
             T * t8 * t9 * t56
             + T * t2 * t3 * t11 * t12
@@ -2280,7 +2286,7 @@ Matrix calculateA(
     };
     
 
-    std::vector<double> mt10 = {
+    double mt10[] = {
         t57 * (
             T * t8 * t9 * t53
             + T * t2 * t3 * t6 * t12
@@ -2316,7 +2322,7 @@ Matrix calculateA(
         0.0, 0.0, 0.0
     };
     
-    std::vector<double> mt11 = {
+    double mt11[] = {
         t57 * (
             T * t5 * t8 * t9
             - T * t3 * t7 * t9 * t10
@@ -2358,7 +2364,7 @@ Matrix calculateA(
         0.0
     };
 
-    std::vector<double> mt12 = {
+    double mt12[] = {
         0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0,
     
         t423 * t779 * (-t1366 + t1367 - t1411 + t1412 + t1426 + t1355 * (t543 - thetaVar_dot))
@@ -2390,7 +2396,7 @@ Matrix calculateA(
         0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0
     };
 
-    std::vector<double> mt13 = {
+    double mt13[] = {
         t372 * t779 * t1956
         + t423 * t779 * t1961
         + t371 * t779 * (-t1273 + t1321 + t1442 + t1481 + t1483 + t1262 * (t543 - thetaVar_dot)),
@@ -2404,29 +2410,29 @@ Matrix calculateA(
         - t421 * t779 * (-t1273 + t1321 + t1442 + t1481 + t1483 + t1262 * (t543 - thetaVar_dot))
     };
     
-    std::vector<double> A_flat;
-    A_flat.reserve(144);  // Reserve memory for performance
+    Matrix A_flat(144, 1, 0.0);  // 144 rows, 1 column
+    unsigned int idx = 0;
 
-    A_flat.insert(A_flat.end(), mt1.begin(), mt1.end());
-    A_flat.insert(A_flat.end(), mt2.begin(), mt2.end());
-    A_flat.insert(A_flat.end(), mt3.begin(), mt3.end());
-    A_flat.insert(A_flat.end(), mt4.begin(), mt4.end());
-    A_flat.insert(A_flat.end(), mt5.begin(), mt5.end());
-    A_flat.insert(A_flat.end(), mt6.begin(), mt6.end());
-    A_flat.insert(A_flat.end(), mt7.begin(), mt7.end());
-    A_flat.insert(A_flat.end(), mt8.begin(), mt8.end());
-    A_flat.insert(A_flat.end(), mt9.begin(), mt9.end());
-    A_flat.insert(A_flat.end(), mt10.begin(), mt10.end());
-    A_flat.insert(A_flat.end(), mt11.begin(), mt11.end());
-    A_flat.insert(A_flat.end(), mt12.begin(), mt12.end());
-    A_flat.insert(A_flat.end(), mt13.begin(), mt13.end());
+    for (size_t i = 0; i < sizeof(mt1) / sizeof(mt1[0]); ++i) A_flat(idx++, 0) = mt1[i];
+    for (size_t i = 0; i < sizeof(mt2) / sizeof(mt2[0]); ++i) A_flat(idx++, 0) = mt2[i];
+    for (size_t i = 0; i < sizeof(mt3) / sizeof(mt3[0]); ++i) A_flat(idx++, 0) = mt3[i];
+    for (size_t i = 0; i < sizeof(mt4) / sizeof(mt4[0]); ++i) A_flat(idx++, 0) = mt4[i];
+    for (size_t i = 0; i < sizeof(mt5) / sizeof(mt5[0]); ++i) A_flat(idx++, 0) = mt5[i];
+    for (size_t i = 0; i < sizeof(mt6) / sizeof(mt6[0]); ++i) A_flat(idx++, 0) = mt6[i];
+    for (size_t i = 0; i < sizeof(mt7) / sizeof(mt7[0]); ++i) A_flat(idx++, 0) = mt7[i];
+    for (size_t i = 0; i < sizeof(mt8) / sizeof(mt8[0]); ++i) A_flat(idx++, 0) = mt8[i];
+    for (size_t i = 0; i < sizeof(mt9) / sizeof(mt9[0]); ++i) A_flat(idx++, 0) = mt9[i];
+    for (size_t i = 0; i < sizeof(mt10) / sizeof(mt10[0]); ++i) A_flat(idx++, 0) = mt10[i];
+    for (size_t i = 0; i < sizeof(mt11) / sizeof(mt11[0]); ++i) A_flat(idx++, 0) = mt11[i];
+    for (size_t i = 0; i < sizeof(mt12) / sizeof(mt12[0]); ++i) A_flat(idx++, 0) = mt12[i];
+    for (size_t i = 0; i < sizeof(mt13) / sizeof(mt13[0]); ++i) A_flat(idx++, 0) = mt13[i];
 
 
     Matrix A(12, 12, 0);
 
     for (unsigned int i = 0; i < 12; ++i) {
         for (unsigned int j = 0; j < 12; ++j) {
-            A(i, j) = A_flat[j * 12 + i]; 
+            A(i, j) = A_flat(j * 12 + i, 0); 
         }
     }
 

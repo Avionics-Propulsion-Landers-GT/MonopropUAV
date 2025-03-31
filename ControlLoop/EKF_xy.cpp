@@ -11,11 +11,11 @@
 EKF_Position::EKF_Position(const Vector& initial_state, double delta_time, double q_scalar, double r_scalar, double initial_p)
     : ExtendedKalmanFilterGeneral(initial_state, delta_time, q_scalar, r_scalar, initial_p) {}
 
-Vector EKF_Position::parseData(const std::vector<double>& data) {
-    Vector parsed_data(4, 0.0);  // Adjust the size accordingly
-    // Fill in actual parsing logic if needed
-    return parsed_data;
-}
+// Vector EKF_Position::parseData(const std::vector<double>& data) {
+//     Vector parsed_data(4, 0.0);  // Adjust the size accordingly
+//     // Fill in actual parsing logic if needed
+//     return parsed_data;
+// }
 
 Vector EKF_Position::stateTransitionFunction() {
     Vector new_state(4, 0.0);
