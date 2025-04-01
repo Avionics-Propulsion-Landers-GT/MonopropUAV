@@ -204,7 +204,7 @@ function simulate()
         T_drag_body = drag{2};
         T_net = to_world_frame_quaternion(att) * (T_thrust_body + T_drag_body + T_gimbal_body);
     
-        state = update_dynamics(pos, vel, att, ang_vel, F_net, T_net, dt);
+        state = update_dynamics(pos, vel, att, ang_vel, F_net, T_net, thrust_gimbal_ang_vel, dt);
         pos = state{1};
         vel = state{2};
         accel = state{3};
@@ -292,7 +292,7 @@ end
 simulate()
 
 %% updates the state with a given net force, net torque, and time step
-function state = update_dynamics(pos, vel, att, ang_vel, F_net, T_net, delta_t)
+function state = update_dynamics(pos, vel, att, ang_vel, F_net, T_net, gimbal_ang_vel, delta_t)
     global m;
     global I;
     global Inv_I;
