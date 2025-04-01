@@ -302,7 +302,7 @@ function state = update_dynamics(pos, vel, att, ang_vel, F_net, T_net, gimbal_an
     vel = vel + accel * delta_t;
     pos = pos + vel * delta_t;
     % rotational component
-    ang_accel = Inv_I * (T_net - cross(ang_vel, I * ang_vel));% - cross([gimbal_ang_vel(1); 0; 0], TVC_top_I * [gimbal_ang_vel(1); 0; 0]) - cross(gimbal_ang_vel, TVC_bottom_I * gimbal_ang_vel));
+    ang_accel = Inv_I * (T_net);% - cross(ang_vel, I * ang_vel));% - cross([gimbal_ang_vel(1); 0; 0], TVC_top_I * [gimbal_ang_vel(1); 0; 0]) - cross(gimbal_ang_vel, TVC_bottom_I * gimbal_ang_vel));
     ang_vel = ang_vel + ang_accel * delta_t;
     delta_att = ang_vel * delta_t;
     att = att + 0.5 * quaternion_multiply([0; delta_att(1); delta_att(2); delta_att(3)], att) * delta_t;
