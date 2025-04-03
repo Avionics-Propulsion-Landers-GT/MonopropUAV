@@ -2,6 +2,7 @@
 #include "EKF_xy.h"
 #include "EKF_z.h"
 #include <iostream>
+#include "lqr.h"
 
 /*
 
@@ -54,6 +55,8 @@ SystemComponents init(std::vector<double> gpsInit, std::vector<std::vector<doubl
     double initial_p_z = 100;
     EKF_Altitude ekf_z(initial_z_state, dt, q_scalar_z, r_scalar_z, initial_p_z);
 
+    LQR lqrController;
+
     // Return struct of filters
-    return {madgwickFilter, ekf_xy, ekf_z};
+    return {madgwickFilter, ekf_xy, ekf_z, lqrController};
 }

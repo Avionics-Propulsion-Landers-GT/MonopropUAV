@@ -15,7 +15,7 @@ Matrix calculateA(
     const Vector& rc,           // size 3
     const Vector& rt,           // size 3
     const Matrix& inertia,      // size 3x3
-    const Matrix& inertia_s,
+    // const Matrix& inertia_s,
     const Matrix& inertia_a,
     const Matrix& inertia_b
 );

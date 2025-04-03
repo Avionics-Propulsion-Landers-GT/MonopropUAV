@@ -6,6 +6,9 @@
 #include <fstream>
 #include <iomanip>
 #include <cmath>
+#include "LQR/calculateA.h"
+#include "LQR/calculateB.h"
+
 // #include <cppad/cppad.hpp>
 // #ifndef M_PI
 // #define M_PI 3.14159265358979323846
@@ -30,12 +33,17 @@ const Matrix ANCHORS = initAnchors();
 
 const double m = 0.7; // kg; mass of uav
 const double f = 1.2; // kg/m3; density of air
-const double cDrag = 0.5; // placeholder value
-const double prop_BodyCoM_distance = 0.1; // 10cm from UAV prop hinge to the body CoM [placeholder]
-const double thrustArm = 0.04; // 4cm thrust arm [placeholder]
-const std::vector<double> statCoM = {0, 0, 0}; // Starting CoM is the origin for the body frame. 
-const std::vector<double> statMoIM = {0.00940, 0, 0, 0, 0.00940, 0, 0, 0, 0.00014}; // kgm2; static inertia tensor about cylidner CoM
+const std::vector<double> CoM = {0, 0, 0}; // Starting CoM is the origin for the body frame. 
+const std::vector<double> moim = {0.00940, 0, 0, 0, 0.00940, 0, 0, 0, 0.00014}; // kgm2; static inertia tensor about cylidner CoM
+const double THRUST_OFFSET = 7*24*0.001; // thrust offset from CoM in meters
 
+const std::vector<double> Q_raw = { // 12 x 12
+
+}; 
+
+const std::vector<double> R_raw = { // 7 x 7
+    
+};
 
 /*
 
@@ -91,6 +99,37 @@ std::vector<double> weightedAverage(const std::vector<double>& v1, const std::ve
     return result;
 }
 
+double cdRegression(double AoA) {
+    return ((2.5/90)*AoA+(1.5/10000)*(AoA*AoA)); //placeholder regression, accurate enough
+}
+
+double areaRegression(double AoA) {
+    return 0.0072382 + 0.000226775*AoA;
+}
+
+double copRegression(double AoA) {
+    return 0.048 - 0.00053333333333*AoA;
+}
+
+std::vector<double> getInertiaA(double a) {
+    double m = 0.05; // kg
+    double r = 0.01;
+    double R = 0.096;
+    double factor = m*(R*R + ((3/4)*(r*r)));
+    double Ix = 0.5*m*r*r;
+    return {Ix, 0, 0, 0, factor*cos(a), -factor*sin(a), 0, factor*sin(a), factor*cos(a)};
+}
+
+std::vector<double> getInertiaB(double b) {
+    double m = 0.05; // kg
+    double r = 0.01;
+    double R = 0.096;
+    double factor = m*(R*R + ((3/4)*(r*r)));
+    double Ix = 0.5*m*r*r;
+    return {Ix*cos(b), 0, Ix*sin(b), 0, factor, 0, -factor*sin(b), 0, factor*cos(b)};
+
+}
+
 Vector trilaterateXY(const Matrix& anchors, double d1, double d2, double d3) {
     if (anchors.getRows() != 3 || anchors.getCols() != 3) {
         throw std::invalid_argument("Anchors matrix must be 3x3: [3 anchors x (x, y, z)]");
@@ -111,7 +150,7 @@ Vector trilaterateXY(const Matrix& anchors, double d1, double d2, double d3) {
     // i = dot(ex, p3 - p1)
     Vector p3_minus_p1 = Vector(p3.add(p1.multiply(-1)));
     double i = ex.dotProduct(p3_minus_p1);
-    std::cout << "i " << i << std::endl;
+    // std::cout << "i " << i << std::endl;
 
     // ey = normalize((p3 - p1) - ex * i)
     Vector ex_i = Vector(ex.multiply(i));
@@ -120,12 +159,12 @@ Vector trilaterateXY(const Matrix& anchors, double d1, double d2, double d3) {
 
     // j = dot(ey, p3 - p1)
     double j = ey.dotProduct(p3_minus_p1);
-    std::cout << "j " << j << std::endl;
+    // std::cout << "j " << j << std::endl;
 
 
     // d = |p2 - p1|
     double d = p2_minus_p1.magnitude();
-    std::cout << "d: " << d << std::endl;
+    // std::cout << "d: " << d << std::endl;
 
 
     // Trilateration equations
@@ -148,6 +187,20 @@ Vector toVector(const std::vector<double>& v) {
     Vector result(v.size(), 0.0);
     for (unsigned int i = 0; i < v.size(); ++i) {
         result(i, 0) = v[i];
+    }
+    return result;
+}
+
+Matrix toMatrix(const std::vector<double>& v) {
+    if (v.size() != 9) {
+        throw std::invalid_argument("Input vector must have exactly 9 elements.");
+    }
+
+    Matrix result(3, 3, 0.0);  // 3 rows, 3 cols, initialize to 0.0
+    for (unsigned int i = 0; i < 3; ++i) {
+        for (unsigned int j = 0; j < 3; ++j) {
+            result(i, j) = v[i * 3 + j];  // row-major order
+        }
     }
     return result;
 }
@@ -309,41 +362,83 @@ LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vecto
 
     // ----------------------- i. set up key quantities ------------------------
 
+    // 1. Find AoA by dealing with dot product of world frame z axis and wf velocity
+    double AoA;
+    std::vector<double> z_wf = {sin(state[2][0]), -cos(state[2][0])*sin(state[2][1]), cos(state[2][0])*cos(state[2][1])};
+    double v_norm = std::sqrt(velocity[0]*velocity[0] + velocity[1]*velocity[1] + velocity[2]*velocity[2]);
+    double z_norm = std::sqrt(z_wf[0]*z_wf[0] + z_wf[1]*z_wf[1] + z_wf[2]*z_wf[2]);
+    if (v_norm == 0.0 || z_norm == 0.0) {
+        AoA = 0;  // avoid division by zero, define AoA as 0
+    }
+    double dot = -(velocity[0] * z_wf[0] + velocity[1] * z_wf[1] + velocity[2] * z_wf[2]);
+    double cos_alpha = dot / (v_norm * z_norm);
+    cos_alpha = std::max(-1.0, std::min(1.0, cos_alpha));
+    AoA = std::acos(cos_alpha)*(180/3.14159265358979323846);
+
+    // 2. From AoA grab Cd, area, and rc
+    double Cd = cdRegression(AoA);
+    double area = areaRegression(AoA);
+    double CoP_offset = copRegression(AoA);
+    std::vector<double> rc_raw = {0, 0, -CoP_offset}; 
+    Vector rc = toVector(rc_raw);
+
+    // 3. Construct rt
+    std::vector<double> rt_raw = {0, 0, -THRUST_OFFSET};
+    Vector rt = toVector(rt_raw);
+
+    // 4. Construct flat state vector and put it in custom class
+    Vector current_state(12, 0.0);
+    current_state(0, 0) = new_attitude[0];
+    current_state(1, 0) = new_attitude[1];
+    current_state(2, 0) = new_attitude[2];
+    current_state(3, 0) = new_position[0];
+    current_state(4, 0) = new_position[1];
+    current_state(5, 0) = new_position[2];
+    current_state(6, 0) = angular_velocity[0];
+    current_state(7, 0) = angular_velocity[1];
+    current_state(8, 0) = angular_velocity[2];
+    current_state(9, 0) = velocity[0];
+    current_state(10, 0) = velocity[1];
+    current_state(11, 0) = velocity[2];
+
+    // 5. Construct input Vector
+    Vector current_input = toVector(command);
+
+    // 6. Get MoIMs
+    Matrix inertia = toMatrix(moim);
+    Matrix inertia_a = toMatrix(getInertiaA(command[1]));
+    Matrix inertia_b = toMatrix(getInertiaB(command[2]));
     
-    
-    
+    // 7. Calculate A and B Matrices
+    Matrix A = calculateA(m, f, Cd, area, current_state, current_input, rc, rt, inertia, inertia_a, inertia_b);
+    Matrix B = calculateB(m, f, Cd, area, current_state, current_input, rc, rt, inertia, inertia_a, inertia_b);
 
 
     // ---------- ii. Use state matrices to compute optimal controls -----------
 
-    // Vector current_state(12, 0.0);
-    // current_state(0, 0) = new_attitude[0];
-    // current_state(1, 0) = new_attitude[1];
-    // current_state(2, 0) = new_attitude[2];
-    // current_state(3, 0) = new_position[0];
-    // current_state(4, 0) = new_position[1];
-    // current_state(5, 0) = new_position[2];
-    // current_state(6, 0) = angular_velocity[0];
-    // current_state(7, 0) = angular_velocity[1];
-    // current_state(8, 0) = angular_velocity[2];
-    // current_state(9, 0) = velocity[0];
-    // current_state(10, 0) = velocity[1];
-    // current_state(11, 0) = velocity[2];
+    Matrix Q = toMatrix(Q_raw);
+    Matrix R = toMatrix(R_raw);
 
     // // Set state and setpoint in LQR controller
-    // lqrController.setState(current_state);
-    // lqrController.setPoint = toVector(setPoint); // Assuming setPoint is already a Vector
+    lqrController.setA(A);
+    lqrController.setB(B);
+    lqrController.setQ(Q);
+    lqrController.setR(R);
+
+
+    lqrController.setState(current_state);
+    lqrController.setPoint = toVector(setPoint); // Assuming setPoint is a std::vector
 
     // // Compute error between current state and desired state
-    // Matrix neg_setpoint = lqrController.setPoint.multiply(-1.0);
-    // Vector state_error = lqrController.getState().add(Vector(neg_setpoint));
+    Matrix neg_setpoint = lqrController.setPoint.multiply(-1.0);
+    Vector state_error = lqrController.getState().add(Vector(neg_setpoint));
 
     // // Recalculate K if needed (e.g., time-varying system)
-    // lqrController.calculateK();
+    lqrController.calculateK();
 
     // // Compute control command: u = -K * state_error
-    // Matrix negative_K = lqrController.getK().multiply(-1.0);
-    // Matrix control_command = negative_K.multiply(state_error);  // result is 12x1 Matrix
+    Matrix negative_K = lqrController.getK().multiply(-1.0);
+    Matrix control_command = negative_K.multiply(state_error);  // result is 7x1 Matrix
 
     // std::vector<double> newCommand = toStdVector(control_command);  // control_command is a Matrix (12x1)
     // std::vector<double> error = toStdVector(state_error);           // state_error is a Vector

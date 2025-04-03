@@ -116,46 +116,46 @@ int main() {
     // Test A and B matrix generation
 
     // // Test data
-    // double m = 10.0;
-    // double f = 5.0;
-    // double cDrag = 0.2;
-    // double areaVar = 1.0;
+    // double m = 0.7;
+    // double f = 1.2;
+    // double cDrag = 0.8;
+    // double areaVar = 0.004;
 
     // Vector full_state(12, 0.0); // State vector (12x1)
     // full_state[0] = 1.0; full_state[1] = 2.0; full_state[2] = 3.0;  // Position
-    // full_state[3] = 4.0; full_state[4] = 5.0; full_state[5] = 6.0;  // Velocity
-    // full_state[6] = 0.1; full_state[7] = 0.2; full_state[8] = 0.3;  // Euler Angles
+    // full_state[3] = 0.1; full_state[4] = 0.2; full_state[5] = 5;  // Velocity
+    // full_state[6] = 0.05; full_state[7] = 0.1; full_state[8] = 0.15;  // Euler Angles
     // full_state[9] = 0.01; full_state[10] = 0.02; full_state[11] = 0.03;  // Angular Velocities
 
     // Vector full_input(7, 0.0);  // Input vector (7x1)
-    // full_input[0] = 0.5; full_input[1] = 0.4; full_input[2] = 0.3;  // Inputs
-    // full_input[3] = 0.1; full_input[4] = 0.2; full_input[5] = 0.05;
-    // full_input[6] = 0.06;
+    // full_input[0] = 5.0; full_input[1] = 0.1; full_input[2] = 0.2;  // Inputs
+    // full_input[3] = 0.01; full_input[4] = 0.02; full_input[5] = 0.001;
+    // full_input[6] = 0.002;
 
     // Vector rc(3, 0.0);  // Position vector
-    // rc[0] = 0.1; rc[1] = 0.2; rc[2] = 0.3;
+    // rc[0] = 0.001; rc[1] = 0.0; rc[2] = -0.001;
 
     // Vector rt(3, 0.0);  // Rotation vector
-    // rt[0] = 1.0; rt[1] = 2.0; rt[2] = 3.0;
+    // rt[0] = 0.0; rt[1] = 0.0; rt[2] = -0.2;
 
     // // Inertia matrices
     // Matrix inertia(3, 3, 0.0);
     // inertia(0, 0) = 1.0;
-    // inertia(1, 1) = 2.0;
-    // inertia(2, 2) = 3.0;
+    // inertia(1, 1) = 1.0;
+    // inertia(2, 2) = 1.0;
 
-    // Matrix inertia_s(3, 3, 0.0);
-    // inertia_s(0, 0) = 1.1; inertia_s(1, 1) = 2.1; inertia_s(2, 2) = 3.1;
+    // // Matrix inertia_s(3, 3, 0.0);
+    // // inertia_s(0, 0) = 1.1; inertia_s(1, 1) = 2.1; inertia_s(2, 2) = 3.1;
 
     // Matrix inertia_a(3, 3, 0.0);
-    // inertia_a(0, 0) = 1.2; inertia_a(1, 1) = 2.2; inertia_a(2, 2) = 3.2;
+    // inertia_a(0, 0) = 0.05; inertia_a(1, 1) = 0.05; inertia_a(2, 2) = 0.05;
 
     // Matrix inertia_b(3, 3, 0.0);
-    // inertia_b(0, 0) = 1.3; inertia_b(1, 1) = 2.3; inertia_b(2, 2) = 3.3;
+    // inertia_b(0, 0) = 0.05; inertia_b(1, 1) = 0.05; inertia_b(2, 2) = 0.05;
 
     // // Call calculateA function
-    // Matrix B_out = calculateB(m, f, cDrag, areaVar, full_state, full_input, rc, rt, inertia, inertia_s, inertia_a, inertia_b);
-    // Matrix A_out = calculateA(m, f, cDrag, areaVar, full_state, full_input, rc, rt, inertia, inertia_s, inertia_a, inertia_b);
+    // Matrix B_out = calculateB(m, f, cDrag, areaVar, full_state, full_input, rc, rt, inertia, inertia_a, inertia_b);
+    // Matrix A_out = calculateA(m, f, cDrag, areaVar, full_state, full_input, rc, rt, inertia, inertia_a, inertia_b);
 
     // // Print the resulting A matrix
     // std::cout << "Calculated A matrix:" << std::endl;
