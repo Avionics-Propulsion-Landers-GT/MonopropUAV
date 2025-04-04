@@ -1,7 +1,9 @@
 #include <stdexcept>
 #include <iostream>
+#include <iomanip> 
 #include "Matrix.h"
 #include "Vector.h"
+#include <cmath>
 
 //Initialize data pointer to a double which allows for efficient array creation etc. and rows and cols
     
@@ -165,28 +167,38 @@ Matrix Matrix::getSubMatrix(unsigned int row, unsigned int col) const {
     return subMatrix;
 }
 
-Matrix Matrix::inverse() const {
-    if (rows != cols) {
-        return Matrix(0,0, 0); //can't compute inverse if matrix is not square
-    } else {
-        double det = determinant();
-        if (det == 0) {
-            return Matrix(0,0, 0);
-        }
+// Matrix Matrix::inverse() const {
+//     if (rows != cols) {
+//         return Matrix(0,0, 0); //can't compute inverse if matrix is not square
+//     } else {
+//         double det = determinant();
+//         if (det == 0) {
+//             return Matrix(0,0, 0);
+//         }
 
-        Matrix adj(rows, cols, 0);
-        for (unsigned int i = 0; i < rows; ++i) {
-            for (unsigned int j = 0; j < rows; ++j) {
-                adj(j, i) = cofactor(i,j);
-            }
+//         Matrix adj(rows, cols, 0);
+//         for (unsigned int i = 0; i < rows; ++i) {
+//             for (unsigned int j = 0; j < rows; ++j) {
+//                 adj(j, i) = cofactor(i,j);
+//             }
+//         }
+//         Matrix inv(rows, cols, 0);
+//         for (unsigned int i = 0; i < rows; ++i) {
+//             for (unsigned int j = 0; j < cols; ++j) {
+//                 inv(i,j) = adj(i,j) / det;
+//             }
+//         }
+//         return inv;
+//     }
+// }
+
+void Matrix::print() const {
+    unsigned int precision = 4;
+    for (unsigned int i = 0; i < rows; ++i) {
+        for (unsigned int j = 0; j < cols; ++j) {
+            std::cout << std::setw(10) << std::fixed << std::setprecision(precision) << (*this)(i, j) << " ";
         }
-        Matrix inv(rows, cols, 0);
-        for (unsigned int i = 0; i < rows; ++i) {
-            for (unsigned int j = 0; j < cols; ++j) {
-                inv(i,j) = adj(i,j) / det;
-            }
-        }
-        return inv;
+        std::cout << std::endl;
     }
 }
 
@@ -204,7 +216,7 @@ Matrix Matrix::luInverse() const {
 
     if (!luDecompose(L, U, P)) {
         std::cerr << "[ERROR] LU decomposition failed. Matrix may be singular.\n";
-        return Matrix(0, 0, 0);
+        return this->pseudoInverse();
     }
 
     Matrix inverse(n, n, 0.0);
@@ -300,6 +312,68 @@ bool Matrix::luDecompose(Matrix& L, Matrix& U, Matrix& P) const {
     return true;
 }
 
+Matrix Matrix::pseudoInverse() const {
+    double tol = 10^(-8);
+    // Check if matrix is non-empty
+    if (rows == 0 || cols == 0) {
+        // std::cerr << "[ERROR] pseudoInverse: Empty matrix.\n";
+        return Matrix(0, 0, 0);
+    }
+
+    // std::cout << "[INFO] Starting pseudoinverse computation...\n";
+
+    // Step 1: Transpose of A
+    Matrix A_T = this->transpose();
+    // std::cout << "[INFO] Transposed matrix A_T computed.\n";
+
+    // Step 2: AᵗA (n x n)
+    Matrix AtA = A_T.multiply(*this);
+    // std::cout << "[INFO] Computed AtA = Aᵗ * A\n";
+
+    // Step 3: Regularization for invertibility (Tikhonov method)
+    for (unsigned int i = 0; i < AtA.rows; ++i) {
+        AtA(i, i) += tol;
+    }
+    // std::cout << "[INFO] Applied Tikhonov regularization to AtA.\n";
+
+    // Step 4: Attempt inversion of regularized AtA
+    Matrix AtA_inv = AtA.luInverse();
+    if (AtA_inv.rows == 0 || AtA_inv.cols == 0) {
+        // std::cerr << "[WARNING] AtA inversion failed. Trying alternate path using A * Aᵗ...\n";
+
+        // If AtA fails, try A * Aᵗ
+        Matrix AAt = this->multiply(A_T);
+        for (unsigned int i = 0; i < AAt.rows; ++i) {
+            AAt(i, i) += tol;
+        }
+
+        Matrix AAt_inv = AAt.luInverse();
+        if (AAt_inv.rows == 0 || AAt_inv.cols == 0) {
+            std::cerr << "[ERROR] Both AtA and AAt are singular. Pseudoinverse failed.\n";
+            return Matrix(0, 0, 0);
+        }
+
+        // Compute right pseudoinverse: Aᵗ * (A * Aᵗ)⁻¹
+        // std::cout << "[INFO] Successfully computed pseudoinverse using Aᵗ * (A * Aᵗ)⁻¹.\n";
+        return A_T.multiply(AAt_inv);
+    }
+
+    // Step 5: Compute pseudoinverse: (AᵗA + λI)⁻¹ * Aᵗ
+    // std::cout << "[INFO] Successfully computed pseudoinverse using (AᵗA + λI)⁻¹ * Aᵗ.\n";
+    return AtA_inv.multiply(A_T);
+}
+
+
+void Matrix::sanitizeNaNs() {
+    double replacement = 0.0;
+    for (unsigned int i = 0; i < this->rows; ++i) {
+        for (unsigned int j = 0; j < this->cols; ++j) {
+            if (std::isnan((*this)(i, j))) {
+                (*this)(i, j) = replacement;
+            }
+        }
+    }
+}
 
 bool Matrix::isInvertible() const {
     if (rows != cols) {

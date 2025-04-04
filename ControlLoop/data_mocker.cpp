@@ -12,6 +12,9 @@
 #include "LQR/calculateB.h"
 #include "Matrix.h"
 #include "Vector.h"
+#include <thread>
+#include <algorithm> 
+#include <cmath>
 
 /*
 
@@ -37,8 +40,26 @@ runs at about 8000 Hz minimum. The program will output a performance summary at 
 will tell you how fast it is running. If it is running slower than 2000 Hz, then there is
 a serious danger of program lag and the timestep will have to be increased to 0.01s or something.
 
-
 */
+
+const double SET_DT = 0.001;
+
+std::vector<double> trajectory(double t) { // Replace with waypoint code
+    const double pi = 3.141592653589793;
+
+    if (t >= 0.0 && t < 5.0) {
+        return {0,0,0, 0,0,-0.5 * cos(pi * t / 5.0) + 0.5, 0,0,0, 0,0,0};
+    } else if (t >= 5.0 && t < 10.0) {
+        return {0,0,0, 0,0,1, 0,0,0, 0,0,0};
+    } else if (t >= 10.0 && t < 15.0) {
+        return {0,0,0, 0,0,0.5 * cos(pi * t / 5.0) + 0.5, 0,0,0, 0,0,0};
+    } else if (t >= 15.0 && t <= 20.0) {
+        return {0,0,0, 0,0,0, 0,0,0, 0,0,0};
+    } else {
+        // Outside of defined range; handle as needed
+        return {0,0,0, 0,0,1, 0,0,0, 0,0,0};
+    }
+}
 
 std::vector<double> readGPSInit(const std::string& filename) {
     /*
@@ -109,9 +130,28 @@ bool isHeader(const std::string& line) {
     return false;  // If all cells are numbers, it's a data row
 }
 
+std::vector<double> subtract(const std::vector<double>& a, const std::vector<double>& b) {
+    std::vector<double> result;
+    if (a.size() != b.size()) throw std::runtime_error("Vector size mismatch");
+
+    result.reserve(a.size());
+    for (size_t i = 0; i < a.size(); ++i)
+        result.push_back(a[i] - b[i]);
+
+    return result;
+}
+
+std::vector<double> multiply(const std::vector<double>& v, double scalar) {
+    std::vector<double> result(v.size());
+    for (std::size_t i = 0; i < v.size(); ++i) {
+        result[i] = v[i] * scalar;
+    }
+    return result;
+}
+
 int main() {
 
-    double dt = 0.001;
+    double dt = SET_DT;
 
     // Test A and B matrix generation
 
@@ -247,9 +287,6 @@ int main() {
     // is a struct with {state, status, command}.
     LoopOutput out;
 
-    // Initialize setpoint
-    std::vector<double> setPoint = {0,0,0,0,0,0,0,0,0,0,0,0};
-
     // The state vector is {eulerAngles, position, angularVelocity, velocity}
     out.state = {{0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}};
     
@@ -270,8 +307,16 @@ int main() {
     SystemComponents system = init(gps_init, out.state, dt); // Initialize all filters
 
     // Begin the loop!
-    // std::cout << "Beginning loop!" << std::endl;
+    std::cout << "Beginning loop!" << std::endl;
+    double total_time = 0;
+    double time_spent;
     while (allFilesHaveData) {
+        
+        std::cout << "Completion... " << iteration << std::endl;
+
+        // Start clock
+        auto start = std::chrono::high_resolution_clock::now();
+
         // Clear the data from the previous loop.
         values.clear();
 
@@ -282,7 +327,7 @@ int main() {
         size_t maxColumns = 0; 
         for (size_t i = 0; i < fileStreams.size(); ++i) {
             std::vector<double> rowValues;
-            if (fileStreams[i].good() && std::getline(fileStreams[i], line)) {  // ✅ Only read valid lines
+            if (fileStreams[i].good() && std::getline(fileStreams[i], line)) {  // Only read valid lines
                 std::stringstream ss(line);
                 std::string cell;
                 while (std::getline(ss, cell, ',')) {
@@ -312,24 +357,23 @@ int main() {
             }
         }
 
+        std::vector<double> desired_state = trajectory(total_time);
+        std::vector<double> delta_desired_state = multiply(subtract(desired_state, trajectory(total_time-time_spent)), (1/time_spent));
+
         // Basic check on the values to make sure they are sane.
         if (values.size() > 1 && !values[1].empty()) {
-
-            //Start clock
-            auto start = std::chrono::high_resolution_clock::now();
 
             /*
                 This is the loop. The output is a struct with {state, status, command.}
                 We put in the data values, the last known state, the system (aka filter
                 objects), the status (which is a vector bool) controls the system sanity
-                state. dt is obviously just a constant (set at 0.001s nominally)
+                state. dt is obviously just a constant (set at 0.001s nominally) <-- set chrono
                 
             */
             // std::cout << "[DEBUG] Entered loop() " << iteration << std::endl;
-            out = loop(values, out.state, system, status, dt, setPoint, out.command);
+            out = loop(values, out.state, system, status, dt, desired_state, delta_desired_state, out.command);
            
 
-            // End clock
             auto end = std::chrono::high_resolution_clock::now();
 
             // Compute the latency from the loop clock.
@@ -344,13 +388,25 @@ int main() {
 
             // Log the state to a data file for review & filter testing vs. original data
             dataFile << iteration << "," << std::fixed << std::setprecision(6) << out.state[1][0] << "," << out.state[1][1] << "," << out.state[1][2] << "\n";
-            iteration++;
+            iteration = iteration+1;
+
+            // End clock & 
+            double remaining_time_ms = std::max(0.0, 1.0 - latency_ms);  
+            //std::this_thread::sleep_for(std::chrono::duration<double, std::milli>(remaining_time_ms));
+            if (latency_ms > SET_DT*1000) {
+                total_time += (latency_ms/1000);
+            } else {
+                total_time += (SET_DT);
+            }
+            time_spent = std::max(latency_ms, SET_DT)/1000;
+
 
         } else {
             // If that basic check fails start a new loop and
             // hope for the best.
             std::cerr << "EOF" << std::endl;
         }
+
     } // End loop
 
     // End processing clock
@@ -370,6 +426,7 @@ int main() {
         std::cout << "Average Latency: " << avg_latency << " ms" << std::endl;
         std::cout << "Average Frequency: " << avg_frequency << " Hz" << std::endl;
         std::cout << "Total Processing Time: " << processingTime << " ms" << std::endl;
+        std::cout << "Total Calculated Processing Time: " << total_time << " s" << std::endl;
     }
 
     // Close files

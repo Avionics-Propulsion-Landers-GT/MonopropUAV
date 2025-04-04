@@ -1,9 +1,22 @@
 #include "lqr.h"
 #include "Vector.h"
 #include "Matrix.h"
+#include <cmath>
+#include <iostream>
 
 
 LQR lqrController;
+
+double LQR::frobeniusNormDiff(const Matrix& A, const Matrix& B) const {
+    double sum = 0.0;
+    for (unsigned int i = 0; i < A.getRows(); ++i) {
+        for (unsigned int j = 0; j < A.getCols(); ++j) {
+            double diff = A(i, j) - B(i, j);
+            sum += diff * diff;
+        }
+    }
+    return std::sqrt(sum);
+}
 
 // Constructor
 LQR::LQR()
@@ -68,31 +81,53 @@ void LQR::setState(Vector&& state) {
     this->state = std::move(state);
 }
 
-void LQR::calculateK() {
-    Matrix P = Q;                         // Initialize P to Q
-    Matrix P_prev(P);          // Previous iteration
-    const int num_iterations = 50;
+// Solve Riccati Equation
+void LQR::calculateK(double dt) {
+    std::cout<<"A"<<std::endl;
+    A.print();
+    std::cout<<"B"<<std::endl;
+    B.print();
+    std::cout<<"Q"<<std::endl;
+    Q.print();
+    std::cout<<"R"<<std::endl;
+    R.print();
 
-    for (int i = num_iterations; i > 0; --i) {
+    // Discretize A and B
+    Matrix A_d = Matrix(A.getRows()).add(A.multiply(dt));
+    Matrix B_d = B.multiply(dt);
+
+    // R.pseudoInverse().print();
+
+    Matrix P = A.transpose().multiply(Q).multiply(A);;
+    Matrix P_prev = P;
+    const double tolerance = 1e-6;
+    const int max_iterations = 100;
+    int iter = 0;
+
+    for (; iter < max_iterations; ++iter) {
         P_prev = P;
 
-        Matrix At = A.transpose();
-        Matrix Bt = B.transpose();
+        Matrix BtP = B_d.transpose().multiply(P);
+        Matrix BtPB = BtP.multiply(B_d);
+        Matrix inv_term = (R.add(BtPB)).luInverse();  // You can switch to pseudoInverse if needed
 
-        Matrix BtP = Bt.multiply(P_prev);
-        Matrix AtP = At.multiply(P_prev);
+        Matrix term1 = A_d.transpose().multiply(P).multiply(A_d);
+        Matrix term2 = A_d.transpose().multiply(P).multiply(B_d).multiply(inv_term).multiply(BtP).multiply(A_d);
 
-        Matrix term1 = At.multiply(P_prev).multiply(A);
-        Matrix term2 = At.multiply(P_prev).multiply(B);
-        Matrix term3 = BtP.multiply(B);
-        Matrix term4 = R.add(term3).luInverse(); 
-        Matrix term5 = term2.multiply(term4).multiply(BtP.multiply(A));
+        P = Q.add(term1.add(term2.multiply(-1)));
 
-        P = Q.add(term1).add(term5.multiply(-1.0));
+        // Convergence check
+        double diff = frobeniusNormDiff(P, P_prev);
+        std::cout << "[DEBUG] Riccati iteration " << iter << " diff: " << diff << std::endl;
+
+        if (frobeniusNormDiff(P, P_prev) < tolerance) break;
     }
 
-    Matrix Bt = B.transpose();
-    Matrix BtPB = Bt.multiply(P).multiply(B);
-    Matrix inv_term = R.add(BtPB).inverse();
-    K = inv_term.multiply(Bt.multiply(P).multiply(A));
+    if (iter == max_iterations) {
+        std::cerr << "[WARN] DARE did not converge in " << max_iterations << " iterations.\n";
+    }
+
+    Matrix K_temp = (R.add(B_d.transpose().multiply(P).multiply(B_d))).luInverse();
+    K = K_temp.multiply(B_d.transpose()).multiply(P).multiply(A_d);
 }
+

@@ -32,10 +32,12 @@ class Matrix {
         double determinant() const;
         double cofactor (unsigned int row, unsigned int col) const;
         Matrix getSubMatrix(unsigned int row, unsigned int col) const;
+        void print() const;
         bool luDecompose(Matrix& L, Matrix& U, Matrix& P) const;
         Matrix luInverse() const;
-        Matrix inverse() const;
-
+        // Matrix inverse() const;
+        Matrix pseudoInverse() const;
+        void sanitizeNaNs();
         bool isInvertible() const;
         Matrix power(unsigned int k) const;
         double factorial(unsigned int k) const;

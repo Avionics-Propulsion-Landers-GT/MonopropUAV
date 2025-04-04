@@ -4,6 +4,7 @@
 #include "Madgwick.h"
 #include "EKF_xy.h"
 #include "EKF_z.h"
+#include "lqr.h"
 
 /*
 

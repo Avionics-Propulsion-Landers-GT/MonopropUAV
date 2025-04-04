@@ -31,18 +31,42 @@ const Matrix ANCHORS = initAnchors();
 
 // Define Constants 
 
-const double m = 0.7; // kg; mass of uav
-const double f = 1.2; // kg/m3; density of air
-const std::vector<double> CoM = {0, 0, 0}; // Starting CoM is the origin for the body frame. 
-const std::vector<double> moim = {0.00940, 0, 0, 0, 0.00940, 0, 0, 0, 0.00014}; // kgm2; static inertia tensor about cylidner CoM
+const double M = 0.7; // kg; mass of uav
+const double F = 1.2; // kg/m3; density of air
+const std::vector<double> INERTIA = {0.00940, 0, 0, 0, 0.00940, 0, 0, 0, 0.00014}; // kgm2; static inertia tensor about cylidner CoM
 const double THRUST_OFFSET = 7*24*0.001; // thrust offset from CoM in meters
+std::vector<double> G_VECTOR = {0,0,0, 0,0,-9.80665, 0,0,0, 0,0,0};
 
-const std::vector<double> Q_raw = { // 12 x 12
+const std::vector<double> Q_MATRIX = { // 12 x 12
+     // Position (x, y, z)
+     10.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+     0.0,10.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+     0.0, 0.0,10.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
 
+    // Linear velocity (vx, vy, vz)
+     0.0, 0.0, 0.0,  2.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+     0.0, 0.0, 0.0,  0.0, 2.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+     0.0, 0.0, 0.0,  0.0, 0.0, 2.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+
+    // Angular position (roll, pitch, yaw)
+     0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  8.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+     0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 8.0, 0.0,  0.0, 0.0, 0.0,
+     0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 8.0,  0.0, 0.0, 0.0,
+
+    // Angular velocity (wx, wy, wz)
+     0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  1.0, 0.0, 0.0,
+     0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 1.0, 0.0,
+     0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 1.0
 }; 
 
-const std::vector<double> R_raw = { // 7 x 7
-    
+const std::vector<double> R_MATRIX = { // 7 x 7
+    10, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+    0.0, 10, 0.0, 0.0, 0.0, 0.0, 0.0,
+    0.0, 0.0, 10, 0.0, 0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0, 10, 0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0, 0.0, 10, 0.0, 0.0,
+    0.0, 0.0, 0.0, 0.0, 0.0, 10, 0.0,
+    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 10
 };
 
 /*
@@ -205,6 +229,24 @@ Matrix toMatrix(const std::vector<double>& v) {
     return result;
 }
 
+Matrix toRectMatrix(const std::vector<double>& v, unsigned int m, unsigned int n) {
+    if (v.size() != m * n) {
+        std::cerr << "[ERROR] Vector size does not match matrix dimensions (" 
+                  << v.size() << " vs " << m << "x" << n << ").\n";
+        return Matrix(0, 0, 0.0);
+    }
+
+    Matrix result(m, n, 0.0);  // m rows, n cols, initialized to 0.0
+    for (unsigned int i = 0; i < m; ++i) {
+        for (unsigned int j = 0; j < n; ++j) {
+            result(i, j) = v[i * n + j];  // row-major order
+        }
+    }
+
+    return result;
+}
+
+
 std::vector<double> toStdVector(const Matrix& mat) {
     std::vector<double> result;
     for (unsigned int i = 0; i < mat.getRows(); ++i) {
@@ -215,7 +257,7 @@ std::vector<double> toStdVector(const Matrix& mat) {
 
 
 // Execute the control loop.
-LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vector<std::vector<double>>& state, SystemComponents& system, const std::vector<bool>& status, double dt, const std::vector<double>& setPoint, const std::vector<double>& command) {
+LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vector<std::vector<double>>& state, SystemComponents& system, const std::vector<bool>& status, double dt, const std::vector<double>& desired_state, const std::vector<double>& delta_desired_state, const std::vector<double>& command) {
 
     // Read in values
     std::vector<double> nineAxisIMU = values[0]; // Time, Gyro<[rad/s]>, Accel<[m/s2]>, Mag<[]>
@@ -228,6 +270,11 @@ LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vecto
     Madgwick& madgwickFilter = system.madgwickFilter;
     EKF_Position& ekf_xy = system.ekf_xy;
     EKF_Altitude& ekf_z = system.ekf_z;
+    LQR& lqrController = system.lqrController;
+
+    // Constants
+    double m = M;
+    double f = F;
     
 
     // -------------------- I. SENSOR FUSION ALGORITHM ------------------------
@@ -405,7 +452,7 @@ LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vecto
     Vector current_input = toVector(command);
 
     // 6. Get MoIMs
-    Matrix inertia = toMatrix(moim);
+    Matrix inertia = toMatrix(INERTIA);
     Matrix inertia_a = toMatrix(getInertiaA(command[1]));
     Matrix inertia_b = toMatrix(getInertiaB(command[2]));
     
@@ -413,38 +460,60 @@ LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vecto
     Matrix A = calculateA(m, f, Cd, area, current_state, current_input, rc, rt, inertia, inertia_a, inertia_b);
     Matrix B = calculateB(m, f, Cd, area, current_state, current_input, rc, rt, inertia, inertia_a, inertia_b);
 
+    A.sanitizeNaNs();
+    B.sanitizeNaNs();
+
+    // A.print();
+    // B.print();
+
+
+    current_state.print();
 
     // ---------- ii. Use state matrices to compute optimal controls -----------
 
-    Matrix Q = toMatrix(Q_raw);
-    Matrix R = toMatrix(R_raw);
+    // 1. Determine u_d
+    Vector xd = toVector(desired_state);
+    Vector xdotd = toVector(delta_desired_state);
+    Vector g_bias = toVector(G_VECTOR).multiply(-1);
+    Vector Axd = A.multiply(xd);
+    Vector negAxd = Axd.multiply(-1);
+    Vector r = (xdotd.add(negAxd)).add(g_bias);
+    Matrix B_pinv = B.pseudoInverse();
+    Vector u_d = B_pinv.multiply(r);
 
-    // // Set state and setpoint in LQR controller
+    // Read in Q, R matrices
+    Matrix Q = toRectMatrix(Q_MATRIX, 12, 12);
+    Matrix R = toRectMatrix(R_MATRIX, 7, 7);
+
+    // Set state and setpoint in LQR controller
     lqrController.setA(A);
     lqrController.setB(B);
     lqrController.setQ(Q);
     lqrController.setR(R);
 
-
+    // Read in current + desired states
     lqrController.setState(current_state);
-    lqrController.setPoint = toVector(setPoint); // Assuming setPoint is a std::vector
+    lqrController.setPoint = toVector(desired_state); // Assuming setPoint is a std::vector
 
-    // // Compute error between current state and desired state
+    // Compute error between current state and desired state
     Matrix neg_setpoint = lqrController.setPoint.multiply(-1.0);
     Vector state_error = lqrController.getState().add(Vector(neg_setpoint));
 
-    // // Recalculate K if needed (e.g., time-varying system)
-    lqrController.calculateK();
+    // Recalculate K if needed (e.g., time-varying system)
+    lqrController.calculateK(dt);
 
-    // // Compute control command: u = -K * state_error
+    // // // Compute control command: u = -K * state_error
     Matrix negative_K = lqrController.getK().multiply(-1.0);
-    Matrix control_command = negative_K.multiply(state_error);  // result is 7x1 Matrix
+    Vector control_command = u_d.add(negative_K.multiply(state_error));  // result is 7x1 Matrix
 
-    // std::vector<double> newCommand = toStdVector(control_command);  // control_command is a Matrix (12x1)
-    // std::vector<double> error = toStdVector(state_error);           // state_error is a Vector
+    // // std::vector<double> newCommand = toStdVector(control_command);  // control_command is a Matrix (12x1)
+    // // std::vector<double> error = toStdVector(state_error);           // state_error is a Vector
 
-    std::vector<double> newCommand = {0,0,0};
-    std::vector<double> error = {0,0,0};
+    std::vector<double> newCommand = toStdVector(control_command);
+    std::vector<double> error = toStdVector(state_error);
+
+    // std::vector<double> newCommand = {0,0,0}; // Use in case of commenting for error checking
+    // std::vector<double> error = {0,0,0};
 
     std::vector<bool> newStatus = {gpsSanityCheck, lidarStatus};
 

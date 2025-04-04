@@ -28,7 +28,7 @@ public:
     void setState(const Vector& state);
     void setState(Vector&& state);
 
-    void calculateK(); // Calculate K matrix
+    void calculateK(double dt); // Calculate K matrix
 
 private:
     Vector state;
@@ -37,6 +37,7 @@ private:
     Matrix Q;
     Matrix R;
     Matrix K;
+    double frobeniusNormDiff(const Matrix& A, const Matrix& B) const;
 };
 
 #endif // LQR_H
