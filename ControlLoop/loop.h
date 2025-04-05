@@ -18,6 +18,7 @@ struct LoopOutput {
     std::vector<bool> status;
     std::vector<double> command;         // Generated command based on state
     std::vector<double> error;         // Error between state and setpoint
+    std::vector<double> desired_command;
 };
 
 extern LQR lqrController;
@@ -27,7 +28,7 @@ void preciseLatLonToMeters(double lat, double deltaLat, double deltaLon, double 
 std::vector<double> weightedAverage(const std::vector<double>& v1, const std::vector<double>& v2, double weight1, double weight2);
 
 //set point will vary and is subject to change during flight. It will be passed as a 1x12 vector
-LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vector<std::vector<double>>& state, SystemComponents& system, const std::vector<bool>& status, double dt, const std::vector<double>& desired_state, const std::vector<double>& delta_desired_state, const std::vector<double>& command);
+LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vector<std::vector<double>>& state, const std::vector<std::vector<double>>& prevState, SystemComponents& system, const std::vector<bool>& status, double dt, const std::vector<double>& desired_state, const std::vector<double>& delta_desired_state, const std::vector<double>& command);
 
 
 #endif // LOOP_H

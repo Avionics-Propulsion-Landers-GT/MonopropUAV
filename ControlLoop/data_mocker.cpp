@@ -48,18 +48,37 @@ std::vector<double> trajectory(double t) { // Replace with waypoint code
     const double pi = 3.141592653589793;
 
     if (t >= 0.0 && t < 5.0) {
-        return {0,0,0, 0,0,-0.5 * cos(pi * t / 5.0) + 0.5, 0,0,0, 0,0,0};
+        return {0,0,-0.5 * cos(pi * t / 5.0) + 0.5, 0,0,(pi / 10.0) * sin(pi * t / 5.0), 0,0,0, 0,0,0};
     } else if (t >= 5.0 && t < 10.0) {
-        return {0,0,0, 0,0,1, 0,0,0, 0,0,0};
+        return {0,0,1, 0,0,0, 0,0,0, 0,0,0};
     } else if (t >= 10.0 && t < 15.0) {
-        return {0,0,0, 0,0,0.5 * cos(pi * t / 5.0) + 0.5, 0,0,0, 0,0,0};
+        return {0,0,0.5 * cos(pi * t / 5.0) + 0.5, 0,0,-(pi / 10.0) * sin(pi * t / 5.0), 0,0,0, 0,0,0};
     } else if (t >= 15.0 && t <= 20.0) {
         return {0,0,0, 0,0,0, 0,0,0, 0,0,0};
     } else {
         // Outside of defined range; handle as needed
-        return {0,0,0, 0,0,1, 0,0,0, 0,0,0};
+        return {0,0,0, 0,0,0, 0,0,0, 0,0,0};
     }
 }
+
+std::vector<double> delta_trajectory(double t) { // Replace with waypoint code
+    const double pi = 3.141592653589793;
+
+    if (t >= 0.0 && t < 5.0) {
+        return {0,0,(pi / 10.0) * sin(pi * t / 5.0), 0,0,(pi * pi / 50.0) * cos(pi * t / 5.0), 0,0,0, 0,0,0};
+    } else if (t >= 5.0 && t < 10.0) {
+        return {0,0,0, 0,0,0, 0,0,0, 0,0,0};
+    } else if (t >= 10.0 && t < 15.0) {
+        return {0,0,-(pi / 10.0) * sin(pi * t / 5.0), 0,0,-(pi * pi / 50.0) * cos(pi * t / 5.0), 0,0,0, 0,0,0};
+    } else if (t >= 15.0 && t <= 20.0) {
+        return {0,0,0, 0,0,0, 0,0,0, 0,0,0};
+    } else {
+        // Outside of defined range; handle as needed
+        return {0,0,0, 0,0,0, 0,0,0, 0,0,0};
+    }
+}
+
+
 
 std::vector<double> readGPSInit(const std::string& filename) {
     /*
@@ -217,10 +236,10 @@ int main() {
 
     // Note to anyone using this: CHECK THESE PATHS!!
     std::vector<std::string> files = {
-        "../Sensing&Controls/AttitudeEstimation/monocopter_data.csv",
-        "../Sensing&Controls/AttitudeEstimation/noisy_monocopter_data.csv",
-        "../Sensing&Controls/AttitudeEstimation/gps_data.csv",
-        "../Sensing&Controls/AttitudeEstimation/noisy_lidar_data.csv",
+        "imu_data.csv",
+        "ax6_imu_data.csv",
+        "gps_data.csv",
+        "lidar_data.csv",
         "uwb_combined_distances.csv"
     };
 
@@ -260,7 +279,7 @@ int main() {
 
     // Create a file called state.csv to store the state.
     std::ofstream dataFile("state.csv");
-    dataFile << "Iteration,x,y,z\n";
+    dataFile << "Iteration,x,y,z,vx,vy,vz,theta_x,theta_y,theta_z,omega_x,omega_y,omega_z,thrust,a,b\n";
 
     // This is the loop boolean. If it goes false, theloop stops.
     // The program sets this to false only once the data runs out,
@@ -289,10 +308,12 @@ int main() {
 
     // The state vector is {eulerAngles, position, angularVelocity, velocity}
     out.state = {{0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}};
-    
+    std::vector<std::vector<double>> prevState = out.state;
+    std::vector<std::vector<double>> state2;
+
     // The command output is thrust, gimbal angle a, gimbal angle b, adot, bdot, ddot{a}, ddot{b}
     // We only use the first 3 outside the LQR
-    out.command = {0,0,0, 0,0,0,0};
+    out.command = {0,0,0,0,0,0,0};
 
     // Read the initial GPS readings via the function at the beginning of this program & print it
     std::vector<double> gps_init = readGPSInit(files[2]);
@@ -312,7 +333,7 @@ int main() {
     double time_spent;
     while (allFilesHaveData) {
         
-        std::cout << "Completion... " << iteration << std::endl;
+        // std::cout << "Completion... " << iteration << std::endl;
 
         // Start clock
         auto start = std::chrono::high_resolution_clock::now();
@@ -358,7 +379,7 @@ int main() {
         }
 
         std::vector<double> desired_state = trajectory(total_time);
-        std::vector<double> delta_desired_state = multiply(subtract(desired_state, trajectory(total_time-time_spent)), (1/time_spent));
+        std::vector<double> delta_desired_state = delta_trajectory(total_time);
 
         // Basic check on the values to make sure they are sane.
         if (values.size() > 1 && !values[1].empty()) {
@@ -371,8 +392,10 @@ int main() {
                 
             */
             // std::cout << "[DEBUG] Entered loop() " << iteration << std::endl;
-            out = loop(values, out.state, system, status, dt, desired_state, delta_desired_state, out.command);
-           
+            state2 = prevState;
+            prevState = out.state; 
+            out = loop(values, out.state, state2, system, status, dt, desired_state, delta_desired_state, out.command);
+            
 
             auto end = std::chrono::high_resolution_clock::now();
 
@@ -387,7 +410,7 @@ int main() {
             latencyFile << iteration << "," << std::fixed << std::setprecision(6) << latency_ms << "," << frequency_hz << "\n";
 
             // Log the state to a data file for review & filter testing vs. original data
-            dataFile << iteration << "," << std::fixed << std::setprecision(6) << out.state[1][0] << "," << out.state[1][1] << "," << out.state[1][2] << "\n";
+            dataFile << iteration << "," << std::fixed << std::setprecision(6) << out.state[0][0] << "," << out.state[0][1] << "," << out.state[0][2] << "," << out.state[1][0] << "," << out.state[1][1] << "," << out.state[1][2] << "," << out.state[2][0] << "," << out.state[2][1] << "," << out.state[2][2] << "," << out.state[3][0] << "," << out.state[3][1] << "," << out.state[3][2] << "," << out.desired_command[0] << "," << out.desired_command[1] << "," << out.desired_command[2] << "\n";
             iteration = iteration+1;
 
             // End clock & 

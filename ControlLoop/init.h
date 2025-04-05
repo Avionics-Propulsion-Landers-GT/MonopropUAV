@@ -17,6 +17,15 @@ struct SystemComponents {
     Madgwick madgwickFilter;
     EKF_Position ekf_xy;
     EKF_Altitude ekf_z;
+    EKF_Altitude ekf_x;
+    EKF_Altitude ekf_y;
+    EKF_Altitude ekf_z2;
+    EKF_Altitude ekf_vx;
+    EKF_Altitude ekf_vy;
+    EKF_Altitude ekf_vz;
+    EKF_Altitude ekf_ox;
+    EKF_Altitude ekf_oy;
+    EKF_Altitude ekf_oz;
     LQR lqrController;
 };
 

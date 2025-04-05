@@ -23,7 +23,7 @@ void ExtendedKalmanFilterGeneral::predict() {
     Vector predicted_state = stateTransitionFunction();
     Matrix F = stateTransitionJacobian();
     Matrix Ft = F.transpose();
-
+    
     error_covariance = F.multiply(error_covariance).multiply(Ft).add(process_noise_covariance);
 }
 
@@ -36,12 +36,9 @@ void ExtendedKalmanFilterGeneral::update(const Vector& measurement) {
 
     Matrix S = H.multiply(error_covariance).multiply(Ht).add(measurement_noise_covariance);
 
-    if (!S.isInvertible()) {
-        std::cerr << "[EKF] Error: Residual covariance matrix is not invertible!" << std::endl;
-        return;
-    }
+    
 
-    Matrix S_inv = S.luInverse();  // ✅ Use your fast LU-based inverse
+    Matrix S_inv = S.pseudoInverse();  // ✅ Use your fast LU-based inverse
     Matrix K = error_covariance.multiply(Ht).multiply(S_inv);  // Kalman gain
 
     // Update state

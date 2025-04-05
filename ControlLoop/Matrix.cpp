@@ -312,8 +312,431 @@ bool Matrix::luDecompose(Matrix& L, Matrix& U, Matrix& P) const {
     return true;
 }
 
+Matrix Matrix::pseudoInverseGolubKahan(double rankEps, int maxIter) const
+{
+    // ----------------------------------------------------
+    // 0) Basic shape from *this
+    unsigned int m = this->rows;
+    unsigned int n = this->cols;
+
+    // We'll store the SVD as: this = U (m x m) * diag(...) * V^T (n x n),
+    // Then build pseudoinverse => V diag(...)^+ U^T.
+
+    // Make local copy of *this => B (m x n) which we'll transform
+    Matrix B(m, n, 0.0);
+    for(unsigned int i = 0; i < m; i++){
+        for(unsigned int j = 0; j < n; j++){
+            B(i,j) = (*this)(i,j);
+        }
+    }
+
+    // U: (m x m), initially identity
+    Matrix U(m); // By your spec, Matrix(m) => identity(m x m)
+    // V: (n x n), initially identity
+    Matrix V(n);
+
+    // We'll keep main diagonal in diag[], super-diagonal in super[].
+    unsigned int mn = (m < n ? m : n);
+    double* diag  = new double[mn];
+    double* super = new double[mn];
+    for(unsigned int i=0; i<mn; i++){
+        diag[i]  = 0.0;
+        super[i] = 0.0;
+    }
+
+    // ----------------------------------------------------
+    // 1) HOUSEHOLDER BIDIAGONALIZATION (adapted from *this code)
+
+    unsigned int nct = (m - 1 < n ? m - 1 : n);
+    unsigned int nrt = (n - 2 < m ? n - 2 : m);
+
+    for(unsigned int i = 0; i < (nct > mn ? mn : nct); i++){
+        //---------------------
+        // LEFT HOUSEHOLDER
+        double normx = 0.0;
+        for(unsigned int r=i; r<m; r++){
+            double val = B(r,i);
+            normx += val*val;
+        }
+        normx = std::sqrt(normx);
+
+        if(normx < 1e-30){
+            diag[i] = 0.0;
+        } else {
+            if(B(i,i) > 0.0){
+                normx = -normx;
+            }
+            diag[i] = normx;
+            for(unsigned int r=i; r<m; r++){
+                B(r,i) /= -normx;
+            }
+            B(i,i) += 1.0;
+
+            // apply to the rest of the columns
+            for(unsigned int c = i+1; c < n; c++){
+                double s = 0.0;
+                for(unsigned int r = i; r < m; r++){
+                    s += B(r,i)*B(r,c);
+                }
+                s = -s / B(i,i);
+                for(unsigned int r=i; r<m; r++){
+                    B(r,c) += s*B(r,i);
+                }
+            }
+        }
+
+        // Accumulate in U
+        if(normx > 1e-30){
+            for(unsigned int c=0; c<m; c++){
+                double s=0.0;
+                for(unsigned int r=i; r<m; r++){
+                    s += B(r,i)*U(r,c);
+                }
+                s = -s / B(i,i);
+                for(unsigned int r=i; r<m; r++){
+                    U(r,c) += s*B(r,i);
+                }
+            }
+        }
+
+        diag[i] = -normx;
+
+        //---------------------
+        // RIGHT HOUSEHOLDER
+        if(i < n-1){
+            double normy = 0.0;
+            for(unsigned int c=i+1; c<n; c++){
+                double val = B(i,c);
+                normy += val*val;
+            }
+            normy = std::sqrt(normy);
+
+            if(normy < 1e-30){
+                super[i] = 0.0;
+            } else {
+                if(B(i,i+1) > 0.0){
+                    normy = -normy;
+                }
+                super[i] = normy;
+                for(unsigned int c = i+1; c<n; c++){
+                    B(i,c) /= -normy;
+                }
+                B(i,i+1) += 1.0;
+
+                // apply to rows i+1..m-1
+                for(unsigned int rr=i+1; rr<m; rr++){
+                    double s=0.0;
+                    for(unsigned int c2=i+1; c2<n; c2++){
+                        s += B(i,c2)*B(rr,c2);
+                    }
+                    s = -s / B(i,i+1);
+                    for(unsigned int c2=i+1; c2<n; c2++){
+                        B(rr,c2) += s*B(i,c2);
+                    }
+                }
+            }
+
+            // accumulate in V
+            if(normy > 1e-30){
+                for(unsigned int rr=0; rr<n; rr++){
+                    double s=0.0;
+                    for(unsigned int c2=i+1; c2<n; c2++){
+                        s += B(i,c2)*V(rr,c2);
+                    }
+                    s = -s / B(i,i+1);
+                    for(unsigned int c2=i+1; c2<n; c2++){
+                        V(rr,c2) += s*B(i,c2);
+                    }
+                }
+            }
+        }
+    }
+
+    // fill diag[] and super[]
+    for(unsigned int i=0; i<mn; i++){
+        diag[i] = B(i,i);
+        if(i < mn-1){
+            super[i] = ((i+1<n)? B(i,i+1) : 0.0);
+        }
+    }
+
+    // ----------------------------------------------------
+    // 2) Golub-Kahan Bidiagonal QR iteration
+
+    auto fabsd = [&](double x){return (x<0)?-x:x;};
+
+    for(int iterCount=0; iterCount<maxIter; iterCount++){
+        // zero out super[i] if it's small
+        int numZero=0;
+        for(unsigned int i=0; i<mn-1; i++){
+            double thresh = rankEps*(fabsd(diag[i]) + fabsd(diag[i+1]));
+            if(std::fabs(super[i]) < thresh){
+                super[i] = 0.0;
+                numZero++;
+            }
+        }
+        if(numZero == (int)(mn-1)){
+            break; // done
+        }
+
+        // find sub-block
+        unsigned int start=0, end=mn-1;
+        while(start<mn-1){
+            if(std::fabs(super[start]) < 1e-30){
+                start++;
+            } else {
+                break;
+            }
+        }
+        while(end>0){
+            if(std::fabs(super[end-1])<1e-30){
+                end--;
+            } else {
+                break;
+            }
+        }
+        if(start>=end-1){
+            continue;
+        }
+
+        // SHIFT
+        double alpha = diag[end-1];
+        double beta = 0.0;
+        if((end-2) < mn){
+            beta = super[end-2];
+        }
+        double shift=0.0;
+        if(end>=2){
+            double dd = diag[end-2];
+            double bb = (end>=3? super[end-3]:0.0);
+            double t = 0.5*(dd - alpha);
+            double sq = t*t + bb*bb;
+            double sign = (t>=0?1.0:-1.0);
+            shift = alpha - sign*std::sqrt(sq);
+        } else {
+            shift = alpha;
+        }
+
+        double x = diag[start] - shift;
+        double z = super[start];
+
+        // Givens sweeps
+        for(unsigned int k=start; k<end-1; k++){
+            // RIGHT GIVENS
+            double c=0.0, s=0.0;
+            {
+                if(std::fabs(z)<1e-30){
+                    c=1.0; s=0.0;
+                } else {
+                    double r = std::sqrt(x*x + z*z);
+                    c= x/r; 
+                    s= z/r;
+                }
+            }
+            double mk  = diag[k];
+            double mk1 = diag[k+1];
+            double sk  = super[k];
+            diag[k]   = c*mk - s*sk;
+            super[k]  = s*mk + c*sk;
+            diag[k+1] = c*mk1;
+
+            // apply to V
+            for(unsigned int row=0; row<n; row++){
+                double vrk  = V(row,k);
+                double vrk1 = V(row,k+1);
+                V(row,k)   = c*vrk - s*vrk1;
+                V(row,k+1) = s*vrk + c*vrk1;
+            }
+
+            if(k<end-2){
+                // LEFT GIVENS
+                x = super[k];
+                z = diag[k+1];
+                double r = std::sqrt(x*x + z*z);
+                if(r<1e-30){
+                    c=1.0; s=0.0;
+                } else {
+                    c=x/r; s=z/r;
+                }
+                super[k] = r;
+
+                double dk1 = diag[k+1];
+                double sk1 = super[k+1];
+                diag[k+1]  = c*dk1 - s*sk1;
+                super[k+1] = s*dk1 + c*sk1;
+
+                // apply to U, columns (k+1, k+2) if in range
+                if((k+2) < m){
+                    for(unsigned int row=0; row<m; row++){
+                        double uk1= U(row,k+1);
+                        double uk2= U(row,k+2);
+                        U(row,k+1) = c*uk1 - s*uk2;
+                        U(row,k+2) = s*uk1 + c*uk2;
+                    }
+                }
+                x= diag[k+1];
+                z= super[k+1];
+            }
+        }
+    }
+
+    // Now diag[] is ~ singular values (some might be negative)
+    for(unsigned int i=0; i<mn; i++){
+        if(diag[i]<0.0){
+            diag[i] = -diag[i];
+            // flip sign in U's column i
+            for(unsigned int r=0; r<m; r++){
+                U(r,i) = -U(r,i);
+            }
+        }
+    }
+
+    // sort descending
+    for(unsigned int i=0; i<mn; i++){
+        double bestVal=diag[i];
+        unsigned int bestPos=i;
+        for(unsigned int j=i+1; j<mn; j++){
+            if(diag[j]>bestVal){
+                bestVal=diag[j];
+                bestPos=j;
+            }
+        }
+        if(bestPos!=i){
+            double tmp=diag[i];
+            diag[i]=diag[bestPos];
+            diag[bestPos]=tmp;
+            // swap columns i,bestPos in U
+            for(unsigned int r=0; r<m; r++){
+                double t2= U(r,i);
+                U(r,i)= U(r,bestPos);
+                U(r,bestPos)= t2;
+            }
+            // swap columns i,bestPos in V
+            for(unsigned int r=0; r<n; r++){
+                double t2= V(r,i);
+                V(r,i)= V(r,bestPos);
+                V(r,bestPos)= t2;
+            }
+        }
+    }
+
+    for (int iterCount = 0; iterCount < maxIter; ++iterCount) {
+        // Detect negligible superdiagonals
+        int numZero = 0;
+        for (unsigned int i = 0; i < mn - 1; i++) {
+            double thresh = rankEps * (std::fabs(diag[i]) + std::fabs(diag[i + 1]));
+            if (std::fabs(super[i]) < thresh) {
+                super[i] = 0.0;
+                numZero++;
+            }
+        }
+        if (numZero == (int)(mn - 1)) break; // fully diagonal
+    
+        // Find active sub-block
+        unsigned int start = 0, end = mn - 1;
+        while (start < mn - 1 && std::fabs(super[start]) < 1e-30) start++;
+        while (end > 0 && std::fabs(super[end - 1]) < 1e-30) end--;
+        if (start >= end - 1) continue;
+    
+        // Use bottom 2x2 for Wilkinson shift
+        double shift = 0.0;
+        if (end >= 2) {
+            double a = diag[end - 2], b = super[end - 2], c = diag[end - 1];
+            double delta = (a - c) * 0.5;
+            double t = std::sqrt(delta * delta + b * b);
+            shift = c - (b * b) / (delta + ((delta >= 0) ? t : -t));
+        } else {
+            shift = diag[end - 1];
+        }
+    
+        double x = diag[start] - shift;
+        double z = super[start];
+    
+        for (unsigned int k = start; k < end - 1; k++) {
+            // Right Givens (affects V)
+            double r = std::sqrt(x * x + z * z);
+            double c = (r < 1e-30) ? 1.0 : x / r;
+            double s = (r < 1e-30) ? 0.0 : z / r;
+    
+            // Apply to bidiagonal
+            double t1 = diag[k], t2 = super[k];
+            diag[k]   = c * t1 - s * t2;
+            super[k]  = s * t1 + c * t2;
+            diag[k+1] = c * diag[k+1];
+    
+            // Apply to V (columns k, k+1)
+            for (unsigned int row = 0; row < n; row++) {
+                double vk = V(row, k), vk1 = V(row, k + 1);
+                V(row, k)     = c * vk - s * vk1;
+                V(row, k + 1) = s * vk + c * vk1;
+            }
+    
+            // Left Givens (affects U)
+            if (k < end - 2) {
+                x = super[k];
+                z = diag[k + 1];
+                r = std::sqrt(x * x + z * z);
+                c = (r < 1e-30) ? 1.0 : x / r;
+                s = (r < 1e-30) ? 0.0 : z / r;
+    
+                super[k]   = r;
+                diag[k + 1] = c * diag[k + 1] - s * super[k + 1];
+                super[k + 1] = s * diag[k + 1] + c * super[k + 1];
+    
+                // Apply to U (columns k+1, k+2)
+                if (k + 2 < m) {
+                    for (unsigned int row = 0; row < m; row++) {
+                        double uk1 = U(row, k + 1), uk2 = U(row, k + 2);
+                        U(row, k + 1) = c * uk1 - s * uk2;
+                        U(row, k + 2) = s * uk1 + c * uk2;
+                    }
+                }
+    
+                x = diag[k + 1];
+                z = super[k + 1];
+            }
+        }
+    }
+
+    // Build Sigma (m x n)
+    Matrix Sigma(m, n, 0.0);
+    for(unsigned int i=0; i<m && i<n; i++){
+        Sigma(i,i) = diag[i];
+    }
+
+    // Build Sigma^+ => (n x m)
+    Matrix SigmaPlus(n, m, 0.0);
+    for(unsigned int i=0; i<mn; i++){
+        double val = diag[i];
+        if(val>rankEps){
+            SigmaPlus(i,i)= 1.0/val;
+        } else {
+            SigmaPlus(i,i)= 0.0;
+        }
+    }
+
+    // Mtemp = V*(n x n)*SigmaPlus(n x m) => (n x m)
+    Matrix Mtemp = V.multiply(SigmaPlus);
+
+    // U^T => (m x m)
+    Matrix U_T(m, m, 0.0);
+    for(unsigned int r=0; r<m; r++){
+        for(unsigned int c=0; c<m; c++){
+            U_T(r,c)= U(c,r);
+        }
+    }
+
+    // Aplus => (n x m) = (n x m)*(m x m) => (n x m)
+    Matrix Aplus = Mtemp.multiply(U_T);
+
+    delete[] diag;
+    delete[] super;
+
+    return Aplus;
+}
+
 Matrix Matrix::pseudoInverse() const {
-    double tol = 10^(-8);
+    double tol = 1e-8;
     // Check if matrix is non-empty
     if (rows == 0 || cols == 0) {
         // std::cerr << "[ERROR] pseudoInverse: Empty matrix.\n";

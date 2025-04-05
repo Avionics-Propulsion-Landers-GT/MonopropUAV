@@ -1,5 +1,6 @@
 #include "Madgwick.h"
 #include <cmath>
+#include <iostream>
 
 Madgwick::Madgwick(double setGain, double setBeta, double startTime, std::vector<double>& initialOrientation) {
     gain = setGain;
@@ -54,9 +55,16 @@ std::vector<double> Madgwick::madgwickUpdate(std::vector<double>& q,
     return updatedQ;
 }
 
-void Madgwick::normalizeArray(std::vector<double>& array) {
-    double arrayMagnitude = magnitude(array);
-    for (double& val : array) val /= arrayMagnitude;
+void Madgwick::normalizeArray(std::vector<double>& v) {
+    double sumSquares = 0.0;
+    for (double val : v) {
+        sumSquares += val * val;
+    }
+
+    double norm = std::sqrt(sumSquares);
+    if (norm < 1e-9) return;
+
+    for (double& val : v) val /= norm;
 }
 
 double Madgwick::magnitude(std::vector<double>& array) {
