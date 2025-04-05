@@ -573,17 +573,13 @@ LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vecto
     // 1. Determine u_d
     Vector xd = toVector(desired_state);
     Vector xdotd = toVector(delta_desired_state);
-    Vector g_bias = toVector(G_VECTOR);
+    Vector g_bias = toVector(G_VECTOR).multiply(-1);
     Vector Axd = A.multiply(xd);
     Vector negAxd = Axd.multiply(-1);
     Vector r = (xdotd.add(negAxd)).add(g_bias);
     double rankEps = 1e-12;
     int maxIter = 100;
-    Matrix B_pinv = B.pseudoInverseGolubKahan(rankEps, maxIter);
-    std::cout << "B_pinv" << std::endl;
-    B_pinv.print();
-    std::cout << "B" << std::endl;
-    B.print();
+    Matrix B_pinv = B.pseudoInverseAuto(rankEps, maxIter);
     Vector u_d = B_pinv.multiply(r);
     std::vector<double> desired_command = toStdVector(u_d);
 

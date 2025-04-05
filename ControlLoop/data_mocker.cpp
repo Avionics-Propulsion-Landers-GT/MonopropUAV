@@ -279,7 +279,7 @@ int main() {
 
     // Create a file called state.csv to store the state.
     std::ofstream dataFile("state.csv");
-    dataFile << "Iteration,x,y,z,vx,vy,vz,theta_x,theta_y,theta_z,omega_x,omega_y,omega_z,thrust,a,b\n";
+    dataFile << "Iteration,x,y,z,vx,vy,vz,theta_x,theta_y,theta_z,omega_x,omega_y,omega_z,thrust,a,b,adot,bdot,addot,bddot\n";
 
     // This is the loop boolean. If it goes false, theloop stops.
     // The program sets this to false only once the data runs out,
@@ -410,7 +410,7 @@ int main() {
             latencyFile << iteration << "," << std::fixed << std::setprecision(6) << latency_ms << "," << frequency_hz << "\n";
 
             // Log the state to a data file for review & filter testing vs. original data
-            dataFile << iteration << "," << std::fixed << std::setprecision(6) << out.state[0][0] << "," << out.state[0][1] << "," << out.state[0][2] << "," << out.state[1][0] << "," << out.state[1][1] << "," << out.state[1][2] << "," << out.state[2][0] << "," << out.state[2][1] << "," << out.state[2][2] << "," << out.state[3][0] << "," << out.state[3][1] << "," << out.state[3][2] << "," << out.desired_command[0] << "," << out.desired_command[1] << "," << out.desired_command[2] << "\n";
+            dataFile << iteration << "," << std::fixed << std::setprecision(6) << out.state[0][0] << "," << out.state[0][1] << "," << out.state[0][2] << "," << out.state[1][0] << "," << out.state[1][1] << "," << out.state[1][2] << "," << out.state[2][0] << "," << out.state[2][1] << "," << out.state[2][2] << "," << out.state[3][0] << "," << out.state[3][1] << "," << out.state[3][2] << "," << out.desired_command[0] << "," << out.desired_command[1] << "," << out.desired_command[2] << "," << out.desired_command[3] << "," << out.desired_command[4] << "," << out.desired_command[5] << "," << out.desired_command[6] <<"\n";
             iteration = iteration+1;
 
             // End clock & 

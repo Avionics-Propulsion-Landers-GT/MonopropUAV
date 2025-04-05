@@ -36,7 +36,8 @@ class Matrix {
         bool luDecompose(Matrix& L, Matrix& U, Matrix& P) const;
         Matrix luInverse() const;
         // Matrix inverse() const;
-        Matrix pseudoInverseGolubKahan(double rankEps, int maxIter) const;
+        Matrix pseudoInverseJacobi(double rankEps, int maxIter) const;
+        Matrix pseudoInverseAuto(double rankEps, int maxIter) const;
         Matrix pseudoInverse() const;
         void sanitizeNaNs();
         bool isInvertible() const;

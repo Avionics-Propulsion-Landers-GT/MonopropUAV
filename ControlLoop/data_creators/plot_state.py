@@ -113,8 +113,8 @@ win_path4= f"\\\\wsl.localhost\\{distro_name}" + wsl_html_path4.replace("/", "\\
 
 fig5 = go.Figure()
 fig5.add_trace(go.Scatter(x=df["Iteration"], y=df["thrust"], mode='lines', name='Optimal Thrust [N]'))
-fig5.add_trace(go.Scatter(x=df["Iteration"], y=df["a"], mode='lines', name='Optimal A Gimbal [rad]'))
-fig5.add_trace(go.Scatter(x=df["Iteration"], y=df["b"], mode='lines', name='Optimal B Gimbal [rad]'))
+fig5.add_trace(go.Scatter(x=df["Iteration"], y=df["adot"], mode='lines', name='Optimal A Gimbal [rad]'))
+fig5.add_trace(go.Scatter(x=df["Iteration"], y=df["bdot"], mode='lines', name='Optimal B Gimbal [rad]'))
 
 fig5.update_layout(
     title="Desired Command State",
