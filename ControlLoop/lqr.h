@@ -38,6 +38,7 @@ private:
     Matrix R;
     Matrix K;
     double frobeniusNormDiff(const Matrix& A, const Matrix& B) const;
+    double frobeniusNorm(const Matrix& A) const;
 };
 
 #endif // LQR_H

@@ -555,6 +555,150 @@ Matrix Matrix::pseudoInverseJacobi(double rankEps, int maxIter) const
     return Aplus;
 }
 
+Matrix Matrix::controllabilityMatrix(const Matrix& B) const {
+    if (this->getRows() != this->getCols()) {
+        throw std::runtime_error("A must be square for controllability matrix.");
+    }
+    if (this->getRows() != B.getRows()) {
+        throw std::runtime_error("Matrix dimensions must agree (A.rows == B.rows).");
+    }
+
+    unsigned int n = this->getRows();
+    unsigned int m = B.getCols();
+    Matrix C(n, n * m, 0.0); // Controllability matrix: n x (n*m)
+
+    Matrix A_pow = Matrix(n); // Start with A^0 = I
+    for (unsigned int i = 0; i < n; ++i) {
+        Matrix term = A_pow.multiply(B); // A^i * B
+
+        for (unsigned int r = 0; r < n; ++r) {
+            for (unsigned int c = 0; c < m; ++c) {
+                C(r, i * m + c) = term(r, c);
+            }
+        }
+
+        A_pow = this->multiply(A_pow); // A^(i+1)
+    }
+
+    return C;
+}
+
+bool Matrix::isControllable(const Matrix& B, double tol) const {
+    Matrix C = this->controllabilityMatrix(B);
+    unsigned int n = this->getRows();
+    unsigned int rankC = C.rank(tol); // You can customize this internally
+
+    return rankC == n;
+}
+
+unsigned int Matrix::rank(double tol) const {
+    unsigned int m = this->getRows();
+    unsigned int n = this->getCols();
+    unsigned int minDim = std::min(m, n);
+
+    // Do thin SVD
+    Matrix A = *this;
+    Matrix U(m, n, 0.0);
+    Matrix Sigma(n, 1, 0.0);
+    Matrix V(n, n, 0.0);
+    A.thinJacobiSVD(U, Sigma, V, tol, 100); 
+
+    // Count singular values above threshold
+    unsigned int rank = 0;
+    for (unsigned int i = 0; i < minDim; ++i) {
+        if (Sigma(i, i) > tol) {
+            ++rank;
+        }
+    }
+
+    return rank;
+}
+
+
+
+
+void Matrix::thinJacobiSVD(Matrix& U, Matrix& Sigma, Matrix& V, double rankEps, int maxIter) const
+{
+    unsigned int m = this->rows;
+    unsigned int n = this->cols;
+    if (m < n) {
+        throw std::runtime_error("This version expects a tall (m>=n) matrix.");
+    }
+
+    Matrix A = *this;
+    V = Matrix(n, n, 0.0);
+    for (unsigned int i = 0; i < n; ++i)
+        V(i, i) = 1.0;
+
+    for (int iter = 0; iter < maxIter; ++iter) {
+        bool changed = false;
+
+        for (unsigned int p = 0; p < n - 1; ++p) {
+            for (unsigned int q = p + 1; q < n; ++q) {
+                double app = 0.0, aqq = 0.0, apq = 0.0;
+                for (unsigned int i = 0; i < m; ++i) {
+                    double aip = A(i, p), aiq = A(i, q);
+                    app += aip * aip;
+                    aqq += aiq * aiq;
+                    apq += aip * aiq;
+                }
+
+                double eps_orth = 1e-12 * std::sqrt(app * aqq);
+                if (std::fabs(apq) <= eps_orth || app < 1e-30 || aqq < 1e-30)
+                    continue;
+
+                changed = true;
+
+                double tau = (aqq - app) / (2.0 * apq);
+                double t = (tau >= 0.0 ? 1.0 : -1.0) / (std::fabs(tau) + std::sqrt(1.0 + tau * tau));
+                double c = 1.0 / std::sqrt(1.0 + t * t);
+                double s = c * t;
+
+                for (unsigned int i = 0; i < m; ++i) {
+                    double aip = A(i, p), aiq = A(i, q);
+                    A(i, p) = c * aip - s * aiq;
+                    A(i, q) = s * aip + c * aiq;
+                }
+
+                for (unsigned int i = 0; i < n; ++i) {
+                    double vip = V(i, p), viq = V(i, q);
+                    V(i, p) = c * vip - s * viq;
+                    V(i, q) = s * vip + c * viq;
+                }
+            }
+        }
+
+        if (!changed) break;
+    }
+
+    // Compute singular values
+    Matrix sigma(n, 1, 0.0);
+    for (unsigned int j = 0; j < n; ++j) {
+        double sum = 0.0;
+        for (unsigned int i = 0; i < m; ++i)
+            sum += A(i, j) * A(i, j);
+        sigma(j, 0) = std::sqrt(sum);
+    }
+
+    // Build U
+    U = Matrix(m, n, 0.0);
+    for (unsigned int j = 0; j < n; ++j) {
+        double sVal = sigma(j, 0);
+        if (sVal > rankEps) {
+            for (unsigned int i = 0; i < m; ++i)
+                U(i, j) = A(i, j) / sVal;
+        }
+    }
+
+    // Build Sigma
+    Sigma = Matrix(n, n, 0.0);
+    for (unsigned int j = 0; j < n; ++j) {
+        double sVal = sigma(j, 0);
+        Sigma(j, j) = (sVal > rankEps) ? sVal : 0.0;
+    }
+}
+
+
 Matrix Matrix::pseudoInverseAuto(double rankEps, int maxIter) const {
     unsigned int m = this->getRows();
     unsigned int n = this->getCols();

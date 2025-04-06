@@ -38,6 +38,10 @@ class Matrix {
         // Matrix inverse() const;
         Matrix pseudoInverseJacobi(double rankEps, int maxIter) const;
         Matrix pseudoInverseAuto(double rankEps, int maxIter) const;
+        void thinJacobiSVD(Matrix& U, Matrix& Sigma, Matrix& V, double rankEps, int maxIter) const;
+        Matrix controllabilityMatrix(const Matrix& B) const;
+        bool isControllable(const Matrix& B, double tol) const;
+        unsigned int rank(double tol) const;
         Matrix pseudoInverse() const;
         void sanitizeNaNs();
         bool isInvertible() const;

@@ -585,29 +585,26 @@ LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vecto
 
 
 
-    // u_d.print();
+    // Read in Q, R matrices
+    Matrix Q = toRectMatrix(Q_MATRIX, 12, 12);
+    Matrix R = toRectMatrix(R_MATRIX, 7, 7);
 
+    // Set state and setpoint in LQR controller
+    lqrController.setA(A);
+    lqrController.setB(B);
+    lqrController.setQ(Q);
+    lqrController.setR(R);
 
-    // // // Read in Q, R matrices
-    // Matrix Q = toRectMatrix(Q_MATRIX, 12, 12);
-    // Matrix R = toRectMatrix(R_MATRIX, 7, 7);
+    // Read in current + desired states
+    lqrController.setState(current_state);
+    lqrController.setPoint = toVector(desired_state); // Assuming setPoint is a std::vector
 
-    // // Set state and setpoint in LQR controller
-    // lqrController.setA(A);
-    // lqrController.setB(B);
-    // lqrController.setQ(Q);
-    // lqrController.setR(R);
+    // Compute error between current state and desired state
+    Matrix neg_setpoint = lqrController.setPoint.multiply(-1.0);
+    Vector state_error = lqrController.getState().add(Vector(neg_setpoint));
 
-    // // Read in current + desired states
-    // lqrController.setState(current_state);
-    // lqrController.setPoint = toVector(desired_state); // Assuming setPoint is a std::vector
-
-    // // Compute error between current state and desired state
-    // Matrix neg_setpoint = lqrController.setPoint.multiply(-1.0);
-    // Vector state_error = lqrController.getState().add(Vector(neg_setpoint));
-
-    // // Recalculate K if needed (e.g., time-varying system)
-    // lqrController.calculateK(dt);
+    // Recalculate K if needed (e.g., time-varying system)
+    lqrController.calculateK(dt);
 
     // // // // Compute control command: u = -K * state_error
     // Matrix negative_K = lqrController.getK().multiply(-1.0);
