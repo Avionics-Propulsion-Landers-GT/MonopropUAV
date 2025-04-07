@@ -75,6 +75,8 @@ global gimbal_speed;
 gimbal_speed = 5; % TODO: set
 global gimbal_acceleration;
 gimbal_acceleration =2; % TODO: set
+global dt; %discrete time step for the simulation
+dt = 0.001;
 
 simulate
 %% simulation function
@@ -84,9 +86,9 @@ function simulate()
     global T_max;
     global T_min;
     global gimbal_speed;
+    global dt;
 
     % Simulation parameters
-    dt = 0.001; % Time step (seconds): Specifies the resolution of the simulation. 
     t_end = 40; % Simulation time (seconds): The total duration for which the simulation runs.
     t = 0:dt:t_end; % Time vector: Discretized time values for the simulation, spanning from 0 to t_end with increments of dt.
     num_steps = length(t);  % Number of time steps: Determines the total number of iterations based on the time vector.
@@ -162,11 +164,58 @@ function simulate()
                                % Higher values ensure quicker corrections but may cause instability if set too high.
     Kd_att = [2.0; 2.0; 0.0];  % Derivative gains for Roll, Pitch, Yaw: Provides damping to prevent oscillations in attitude control.
 
-    x = 1:0.001:80;
+    % Time vector
+    x = 0:dt:t_end;
+    n = length(x);
     
-    tempGimbalCommands = [0.1*cos(0.5 * x); 0.1*sin(0.5* x); zeros(1, length(x))];
-    %tempGimbalCommands = [clip(x.*x.*0.0001, -pi/12, pi/12); clip(x.*x.*0.0001, -pi/12, pi/12); zeros(1, length(x))];
+    % Output vector (initialize)
+    gimbal_cmd = zeros(3, n); 
+    
+    % Parameters
+    max_angle = pi/12; % max magnitude in rad
+    min_duration = 1;  % seconds
+    max_duration = 5;  % seconds
+    
+    %Generate random x cmds
+    i = 1;
+    while i <= n
+        % Random duration in seconds, converted to steps
+        duration_sec = min_duration + (max_duration - min_duration) * rand();
+        duration_steps = round(duration_sec / dt);
+        
+        % Ensure we don't overshoot the vector length
+        end_i = min(i + duration_steps - 1, n);
+        
+        % Random command magnitude (positive or negative)
+        mag = (2*rand() - 1) * max_angle; % range: [-pi/12, +pi/12]
+        
+        % Apply to segment
+        gimbal_cmd(1, i:end_i) = mag;
+        
+        % Move to next segment
+        i = end_i + 1;
+    end
 
+    %Generate random y cmds
+    i = 1;
+    while i <= n
+        % Random duration in seconds, converted to steps
+        duration_sec = min_duration + (max_duration - min_duration) * rand();
+        duration_steps = round(duration_sec / dt);
+        
+        % Ensure we don't overshoot the vector length
+        end_i = min(i + duration_steps - 1, n);
+        
+        % Random command magnitude (positive or negative)
+        mag = (2*rand() - 1) * max_angle; % range: [-pi/12, +pi/12]
+        
+        % Apply to segment
+        gimbal_cmd(2, i:end_i) = mag;
+        
+        % Move to next segment
+        i = end_i + 1;
+    end
+ 
     for step = 1:num_steps
         % Current time
         t_current = t(step);  % Fetch the current time step value.
@@ -181,7 +230,7 @@ function simulate()
         euler_attitude_error = quaternion_to_euler(attitude_error);
         gimbal_goal = [clip(euler_attitude_error(1), -pi/12, pi/12); clip(euler_attitude_error(2), -pi/12, pi/12); 0];
 
-        thrust_gimbal_goal = tempGimbalCommands(:, step); %delete later
+        thrust_gimbal_goal = gimbal_cmd(:, step); %delete later when doing LQR
 
         gimbal_info = update_TVC(thrust_gimbal, thrust_gimbal_ang_vel, thrust_gimbal_goal, dt);
         thrust_gimbal = gimbal_info{1}; %thrust_gimbal needs to be a 3 x 1 vector
@@ -226,12 +275,15 @@ function simulate()
         gimbal_actuation_history(:, step) = thrust_gimbal; % Record actual gimbal actuation history (what its actual position is, not the gimbal cmd)
     end
     % Store to CSV file
-        filename = 'histories.csv';
-        % writematrix(filename,position_history');
+    filename = 'histories.csv';
+    writematrix(position_history', filename);
+
+    %close any open figures
+    close all
 
     %plot trajectory
     figure('Name', 'Trajectory Plot')
-    plot3(position_history(1,:), position_history(2,:), position_history(3,:), lineWidth = 2)
+    plot3(position_history(1,:), position_history(2,:), position_history(3,:), 'lineWidth', 2)
     %plot trajectory coordinates separately
     figure('Name', 'Trajectory Coordinates over Time')
     subplot(3, 1, 1)
@@ -288,8 +340,6 @@ function simulate()
     legend('CMD', 'Actual')
     title('Z gimbal')
 end
-
-simulate()
 
 %% updates the state with a given net force, net torque, and time step
 function state = update_dynamics(pos, vel, att, ang_vel, F_net, T_net, gimbal_ang_vel, delta_t)
