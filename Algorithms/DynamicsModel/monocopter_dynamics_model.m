@@ -226,12 +226,15 @@ function simulate()
         gimbal_actuation_history(:, step) = thrust_gimbal; % Record actual gimbal actuation history (what its actual position is, not the gimbal cmd)
     end
     % Store to CSV file
-        filename = 'histories.csv';
-        % writematrix(filename,position_history');
+    filename = 'histories.csv';
+    writematrix(position_history', filename);
+
+    %close any open figures
+    close all
 
     %plot trajectory
     figure('Name', 'Trajectory Plot')
-    plot3(position_history(1,:), position_history(2,:), position_history(3,:), lineWidth = 2)
+    plot3(position_history(1,:), position_history(2,:), position_history(3,:), 'lineWidth', 2)
     %plot trajectory coordinates separately
     figure('Name', 'Trajectory Coordinates over Time')
     subplot(3, 1, 1)
@@ -288,8 +291,6 @@ function simulate()
     legend('CMD', 'Actual')
     title('Z gimbal')
 end
-
-simulate()
 
 %% updates the state with a given net force, net torque, and time step
 function state = update_dynamics(pos, vel, att, ang_vel, F_net, T_net, gimbal_ang_vel, delta_t)
