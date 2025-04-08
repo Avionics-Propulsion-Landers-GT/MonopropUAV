@@ -312,8 +312,160 @@ bool Matrix::luDecompose(Matrix& L, Matrix& U, Matrix& P) const {
     return true;
 }
 
+double innerProduct(const Matrix& v1, const Matrix& v2) {
+    if (v1.getCols() != 1 || v2.getCols() != 1 || v1.getRows() != v2.getRows()) {
+        throw std::runtime_error("innerProduct: Inputs must be column vectors of same length.");
+    }
+    double sum = 0.0;
+    for (unsigned int i = 0; i < v1.getRows(); ++i) {
+        sum += v1(i, 0) * v2(i, 0);
+    }
+    return sum;
+}
+
+double vectorNorm(const Matrix& v) {
+    return std::sqrt(innerProduct(v, v));
+}
+
+Matrix reshapeVectorToMatrix(const Matrix& v, unsigned int n) {
+    if (v.getCols() != 1 || v.getRows() != n * n)
+        throw std::runtime_error("reshapeVectorToMatrix: vector size must be n^2 × 1.");
+
+    Matrix M(n, n, 0.0);
+    for (unsigned int i = 0; i < n; ++i) {
+        for (unsigned int j = 0; j < n; ++j) {
+            M(i, j) = v(i * n + j, 0);  // Row-major → tweak if you want column-major
+        }
+    }
+    return M;
+}
+Matrix solveCARE_FixedPoint(const Matrix& A, const Matrix& B, const Matrix& Q, const Matrix& R, const double& alpha) {
+    unsigned int n = A.getRows();
+    if (A.getCols() != n || B.getRows() != n || Q.getRows() != n || Q.getCols() != n ||
+        R.getRows() != B.getCols() || R.getCols() != B.getCols()) {
+        throw std::runtime_error("solveCARE_FixedPoint: dimension mismatch.");
+    }
+
+    Matrix P = Q;  // Initial guess
+    const int maxIter = 100;
+    const double tol = 1e-5;
+    Matrix At = A.transpose();
+    Matrix Bt = B.transpose();
+    Matrix Pk = P;
+
+    Matrix alphaMat(n);
+    alphaMat = alphaMat.multiply(alpha);
+
+    for (int iter = 0; iter < maxIter; ++iter) {
+        Matrix term1 = At.multiply(Pk);
+        Matrix term2 = Pk.multiply(A);
+        Matrix Ri = R.luInverse();
+        Matrix BRiBt = B.multiply(Ri).multiply(Bt);
+        Matrix term3 = (Pk.multiply(BRiBt).multiply(Pk)).multiply(-1);
+        Matrix residual = (term1.add(term2).add(term3).add(Q)).multiply(-1);
+        bool breakOut = false;
+
+    
+
+        Matrix dP(n, n, 0.0);
+        for (unsigned int i = 0; i < n; ++i) {
+            for (unsigned int j = 0; j < n; ++j) {
+                double scale = std::max(1.0, std::min(10.0, std::abs(Pk(i, j))));
+                double raw_step = residual(i, j) / scale;
+
+                double drift = std::abs(raw_step * alphaMat(i, j));
+                double rel_drift = drift / (std::abs(Pk(i,j)) + 1e-6);
+                std::cout << "Drift: " << rel_drift << "\n";
+                double abs_resid = std::abs(residual(i, j));
+
+                // Boost α if it's stuck
+                if (abs_resid > 0.05 && rel_drift < 0.5) {
+                    alphaMat(i, j) *= 1.2;
+                    if (alphaMat(i, j) > 50.0)
+                        alphaMat(i, j) = 50.0;
+                }
+
+                // Reduce α if already converging
+                if (abs_resid < 1e-10) {
+                    alphaMat(i, j) *= 0.95;
+                    if (alphaMat(i, j) < 1e-3)
+                        alphaMat(i, j) = 1e-3;
+                }
+
+                // if (Pk(i,j) > 10000) {
+                //     breakOut = true;
+                // }
+
+                dP(i, j) = raw_step * alphaMat(i, j);
+            }
+        }
+
+        Matrix Pk1 = Pk.add(dP);
+        // Matrix Pk1 = Pk1.add(Pk1.transpose()).multiply(0.5);
+
+        
+
+        // Convergence check
+        Matrix diff = residual;
+        double err = diff.frobeniusNorm();
+
+        std::cout << std::fixed << std::setprecision(10);
+        std::cout << "[CARE-FixedPoint] Iter " << iter + 1 << ", residual = " << err << ", P: \n"; Pk1.print();
+        std::cout << std::fixed << std::setprecision(5);
+        std::cout << "[CARE-FixedPoint] Residual: \n"; diff.print();
+        std::cout << "[CARE-FixedPoint] AlphaMat: \n"; alphaMat.print();
+
+
+        Pk = Pk1;
+
+        if ((err < tol) || breakOut) {
+            std::cout << "[CARE] Converged in " << iter << " iterations. \n";
+            break;
+        }
+        
+    }
+
+    return Pk;
+}
+
+Matrix solveCARE_diagonal(const Matrix& A, const Matrix& B, const Matrix& Q, const Matrix& R) {
+    unsigned int n = A.getRows();
+    Matrix P(n, n, 0.0);
+
+    for (unsigned int i = 0; i < n; ++i) {
+        double a = (B(i,i) * B(i,i)) / R(i,i);
+        double b = -2.0 * A(i,i);
+        double c = -Q(i,i);
+
+        double discriminant = b*b - 4*a*c;
+        if (discriminant < 0.0)
+            throw std::runtime_error("CARE (scalar): negative discriminant — no real solution.");
+
+        double P_i = (-b + std::sqrt(discriminant)) / (2*a);
+        P(i,i) = P_i;
+    }
+
+    return P;
+}
+
+
+
+double Matrix::frobeniusNorm() const {
+    double sum = 0.0;
+    for (unsigned int i = 0; i < this->rows; ++i) {
+        for (unsigned int j = 0; j < this->cols; ++j) {
+            double val = (*this)(i, j);
+            sum += val * val;
+        }
+    }
+    return std::sqrt(sum);
+}
+
+
 Matrix Matrix::pseudoInverseJacobi(double rankEps, int maxIter) const
 {
+
+
     // ----------------------------------------------------------------
     // 1) Setup:
     //    A is m x n with m >= n (tall).
@@ -322,8 +474,18 @@ Matrix Matrix::pseudoInverseJacobi(double rankEps, int maxIter) const
     // ----------------------------------------------------------------
     unsigned int m = this->rows; // e.g. 12
     unsigned int n = this->cols; // e.g. 7
+    bool flipped = false;
     if (m < n) {
-        throw std::runtime_error("This version expects a tall (m>=n) matrix. Use transpose or adapt the code.");
+        // std::cout << "[SVD] Flipping...\n";
+        Matrix At = *this;
+        Matrix At_orig = *this;
+        Matrix A = At.transpose();
+        Matrix A_orig = A_orig.transpose();
+        flipped = true;
+
+    } else {
+        Matrix A = *this;
+        Matrix A_orig = *this;
     }
 
     // std::cout << "[pseudoInverseJacobi] Building a THIN SVD for m x n = "
@@ -552,7 +714,11 @@ Matrix Matrix::pseudoInverseJacobi(double rankEps, int maxIter) const
     // std::cout << "4) (B^+ * B)^T ≈ B^+ * B: "
     //           << (approxEqual(BpBT, BpB) ? "✅" : "❌") << "\n";
 
-    return Aplus;
+    if (flipped) {
+        return Aplus.transpose();
+    } else {
+        return Aplus;
+    }
 }
 
 Matrix Matrix::controllabilityMatrix(const Matrix& B) const {
@@ -621,8 +787,10 @@ void Matrix::thinJacobiSVD(Matrix& U, Matrix& Sigma, Matrix& V, double rankEps, 
 {
     unsigned int m = this->rows;
     unsigned int n = this->cols;
+    bool flipped = false;
     if (m < n) {
-        throw std::runtime_error("This version expects a tall (m>=n) matrix.");
+        // std::cout << "[SVD] Flipping... \n";
+        flipped = true;
     }
 
     Matrix A = *this;
@@ -696,6 +864,12 @@ void Matrix::thinJacobiSVD(Matrix& U, Matrix& Sigma, Matrix& V, double rankEps, 
         double sVal = sigma(j, 0);
         Sigma(j, j) = (sVal > rankEps) ? sVal : 0.0;
     }
+
+    if (flipped) {
+        Matrix temp = V;
+        V = U.transpose();
+        U = temp.transpose();
+    }
 }
 
 
@@ -743,6 +917,36 @@ Matrix Matrix::pseudoInverseAuto(double rankEps, int maxIter) const {
     return B_pinv;
 }
 
+Matrix reActivate(const Matrix& activations) {
+    unsigned int m = activations.getRows();
+    unsigned int n = activations.getCols();
+
+    if (n != 1) {
+        std::cerr << "[expandActivationsTall] Error: Expected column vector.\n";
+        return Matrix(0, 0, 0); // or throw exception
+    }
+
+    // Count how many activations are non-zero (== 1.0)
+    unsigned int activeCount = 0;
+    for (unsigned int i = 0; i < m; ++i) {
+        if (activations(i, 0) == 1.0) {
+            ++activeCount;
+        }
+    }
+
+    // Create matrix with shape (m x activeCount)
+    Matrix result(m, activeCount, 0.0); // all zeros
+
+    unsigned int col = 0;
+    for (unsigned int i = 0; i < m; ++i) {
+        if (activations(i, 0) == 1.0) {
+            result(i, col) = 1.0;
+            ++col;
+        }
+    }
+
+    return result;
+}
 
 
 
