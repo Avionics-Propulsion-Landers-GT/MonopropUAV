@@ -619,10 +619,13 @@ unsigned int Matrix::rank(double tol) const {
 
 void Matrix::thinJacobiSVD(Matrix& U, Matrix& Sigma, Matrix& V, double rankEps, int maxIter) const
 {
+    unsigned int flipped = 0;
     unsigned int m = this->rows;
     unsigned int n = this->cols;
     if (m < n) {
-        throw std::runtime_error("This version expects a tall (m>=n) matrix.");
+        // throw std::runtime_error("This version expects a tall (m>=n) matrix.");
+        this->transpose();
+        flipped = 1;
     }
 
     Matrix A = *this;
@@ -667,6 +670,9 @@ void Matrix::thinJacobiSVD(Matrix& U, Matrix& Sigma, Matrix& V, double rankEps, 
                 }
             }
         }
+
+        // Restore matrix to original dimensions
+        if (flipped) this->transpose();
 
         if (!changed) break;
     }
