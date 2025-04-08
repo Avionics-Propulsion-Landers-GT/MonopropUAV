@@ -12,6 +12,7 @@ np.random.seed(30)
 # Near-zero angular velocities (rad/s) with tiny Gaussian noise
 gyro_noise_std = 0.005
 gyro = np.random.normal(0, gyro_noise_std, size=(num_points, 3))
+gyro[:, 1] += 0.2
 
 # Accelerometer: mostly gravity in Z, tiny noise in all axes
 accel_noise_std = 0.02

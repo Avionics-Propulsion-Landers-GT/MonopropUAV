@@ -36,11 +36,11 @@ class Matrix {
         void print() const;
         bool luDecompose(Matrix& L, Matrix& U, Matrix& P) const;
         Matrix luInverse() const;
-        // Matrix inverse() const;
         Matrix pseudoInverseJacobi(double rankEps, int maxIter) const;
         Matrix pseudoInverseAuto(double rankEps, int maxIter) const;
         void thinJacobiSVD(Matrix& U, Matrix& Sigma, Matrix& V, double rankEps, int maxIter) const;
         Matrix controllabilityMatrix(const Matrix& B) const;
+        double frobeniusNorm() const;
         bool isControllable(const Matrix& B, double tol) const;
         unsigned int rank(double tol) const;
         Matrix pseudoInverse() const;
@@ -51,5 +51,10 @@ class Matrix {
         Matrix exp(unsigned int terms) const;
 
 };
+
+Matrix reshapeVectorToMatrix(const Matrix& v, unsigned int n);
+Matrix solveCARE_FixedPoint(const Matrix& A, const Matrix& B, const Matrix& Q, const Matrix& R, const double & alpha);
+Matrix solveCARE_diagonal(const Matrix& A, const Matrix& B, const Matrix& Q, const Matrix& R);
+Matrix reActivate(const Matrix& activations);
 
 #endif
