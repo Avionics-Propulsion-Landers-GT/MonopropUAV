@@ -26,6 +26,7 @@ class Matrix {
         }
 
         Matrix add(const Matrix& other) const;
+        Matrix subtract(const Matrix& other) const;
         Matrix multiply(const Matrix& other) const;
         Matrix multiply(double scalar) const;
         Matrix transpose() const;

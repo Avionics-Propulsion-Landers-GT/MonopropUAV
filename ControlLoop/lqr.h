@@ -30,6 +30,9 @@ public:
 
     void calculateK(double dt); // Calculate K matrix
 
+    double frobeniusNormDiff(const Matrix& A, const Matrix& B) const;
+    double frobeniusNorm(const Matrix& A) const;
+
 private:
     Vector state;
     Matrix A;
@@ -37,8 +40,6 @@ private:
     Matrix Q;
     Matrix R;
     Matrix K;
-    double frobeniusNormDiff(const Matrix& A, const Matrix& B) const;
-    double frobeniusNorm(const Matrix& A) const;
 };
 
 #endif // LQR_H
