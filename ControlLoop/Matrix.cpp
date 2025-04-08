@@ -92,6 +92,21 @@ Matrix Matrix::add(const Matrix& other) const {
     return result;
 }
 
+// Subtraction
+Matrix Matrix::subtract(const Matrix& other) const {
+    // unsigned int rows = A.getRows();
+    // unsigned int cols = A.getCols();
+    if (rows != other.rows || cols != other.cols) return Matrix(0.0); //Error cannot subtract if not equal dimensions
+
+    Matrix C(rows, cols, 0.0);
+    for (unsigned int i = 0; i < rows; ++i) {
+        for (unsigned int j = 0; j < cols; ++j) {
+            C(i, j) = operator()(i, j) - other(i, j);
+        }
+    }
+    return C;
+}
+
 Matrix Matrix::multiply(const Matrix& other) const {
     if (cols != other.rows) return Matrix(0.0); //Error can't multiply matrix of these dimensions
 
