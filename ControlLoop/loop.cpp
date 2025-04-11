@@ -257,7 +257,7 @@ std::vector<double> toStdVector(const Matrix& mat) {
 
 
 // Execute the control loop.
-LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vector<std::vector<double>>& state, const std::vector<std::vector<double>>& prevState, SystemComponents& system, const std::vector<bool>& status, double dt, const std::vector<double>& desired_state, const std::vector<double>& delta_desired_state, const std::vector<double>& command, const std::vector<double>& prevCommand, const std::vector<double>& prevPrevCommand) {
+LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vector<std::vector<double>>& state, const std::vector<std::vector<double>>& prevState, SystemComponents& system, const std::vector<bool>& status, double dt, const std::vector<double>& desired_state, const std::vector<double>& delta_desired_state, const std::vector<double>& command, const std::vector<double>& prevCommand, const std::vector<double>& prevPrevCommand, unsigned int& iter) {
 
 
     // Read in values
@@ -542,7 +542,7 @@ LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vecto
     Vector rc = toVector(rc_raw);
 
     // 3. Construct rt
-    std::vector<double> rt_raw = {0, 0, -THRUST_OFFSET};
+    std::vector<double> rt_raw = {0, 0, -THRUST_OFFSET}; // May not be totally accurate
     Vector rt = toVector(rt_raw);
 
     // 4. Construct flat state vector and put it in custom class
@@ -599,8 +599,8 @@ LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vecto
     Vector r = (xdotd.add(negAxd)).add(g_bias);
     double rankEps = 1e-12;
     int maxIter = 100;
-    Matrix B_pinv = B.pseudoInverseAuto(rankEps, maxIter);
-    Vector u_d = B_pinv.multiply(r);
+    Matrix B_pinv = B.pseudoInverseJacobi(rankEps, maxIter);
+    Vector u_d = B_pinv.multiply(r); 
     // std::cout << "U:\n"; u_d.print();
     std::vector<double> desired_command = {u_d[0], 0, 0};
 
@@ -623,10 +623,14 @@ LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vecto
     Vector state_error = lqrController.getState().add(Vector(neg_setpoint));
 
     // Recalculate K if needed (e.g., time-varying system)
-    lqrController.calculateK(dt);
+    if (iter % 5 == 0) {
+        lqrController.calculateK(dt);
+    }
+
+
 
     // Compute control command: u = -K * state_error
-    // Matrix negative_K = lqrController.getK().multiply(-1.0);
+    Matrix negative_K = lqrController.getK().multiply(-1.0);
     // Vector control_command = u_d.add(negative_K.multiply(state_error));  // result is 7x1 Matrix
 
     // // // std::vector<double> newCommand = toStdVector(control_command);  // control_command is a Matrix (12x1)

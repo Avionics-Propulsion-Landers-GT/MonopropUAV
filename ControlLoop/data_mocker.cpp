@@ -299,7 +299,7 @@ int main() {
 
     // This is the iterator variable. It's useful for printing data
     // to the CSVs.
-    int iteration = 0;
+    unsigned int iteration = 0;
 
     // Track the latency.
     double latency_ms;
@@ -316,8 +316,8 @@ int main() {
     // is a struct with {state, status, command}.
     LoopOutput out;
 
-    // The state vector is {eulerAngles, position, angularVelocity, velocity}
-    out.state = {{0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}};
+    // The state vector is {position, veloccity, angles, ang vel}
+    out.state = {{0,0,0}, {0,0,0}, {0,0.2,0}, {0,0,0}};
     std::vector<std::vector<double>> prevState = out.state;
     std::vector<std::vector<double>> state2;
 
@@ -415,7 +415,7 @@ int main() {
             command2 = prevCommand;
             prevCommand = out.command;
            
-            out = loop(values, out.state, state2, system, status, dt, desired_state, delta_desired_state, out.command, command2, command3);
+            out = loop(values, out.state, state2, system, status, dt, desired_state, delta_desired_state, out.command, command2, command3, iteration);
         
 
             

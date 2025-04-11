@@ -173,10 +173,10 @@ void LQR::calculateK(double dt) {
     // std::cout << "B_r: " << B_r.getRows() << "x" << B_r.getCols() << std::endl;
 
 
-    // std::cout << "[CARE-IN] A_r:\n"; A_r.print();
-    // std::cout << "[CARE-IN] B_r:\n"; B_r.print();
-    // std::cout << "[CARE-IN] Q_r:\n"; Q_r.print();
-    // std::cout << "[CARE-IN] R:\n"; R.print();
+    std::cout << "[CARE-IN] A_r:\n"; A_r.print();
+    std::cout << "[CARE-IN] B_r:\n"; B_r.print();
+    std::cout << "[CARE-IN] Q_r:\n"; Q_r.print();
+    std::cout << "[CARE-IN] R:\n"; R.print();
 
     // 7. CARE on reduced system
     Matrix P_r = Q_r;
@@ -198,7 +198,7 @@ void LQR::calculateK(double dt) {
         P = solveCARE(A_r, B_r, Q_r, R);
     
         // P = solveCARE_diagonal(A_r, B_r, Q_r, R);
-        // std::cout << "[CARE] Solution matrix P:\n"; P.print();
+        std::cout << "[CARE] Solution matrix P:\n"; P.print();
     } catch (const std::exception& e) {
         // std::cerr << "Error solving CARE: " << e.what() << "\n";
     }

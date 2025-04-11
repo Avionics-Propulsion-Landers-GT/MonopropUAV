@@ -5,20 +5,19 @@
 #include "Vector.h"
 #include <cmath>
 #include <limits>
+#include <cassert>
 
 
 //Initialize data pointer to a double which allows for efficient array creation etc. and rows and cols
     
 //Matrix is stored in a 1D array because of memory and elements are stored in the array by row
 //Matrix constructor for all 0s, all 1s, or all constants
-Matrix::Matrix(unsigned int rows, unsigned int cols, double initVal)
-    : rows(rows), cols(cols), data(nullptr) {
-        if (rows > 0 && cols > 0) {
-            data = new double[rows * cols];
-            for (unsigned int i = 0; i < rows * cols; ++i) {
-                data[i] = initVal;
-            }
-        }
+Matrix::Matrix(unsigned int rows, unsigned int cols, double val)
+    : rows(rows), cols(cols) {
+    size_t total = rows * cols;
+    // std::cout << "[Matrix] ctor alloc: " << total << " elements\n";
+    data = (total > 0) ? new double[total] : nullptr;
+    for (size_t i = 0; i < total; ++i) data[i] = val;
 }
 
 //Identity Matrix Constructor
@@ -46,42 +45,58 @@ Matrix::Matrix(const Matrix& other) : rows(other.getRows()), cols(other.getCols(
 
 // Spencer -- Added copy assignment operator
 Matrix& Matrix::operator=(const Matrix& other) {
-    if (this == &other) return *this;  // Protect against self-assignment
+    if (this == &other) return *this;
 
-    // Clean up existing memory
-    delete[] data;
+    if (data != nullptr) {
+        // std::cout << "[Matrix] Freeing data at: " << static_cast<void*>(data)
+        //         << " with size: " << rows << " x " << cols << "\n";
+        delete[] data;
+    }
 
-    // Copy dimensions and allocate new memory
     rows = other.rows;
     cols = other.cols;
+
+    if (rows == 0 || cols == 0) {
+        data = nullptr;
+        return *this;
+    }
+
+    // std::cout << "[Matrix] Allocating data: " << rows << " x " << cols << "\n";
     data = new double[rows * cols];
 
-    // Deep copy the contents
     for (unsigned int i = 0; i < rows * cols; ++i) {
         data[i] = other.data[i];
     }
 
     return *this;
 }
+
        
 // Spencer -- Protected destructor, I was getting errors
 Matrix::~Matrix() {
-    if (data != nullptr) {
-        delete[] data;
-        data = nullptr;
-    }
+    delete[] data;  // delete[] is safe even on nullptr
+    data = nullptr;
 }
         
-//Reference to a matrix entry at row by col (allows for changing that entry)
 double& Matrix::operator()(unsigned int row, unsigned int col) {
-    static double dummyVar = 0.0;
-        if (row >= rows || col >= cols) {
-            return dummyVar;
-        }
-        return data[row * cols + col];
+    if (row >= rows || col >= cols) {
+        throw std::out_of_range(
+            "[Matrix::operator()] Write access out of bounds at (" + 
+            std::to_string(row) + ", " + std::to_string(col) + 
+            ") for matrix of size " + std::to_string(rows) + "x" + std::to_string(cols)
+        );
+    }
+    return data[row * cols + col];
 }
-//reference to a matrix entry at row by col (allows for value to be accessed but not to be changed as const promises to not change the object's state)
+
 const double& Matrix::operator()(unsigned int row, unsigned int col) const {
+    if (row >= rows || col >= cols) {
+        throw std::out_of_range(
+            "[Matrix::operator() const] Read access out of bounds at (" + 
+            std::to_string(row) + ", " + std::to_string(col) + 
+            ") for matrix of size " + std::to_string(rows) + "x" + std::to_string(cols)
+        );
+    }
     return data[row * cols + col];
 }
 
@@ -665,17 +680,22 @@ Matrix Matrix::controllabilityMatrix(const Matrix& B) const {
     for (unsigned int i = 0; i < n; ++i) {
         Matrix term = A_pow.multiply(B); // A^i * B
 
+        if (term.getRows() != n || term.getCols() != m) {
+            throw std::runtime_error("Unexpected shape in controllability computation.");
+        }
+
         for (unsigned int r = 0; r < n; ++r) {
             for (unsigned int c = 0; c < m; ++c) {
                 C(r, i * m + c) = term(r, c);
             }
         }
 
-        A_pow = this->multiply(A_pow); // A^(i+1)
+        A_pow = A_pow.multiply(*this); // Correct order for A^(i+1)
     }
 
     return C;
 }
+
 
 bool Matrix::isControllable(const Matrix& B, double tol) const {
     Matrix C = this->controllabilityMatrix(B);

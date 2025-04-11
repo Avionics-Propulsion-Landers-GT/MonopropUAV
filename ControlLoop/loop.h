@@ -28,7 +28,7 @@ void preciseLatLonToMeters(double lat, double deltaLat, double deltaLon, double 
 std::vector<double> weightedAverage(const std::vector<double>& v1, const std::vector<double>& v2, double weight1, double weight2);
 
 //set point will vary and is subject to change during flight. It will be passed as a 1x12 vector
-LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vector<std::vector<double>>& state, const std::vector<std::vector<double>>& prevState, SystemComponents& system, const std::vector<bool>& status, double dt, const std::vector<double>& desired_state, const std::vector<double>& delta_desired_state, const std::vector<double>& command, const std::vector<double>& prevCommand, const std::vector<double>& prevPrevCommand);
+LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vector<std::vector<double>>& state, const std::vector<std::vector<double>>& prevState, SystemComponents& system, const std::vector<bool>& status, double dt, const std::vector<double>& desired_state, const std::vector<double>& delta_desired_state, const std::vector<double>& command, const std::vector<double>& prevCommand, const std::vector<double>& prevPrevCommand, unsigned int& iter);
 
 
 #endif // LOOP_H
