@@ -96,6 +96,13 @@ std::vector<double> Madgwick::computeGradient(std::vector<double>& q,
 }
 
 std::vector<double> Madgwick::quaternionToEuler(std::vector<double>& quaternion) {
+
+    if (quaternion.size() != 4) {
+        std::cerr << "[Madgwick::quaternionToEuler] ERROR: Quaternion must have 4 elements. Got " 
+                  << quaternion.size() << "\n";
+        std::exit(EXIT_FAILURE);
+    }
+
     return {
         std::atan2(2 * (quaternion[0] * quaternion[1] + quaternion[2] * quaternion[3]), 
                    1 - 2 * (quaternion[1] * quaternion[1] + quaternion[2] * quaternion[2])),

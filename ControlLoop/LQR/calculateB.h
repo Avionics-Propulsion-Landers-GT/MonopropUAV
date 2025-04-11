@@ -17,7 +17,8 @@ Matrix calculateB(
     const Matrix& inertia,      // size 3x3
     const Matrix& inertia_s,
     // const Matrix& inertia_a,
-    const Matrix& inertia_b
+    const Matrix& inertia_b,
+    const Vector& angular_states
 );
 
 #endif // CALCULATE_B_H

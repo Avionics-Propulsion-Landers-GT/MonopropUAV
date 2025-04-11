@@ -35,7 +35,8 @@ Matrix calculateB(
     const Vector& rt,
     const Matrix& inertia,
     const Matrix& inertia_a,
-    const Matrix& inertia_b
+    const Matrix& inertia_b,
+    const Vector& angular_states
 ) {
     // Extract inertia values
     double Ixx = inertia(0,0);
@@ -60,10 +61,10 @@ Matrix calculateB(
     double T = -full_input[0];
     double a = full_input[1];
     double b = full_input[2];
-    double a_dot = full_input[3];
-    double b_dot = full_input[4];
-    double a_ddot = full_input[5];
-    double b_ddot = full_input[6];
+    double a_dot = angular_states[0];
+    double b_dot = angular_states[1];
+    double a_ddot = angular_states[2];
+    double b_ddot = angular_states[3];
 
     // Extract states
     double r_x = full_state[0];
@@ -268,34 +269,17 @@ Matrix calculateB(
         t74 * t138 * t153 + t75 * t138 * t152 + t81 * t138 * t147,
         -t75 * t138 * t147 + t73 * t138 * t153 - t80 * t138 * t152,
         -t74 * t138 * t147 + t73 * t138 * t152 - t79 * t138 * t153,
-        0.0, 0.0, 0.0,
-        // Padding zeros to align length
-        0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        0, 0, 0, 0, 0, 0,
-        -t81 * t118 * t138 + t75 * t138 * t142 + t74 * t138 * t144,
-         t75 * t118 * t138 + t73 * t138 * t144 - t80 * t138 * t142
-    };
-
-    std::vector<double> mt3 = {
-        t74 * t118 * t138 + t73 * t138 * t142 - t79 * t138 * t144,
-        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        -t81 * t119 * t138 + t75 * t138 * t143 + t74 * t138 * t145,
-         t75 * t119 * t138 + t73 * t138 * t145 - t80 * t138 * t143,
-         t74 * t119 * t138 + t73 * t138 * t143 - t79 * t138 * t145
     };
 
     std::vector<double> B_flat;
-    B_flat.reserve(12 * 7);
+    B_flat.reserve(12 * 3);
 
     B_flat.insert(B_flat.end(), mt1.begin(), mt1.end());
     B_flat.insert(B_flat.end(), mt2.begin(), mt2.end());
-    B_flat.insert(B_flat.end(), mt3.begin(), mt3.end());
+   
 
-    Matrix B(12, 7, 0.0);
-    for (unsigned int i = 0; i < 7; ++i) {
+    Matrix B(12, 3, 0.0);
+    for (unsigned int i = 0; i < 3; ++i) {
         for (unsigned int j = 0; j < 12; ++j) {
             B(j, i) = B_flat[i * 12 + j];
         }

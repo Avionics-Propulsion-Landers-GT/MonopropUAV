@@ -38,27 +38,8 @@ const double THRUST_OFFSET = 7*24*0.001; // thrust offset from CoM in meters
 std::vector<double> G_VECTOR = {0,0,0, 0,0,-9.80665, 0,0,0, 0,0,0};
 
 const std::vector<double> Q_MATRIX = { // 12 x 12
-    //  // Position (x, y, z)
-    //  10.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    //  0.0,10.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    //  0.0, 0.0,10.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
 
-    // // Linear velocity (vx, vy, vz)
-    //  0.0, 0.0, 0.0,  2.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    //  0.0, 0.0, 0.0,  0.0, 2.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    //  0.0, 0.0, 0.0,  0.0, 0.0, 2.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-
-    // // Angular position (roll, pitch, yaw)
-    //  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  8.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    //  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 8.0, 0.0,  0.0, 0.0, 0.0,
-    //  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 8.0,  0.0, 0.0, 0.0,
-
-    // // Angular velocity (wx, wy, wz)
-    //  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  1.0, 0.0, 0.0,
-    //  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 1.0, 0.0,
-    //  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 1.0
-
-            /* Starting values based of Bryson's Rule */
+    /* Starting values based of Bryson's Rule */
     // Position (x, y, z)
     1.78, 0.00, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
     0.00, 1.78, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
@@ -80,23 +61,12 @@ const std::vector<double> Q_MATRIX = { // 12 x 12
     0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 0.00, 4.00
 }; 
 
-const std::vector<double> R_MATRIX = { // 7 x 7
-    // 10, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-    // 0.0, 10, 0.0, 0.0, 0.0, 0.0, 0.0,
-    // 0.0, 0.0, 10, 0.0, 0.0, 0.0, 0.0,
-    // 0.0, 0.0, 0.0, 10, 0.0, 0.0, 0.0,
-    // 0.0, 0.0, 0.0, 0.0, 10, 0.0, 0.0,
-    // 0.0, 0.0, 0.0, 0.0, 0.0, 10, 0.0,
-    // 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 10
+const std::vector<double> R_MATRIX = { // 3 x 3
 
 /* Starting values based of Bryson's Rule */
-    0.01, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-    0.0, 16.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-    0.0, 0.0, 16.0, 0.0, 0.0, 0.0, 0.0,
-    0.0, 0.0, 0.0, 1.00, 0.0, 0.0, 0.0,
-    0.0, 0.0, 0.0, 0.0, 1.00, 0.0, 0.0,
-    0.0, 0.0, 0.0, 0.0, 0.0, 1.00, 0.0,
-    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.00
+    0.01, 0.0, 0.0, 
+    0.0, 16.0, 0.0, 
+    0.0, 0.0, 16.0, 
 };
 
 /*
@@ -287,7 +257,8 @@ std::vector<double> toStdVector(const Matrix& mat) {
 
 
 // Execute the control loop.
-LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vector<std::vector<double>>& state, const std::vector<std::vector<double>>& prevState, SystemComponents& system, const std::vector<bool>& status, double dt, const std::vector<double>& desired_state, const std::vector<double>& delta_desired_state, const std::vector<double>& command) {
+LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vector<std::vector<double>>& state, const std::vector<std::vector<double>>& prevState, SystemComponents& system, const std::vector<bool>& status, double dt, const std::vector<double>& desired_state, const std::vector<double>& delta_desired_state, const std::vector<double>& command, const std::vector<double>& prevCommand, const std::vector<double>& prevPrevCommand) {
+
 
     // Read in values
     std::vector<double> nineAxisIMU = values[0]; // Time, Gyro<[rad/s]>, Accel<[m/s2]>, Mag<[]>
@@ -527,6 +498,20 @@ LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vecto
     // Write the state vector
     std::vector<std::vector<double>> newState = {new_position, velocity, new_attitude, angular_velocity};
 
+  
+    // Angular states
+
+    double omega_a = (command[1]-prevCommand[1])/dt;
+    double omega_b = (command[2]-prevCommand[2])/dt;
+    
+    double omega_a_prev = (prevCommand[1]-prevPrevCommand[1])/dt;
+    double omega_b_prev = (prevCommand[2]-prevPrevCommand[2])/dt;
+    double alpha_a = (omega_a-omega_a_prev)/dt;
+    double alpha_b = (omega_b-omega_b_prev)/dt;
+
+    std::vector<double> angular_states = {omega_a, omega_b, alpha_a, alpha_b};
+
+
     // -------------------------- II. LQR --------------------------------------
 
 
@@ -578,17 +563,22 @@ LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vecto
     // 5. Construct input Vector
     Vector current_input = toVector(command);
 
+
+    
+
+    // current_input.print();
+
     // 6. Get MoIMs
     Matrix inertia = toMatrix(INERTIA);
     Matrix inertia_a = toMatrix(getInertiaA(command[1]));
     Matrix inertia_b = toMatrix(getInertiaB(command[2]));
     
     // 7. Calculate A and B Matrices
-    Matrix A = calculateA(m, f, Cd, area, current_state, current_input, rc, rt, inertia, inertia_a, inertia_b);
-    Matrix B = calculateB(m, f, Cd, area, current_state, current_input, rc, rt, inertia, inertia_a, inertia_b);
+    Matrix A = calculateA(m, f, Cd, area, toVector(desired_state), current_input, rc, rt, inertia, inertia_a, inertia_b, toVector(angular_states));
+    Matrix B = calculateB(m, f, Cd, area, toVector(desired_state), current_input, rc, rt, inertia, inertia_a, inertia_b, toVector(angular_states));
 
-    // A.sanitizeNaNs();
-    // B.sanitizeNaNs();
+    A.sanitizeNaNs();
+    B.sanitizeNaNs();
 
     // std::cout << "" << std::endl;
     // A.print();
@@ -611,13 +601,12 @@ LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vecto
     int maxIter = 100;
     Matrix B_pinv = B.pseudoInverseAuto(rankEps, maxIter);
     Vector u_d = B_pinv.multiply(r);
-    std::vector<double> desired_command = toStdVector(u_d);
-
-
+    // std::cout << "U:\n"; u_d.print();
+    std::vector<double> desired_command = {u_d[0], 0, 0};
 
     // Read in Q, R matrices
     Matrix Q = toRectMatrix(Q_MATRIX, 12, 12);
-    Matrix R = toRectMatrix(R_MATRIX, 7, 7);
+    Matrix R = toRectMatrix(R_MATRIX, 3, 3);
 
     // Set state and setpoint in LQR controller
     lqrController.setA(A);
@@ -636,7 +625,7 @@ LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vecto
     // Recalculate K if needed (e.g., time-varying system)
     lqrController.calculateK(dt);
 
-    // // // // Compute control command: u = -K * state_error
+    // Compute control command: u = -K * state_error
     // Matrix negative_K = lqrController.getK().multiply(-1.0);
     // Vector control_command = u_d.add(negative_K.multiply(state_error));  // result is 7x1 Matrix
 
@@ -646,7 +635,7 @@ LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vecto
     // std::vector<double> newCommand = toStdVector(control_command);
     // std::vector<double> error = toStdVector(state_error);
 
-    std::vector<double> newCommand = {0,0,0,0,0,0,0}; // Use in case of commenting for error checking
+    std::vector<double> newCommand = desired_command; 
     std::vector<double> error = {0,0,0};
 
     std::vector<bool> newStatus = {gpsSanityCheck, lidarStatus};

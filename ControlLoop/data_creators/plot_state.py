@@ -113,8 +113,8 @@ win_path4= f"\\\\wsl.localhost\\{distro_name}" + wsl_html_path4.replace("/", "\\
 
 fig5 = go.Figure()
 fig5.add_trace(go.Scatter(x=df["Iteration"], y=df["thrust"], mode='lines', name='Optimal Thrust [N]'))
-fig5.add_trace(go.Scatter(x=df["Iteration"], y=df["adot"], mode='lines', name='Optimal A Gimbal [rad]'))
-fig5.add_trace(go.Scatter(x=df["Iteration"], y=df["bdot"], mode='lines', name='Optimal B Gimbal [rad]'))
+fig5.add_trace(go.Scatter(x=df["Iteration"], y=df["a"], mode='lines', name='Optimal A Gimbal [rad]'))
+fig5.add_trace(go.Scatter(x=df["Iteration"], y=df["b"], mode='lines', name='Optimal B Gimbal [rad]'))
 
 fig5.update_layout(
     title="Desired Command State",
@@ -133,8 +133,8 @@ fig5.write_html(wsl_html_path5)
 win_path5= f"\\\\wsl.localhost\\{distro_name}" + wsl_html_path5.replace("/", "\\")
 
 # Open the HTML file in the default Windows browser using WSL
-subprocess.run(["chrome.exe", win_path])  # For Ubuntu 20.04+, use `wslview`
-subprocess.run(["chrome.exe", win_path2])
-subprocess.run(["chrome.exe", win_path3])
-subprocess.run(["chrome.exe", win_path4])
+# subprocess.run(["chrome.exe", win_path])  # For Ubuntu 20.04+, use `wslview`
+# subprocess.run(["chrome.exe", win_path2])
+# subprocess.run(["chrome.exe", win_path3])
+# subprocess.run(["chrome.exe", win_path4])
 subprocess.run(["chrome.exe", win_path5])

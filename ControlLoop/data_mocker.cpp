@@ -168,6 +168,16 @@ std::vector<double> multiply(const std::vector<double>& v, double scalar) {
     return result;
 }
 
+void printVector(const std::vector<double>& v, const std::string& label = "Vector") {
+    std::cout << label << " [";
+    for (size_t i = 0; i < v.size(); ++i) {
+        std::cout << v[i];
+        if (i < v.size() - 1)
+            std::cout << ", ";
+    }
+    std::cout << "]" << std::endl;
+}
+
 int main() {
 
     double dt = SET_DT;
@@ -279,7 +289,7 @@ int main() {
 
     // Create a file called state.csv to store the state.
     std::ofstream dataFile("state.csv");
-    dataFile << "Iteration,x,y,z,vx,vy,vz,theta_x,theta_y,theta_z,omega_x,omega_y,omega_z,thrust,a,b,adot,bdot,addot,bddot\n";
+    dataFile << "Iteration,x,y,z,vx,vy,vz,theta_x,theta_y,theta_z,omega_x,omega_y,omega_z,thrust,a,b\n";
 
     // This is the loop boolean. If it goes false, theloop stops.
     // The program sets this to false only once the data runs out,
@@ -311,9 +321,15 @@ int main() {
     std::vector<std::vector<double>> prevState = out.state;
     std::vector<std::vector<double>> state2;
 
-    // The command output is thrust, gimbal angle a, gimbal angle b, adot, bdot, ddot{a}, ddot{b}
+     // The command output is thrust, gimbal angle a, gimbal angle b, adot, bdot, ddot{a}, ddot{b}
     // We only use the first 3 outside the LQR
-    out.command = {0,0,0,0,0,0,0};
+    out.command = {0,0,0};
+    std::vector<double> prevCommand = out.command;
+    std::vector<double> command2 = prevCommand;
+    std::vector<double> command3;
+    
+
+   
 
     // Read the initial GPS readings via the function at the beginning of this program & print it
     std::vector<double> gps_init = readGPSInit(files[2]);
@@ -392,9 +408,16 @@ int main() {
                 
             */
             // std::cout << "[DEBUG] Entered loop() " << iteration << std::endl;
+                    
             state2 = prevState;
             prevState = out.state; 
-            out = loop(values, out.state, state2, system, status, dt, desired_state, delta_desired_state, out.command);
+            command3 = command2;
+            command2 = prevCommand;
+            prevCommand = out.command;
+           
+            out = loop(values, out.state, state2, system, status, dt, desired_state, delta_desired_state, out.command, command2, command3);
+        
+
             
 
             auto end = std::chrono::high_resolution_clock::now();
@@ -410,7 +433,7 @@ int main() {
             latencyFile << iteration << "," << std::fixed << std::setprecision(6) << latency_ms << "," << frequency_hz << "\n";
 
             // Log the state to a data file for review & filter testing vs. original data
-            dataFile << iteration << "," << std::fixed << std::setprecision(6) << out.state[0][0] << "," << out.state[0][1] << "," << out.state[0][2] << "," << out.state[1][0] << "," << out.state[1][1] << "," << out.state[1][2] << "," << out.state[2][0] << "," << out.state[2][1] << "," << out.state[2][2] << "," << out.state[3][0] << "," << out.state[3][1] << "," << out.state[3][2] << "," << out.desired_command[0] << "," << out.desired_command[1] << "," << out.desired_command[2] << "," << out.desired_command[3] << "," << out.desired_command[4] << "," << out.desired_command[5] << "," << out.desired_command[6] <<"\n";
+            dataFile << iteration << "," << std::fixed << std::setprecision(6) << out.state[0][0] << "," << out.state[0][1] << "," << out.state[0][2] << "," << out.state[1][0] << "," << out.state[1][1] << "," << out.state[1][2] << "," << out.state[2][0] << "," << out.state[2][1] << "," << out.state[2][2] << "," << out.state[3][0] << "," << out.state[3][1] << "," << out.state[3][2] << "," << out.command[0] << "," << out.command[1] << "," << out.command[2] <<"\n";
             iteration = iteration+1;
 
             // End clock & 

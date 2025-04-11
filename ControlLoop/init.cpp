@@ -29,8 +29,8 @@ SystemComponents init(std::vector<double> gpsInit, std::vector<std::vector<doubl
     double madgwickGain = 0.1; 
     double madgwickBeta = 0.001;
     double startTime = 0.0;
-    std::vector<double> initialOrientation = initState[2];
-    Madgwick madgwickFilter(madgwickGain, madgwickBeta, startTime, initialOrientation);
+    std::vector<double> initialOrientation = {0,0,0,0};
+    Madgwick madgwickFilter(madgwickGain, madgwickBeta, startTime, initialOrientation);// <-- the error is here
 
     // Fill the init GPS variables
     INIT_ALTITUDE = gpsInit[2];

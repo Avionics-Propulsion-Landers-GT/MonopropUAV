@@ -4,6 +4,8 @@
 #include "Matrix.h"
 #include "Vector.h"
 #include <cmath>
+#include <limits>
+
 
 //Initialize data pointer to a double which allows for efficient array creation etc. and rows and cols
     
@@ -157,6 +159,18 @@ double Matrix::determinant() const {
     return det;
 }
 
+double colVectorNorm(const Matrix& v)
+{
+    unsigned int n = v.getRows();
+    // Assume v.getCols() == 1
+    double sum = 0.0;
+    for (unsigned int i = 0; i < n; ++i) {
+        double val = v(i, 0);
+        sum += val * val;
+    }
+    return std::sqrt(sum);
+}
+
 double Matrix::cofactor (unsigned int row, unsigned int col) const {
     Matrix subMatrix = getSubMatrix(row, col);
     return ((row + col) % 2 == 0 ? 1.0 : -1.0) * subMatrix.determinant();
@@ -182,31 +196,6 @@ Matrix Matrix::getSubMatrix(unsigned int row, unsigned int col) const {
     return subMatrix;
 }
 
-// Matrix Matrix::inverse() const {
-//     if (rows != cols) {
-//         return Matrix(0,0, 0); //can't compute inverse if matrix is not square
-//     } else {
-//         double det = determinant();
-//         if (det == 0) {
-//             return Matrix(0,0, 0);
-//         }
-
-//         Matrix adj(rows, cols, 0);
-//         for (unsigned int i = 0; i < rows; ++i) {
-//             for (unsigned int j = 0; j < rows; ++j) {
-//                 adj(j, i) = cofactor(i,j);
-//             }
-//         }
-//         Matrix inv(rows, cols, 0);
-//         for (unsigned int i = 0; i < rows; ++i) {
-//             for (unsigned int j = 0; j < cols; ++j) {
-//                 inv(i,j) = adj(i,j) / det;
-//             }
-//         }
-//         return inv;
-//     }
-// }
-
 void Matrix::print() const {
     unsigned int precision = 4;
     for (unsigned int i = 0; i < rows; ++i) {
@@ -214,6 +203,33 @@ void Matrix::print() const {
             std::cout << std::setw(10) << std::fixed << std::setprecision(precision) << (*this)(i, j) << " ";
         }
         std::cout << std::endl;
+    }
+}
+
+Matrix Matrix::fromArray(int rows, int cols, const double* data, bool colMajor) {
+    Matrix result(rows, cols, 0.0);
+    if (colMajor) {
+        for (int j = 0; j < cols; ++j)
+            for (int i = 0; i < rows; ++i)
+                result(i, j) = data[j * rows + i];
+    } else {
+        for (int i = 0; i < rows; ++i)
+            for (int j = 0; j < cols; ++j)
+                result(i, j) = data[i * cols + j];
+    }
+    return result;
+}
+
+
+void Matrix::toArray(double* out, bool colMajor) const {
+    if (colMajor) {
+        for (int j = 0; j < this->cols; ++j)
+            for (int i = 0; i < this->rows; ++i)
+                out[j * this->rows + i] = (*this)(i, j);
+    } else {
+        for (int i = 0; i < this->rows; ++i)
+            for (int j = 0; j < this->cols; ++j)
+                out[i * this->cols + j] = (*this)(i, j);
     }
 }
 
@@ -354,116 +370,13 @@ Matrix reshapeVectorToMatrix(const Matrix& v, unsigned int n) {
     }
     return M;
 }
-Matrix solveCARE_FixedPoint(const Matrix& A, const Matrix& B, const Matrix& Q, const Matrix& R, const double& alpha) {
-    unsigned int n = A.getRows();
-    if (A.getCols() != n || B.getRows() != n || Q.getRows() != n || Q.getCols() != n ||
-        R.getRows() != B.getCols() || R.getCols() != B.getCols()) {
-        throw std::runtime_error("solveCARE_FixedPoint: dimension mismatch.");
-    }
 
-    Matrix P = Q;  // Initial guess
-    const int maxIter = 100;
-    const double tol = 1e-5;
-    Matrix At = A.transpose();
-    Matrix Bt = B.transpose();
-    Matrix Pk = P;
-
-    Matrix alphaMat(n);
-    alphaMat = alphaMat.multiply(alpha);
-
-    for (int iter = 0; iter < maxIter; ++iter) {
-        Matrix term1 = At.multiply(Pk);
-        Matrix term2 = Pk.multiply(A);
-        Matrix Ri = R.luInverse();
-        Matrix BRiBt = B.multiply(Ri).multiply(Bt);
-        Matrix term3 = (Pk.multiply(BRiBt).multiply(Pk)).multiply(-1);
-        Matrix residual = (term1.add(term2).add(term3).add(Q)).multiply(-1);
-        bool breakOut = false;
-
-    
-
-        Matrix dP(n, n, 0.0);
-        for (unsigned int i = 0; i < n; ++i) {
-            for (unsigned int j = 0; j < n; ++j) {
-                double scale = std::max(1.0, std::min(10.0, std::abs(Pk(i, j))));
-                double raw_step = residual(i, j) / scale;
-
-                double drift = std::abs(raw_step * alphaMat(i, j));
-                double rel_drift = drift / (std::abs(Pk(i,j)) + 1e-6);
-                std::cout << "Drift: " << rel_drift << "\n";
-                double abs_resid = std::abs(residual(i, j));
-
-                // Boost α if it's stuck
-                if (abs_resid > 0.05 && rel_drift < 0.5) {
-                    alphaMat(i, j) *= 1.2;
-                    if (alphaMat(i, j) > 50.0)
-                        alphaMat(i, j) = 50.0;
-                }
-
-                // Reduce α if already converging
-                if (abs_resid < 1e-10) {
-                    alphaMat(i, j) *= 0.95;
-                    if (alphaMat(i, j) < 1e-3)
-                        alphaMat(i, j) = 1e-3;
-                }
-
-                // if (Pk(i,j) > 10000) {
-                //     breakOut = true;
-                // }
-
-                dP(i, j) = raw_step * alphaMat(i, j);
-            }
-        }
-
-        Matrix Pk1 = Pk.add(dP);
-        // Matrix Pk1 = Pk1.add(Pk1.transpose()).multiply(0.5);
-
-        
-
-        // Convergence check
-        Matrix diff = residual;
-        double err = diff.frobeniusNorm();
-
-        std::cout << std::fixed << std::setprecision(10);
-        std::cout << "[CARE-FixedPoint] Iter " << iter + 1 << ", residual = " << err << ", P: \n"; Pk1.print();
-        std::cout << std::fixed << std::setprecision(5);
-        std::cout << "[CARE-FixedPoint] Residual: \n"; diff.print();
-        std::cout << "[CARE-FixedPoint] AlphaMat: \n"; alphaMat.print();
-
-
-        Pk = Pk1;
-
-        if ((err < tol) || breakOut) {
-            std::cout << "[CARE] Converged in " << iter << " iterations. \n";
-            break;
-        }
-        
-    }
-
-    return Pk;
+Matrix Identity(unsigned int n) {
+    Matrix I(n, n, 0.0);
+    for (unsigned int i = 0; i < n; ++i)
+        I(i, i) = 1.0;
+    return I;
 }
-
-Matrix solveCARE_diagonal(const Matrix& A, const Matrix& B, const Matrix& Q, const Matrix& R) {
-    unsigned int n = A.getRows();
-    Matrix P(n, n, 0.0);
-
-    for (unsigned int i = 0; i < n; ++i) {
-        double a = (B(i,i) * B(i,i)) / R(i,i);
-        double b = -2.0 * A(i,i);
-        double c = -Q(i,i);
-
-        double discriminant = b*b - 4*a*c;
-        if (discriminant < 0.0)
-            throw std::runtime_error("CARE (scalar): negative discriminant — no real solution.");
-
-        double P_i = (-b + std::sqrt(discriminant)) / (2*a);
-        P(i,i) = P_i;
-    }
-
-    return P;
-}
-
-
 
 double Matrix::frobeniusNorm() const {
     double sum = 0.0;
@@ -800,7 +713,6 @@ unsigned int Matrix::rank(double tol) const {
 
 void Matrix::thinJacobiSVD(Matrix& U, Matrix& Sigma, Matrix& V, double rankEps, int maxIter) const
 {
-    unsigned int flipped = 0;
     unsigned int m = this->rows;
     unsigned int n = this->cols;
     bool flipped = false;

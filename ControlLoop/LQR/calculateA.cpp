@@ -35,7 +35,8 @@ Matrix calculateA(
     const Vector& rt,           // size 3
     const Matrix& inertia,      // size 3×3
     const Matrix& inertia_a,
-    const Matrix& inertia_b
+    const Matrix& inertia_b,
+    const Vector& angular_states
 ) {
 
     // Extract from full inertia tensor
@@ -66,10 +67,11 @@ Matrix calculateA(
     double T          = full_input[0];
     double a          = full_input[1];
     double b          = full_input[2];
-    double a_dot      = full_input[3];
-    double b_dot      = full_input[4];
-    double a_dot_dot  = full_input[5];
-    double b_dot_dot  = full_input[6];
+    double a_dot      = angular_states[0];
+    double b_dot      = angular_states[1];
+    double a_dot_dot     = angular_states[2];
+    double b_dot_dot     = angular_states[3];
+
 
     // Position
     double r_x = full_state[0];

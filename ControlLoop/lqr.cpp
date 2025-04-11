@@ -4,6 +4,7 @@
 #include <cmath>
 #include <iostream>
 #include <iomanip>
+#include "solveCARE.h"
 
 
 LQR lqrController;
@@ -172,9 +173,10 @@ void LQR::calculateK(double dt) {
     // std::cout << "B_r: " << B_r.getRows() << "x" << B_r.getCols() << std::endl;
 
 
-    // std::cout << "[LQR] A_r:\n"; A_r.print();
-    // std::cout << "[LQR] B_r:\n"; B_r.print();
-    // std::cout << "[LQR] Q_r:\n"; Q_r.print();
+    // std::cout << "[CARE-IN] A_r:\n"; A_r.print();
+    // std::cout << "[CARE-IN] B_r:\n"; B_r.print();
+    // std::cout << "[CARE-IN] Q_r:\n"; Q_r.print();
+    // std::cout << "[CARE-IN] R:\n"; R.print();
 
     // 7. CARE on reduced system
     Matrix P_r = Q_r;
@@ -189,150 +191,33 @@ void LQR::calculateK(double dt) {
 
     B_r_t.thinJacobiSVD(U_b_t, Sigma_b, V_b_t, rankEps, 100);
 
-    // Matrix test = (U_b_t.multiply(Sigma_b).multiply(V_b_t.transpose())).transpose();
-
-
-    // std::cout << "[LQR] Test (" << test.getRows() << "x" << test.getCols() << "):" << std::endl;
-    // test.print();
-
-
-    U_b = V_b_t.transpose();
-    V_b = U_b_t;
-
-    int rank_b = 0;
-    Matrix activations_b = Matrix(rank, 1, 0);
-    for (unsigned int i = 0; i < Sigma_b.getRows(); ++i) {
-        if (Sigma_b(i, i) > rankEps) {
-            ++rank_b;
-            activations_b(i,0) = 1;
-        }
-    }
-    // std::cout << "[LQR] Effective input rank: " << rank_b << "\n";
-    // std::cout << "activations_b " << std::endl; activations_b.print();
-
-    Matrix U_eff = Matrix(U_b.getRows(), rank_b, 0);
-
-    int u_col = 0;
-    for (int i = 0; i < activations_b.getRows(); ++i) {
-        if (activations_b(i, 0) == 1) {
-            for (int row = 0; row < U_b.getRows(); ++row) {
-                U_eff(row, u_col) = U_b(row, i);
-            }
-            ++u_col;
-        }
-    }
-
-    Matrix Sigma_eff(rank_b, rank_b, 0.0);
-    int sigma_col = 0;
-    for (int i = 0; i < Sigma_b.getRows(); ++i) {
-        if (activations_b(i, 0) == 1) {
-            Sigma_eff(sigma_col, sigma_col) = Sigma_b(i, i);
-            ++sigma_col;
-        }
-    }
-
-    
-
-    Matrix V_b_eff(V_b.getRows(), rank_b, 0.0); // (n_u x rank_b)
-    int v_col = 0;
-    for (int i = 0; i < activations_b.getRows(); ++i) {
-        if (activations_b(i, 0) == 1) {
-            for (int row = 0; row < V_b.getRows(); ++row) {
-                V_b_eff(row, v_col) = V_b(row, i);
-            }
-            ++v_col;
-        }
-    }
-
-    if (rank < 7) {
-        Matrix temp = U_eff;
-        U_eff = V_b_eff;
-        V_b_eff = temp;
-    }
-
-    Matrix B_eff = Sigma_eff;
-
-    Matrix A_eff = V_b_eff.transpose().multiply(A_r.multiply(V_b_eff)); // A_eff = U_bᵗ * A_r * U_b
-    Matrix Q_eff = V_b_eff.transpose().multiply(Q_r.multiply(V_b_eff)); // Q_eff = U_bᵗ * Q_r * U_b
-    Matrix P_eff = V_b_eff.transpose().multiply(P_r.multiply(V_b_eff));
-    Matrix R_eff = U_eff.transpose().multiply(R.multiply(U_eff));
-
-    Matrix A_r_d = Matrix(rank_b).add(A_eff);
-    Matrix B_r_d = B_eff;
-
-    // std::cout << "[LQR] Sigma_b (" << Sigma_b.getRows() << "x" << Sigma_b.getCols() << "):" << std::endl;
-    // Sigma_b.print();
-
-    // std::cout << "[LQR] U_b (" << U_b.getRows() << "x" << U_b.getCols() << "):" << std::endl;
-    // U_b.print();
-
-    // std::cout << "[LQR] V_b (" << V_b.getRows() << "x" << V_b.getCols() << "):" << std::endl;
-    // V_b.print();
-
-    // std::cout << "[LQR] Sigma_eff (" << Sigma_eff.getRows() << "x" << Sigma_eff.getCols() << "):" << std::endl;
-    // Sigma_eff.print();
-
-    // std::cout << "[LQR] U_eff (" << U_eff.getRows() << "x" << U_eff.getCols() << "):" << std::endl;
-    // U_eff.print();
-
-    // std::cout << "[LQR] V_eff (" << V_b_eff.getRows() << "x" << V_b_eff.getCols() << "):" << std::endl;
-    // V_b_eff.print();
-
-    // std::cout << "[LQR] B_eff (" << B_eff.getRows() << "x" << B_eff.getCols() << "):" << std::endl;
-    // B_eff.print();
-
-    // std::cout << "[LQR] Q_eff (" << Q_eff.getRows() << "x" << Q_eff.getCols() << "):" << std::endl;
-    // Q_eff.print();
-
-    // std::cout << "[LQR] A_eff (" << A_eff.getRows() << "x" << A_eff.getCols() << "):" << std::endl;
-    // A_eff.print();
-
-    // std::cout << "[LQR] R_eff (" << R_eff.getRows() << "x" << R_eff.getCols() << "):" << std::endl;
-    // R_eff.print();
-
-    Matrix P = Matrix(P_eff.getRows(), P_eff.getCols(), 0.0);
+    Matrix P = Q_r;
 
     // Solve CARE AtP + PA- PB(R^-1)BtP + Q = 0
     try {
-        // Matrix P = solveCARE_FixedPoint(A_eff, B_eff, Q_eff, R_eff, -1);
-        P = solveCARE_diagonal(A_eff, B_eff, Q_eff, R_eff);
+        P = solveCARE(A_r, B_r, Q_r, R);
+    
+        // P = solveCARE_diagonal(A_r, B_r, Q_r, R);
         // std::cout << "[CARE] Solution matrix P:\n"; P.print();
     } catch (const std::exception& e) {
-        std::cerr << "Error solving CARE: " << e.what() << "\n";
+        // std::cerr << "Error solving CARE: " << e.what() << "\n";
     }
 
-    Matrix Ad_eff = Matrix(A_eff.getRows()).add(A_eff.multiply(dt));
-    Matrix Bd_eff = B_eff.multiply(dt);
-    Matrix BtPB = (Bd_eff.transpose()).multiply(P.multiply(Bd_eff));
 
-    Matrix term1 = ((R_eff.add(BtPB)).luInverse());
 
-    Matrix Kd_eff = term1.multiply(Bd_eff.transpose()).multiply(P).multiply(Ad_eff);
+    Matrix Ad_r = Matrix(A_r.getRows()).add(A_r.multiply(dt));
+    Matrix Bd_r = B_r.multiply(dt);
+    Matrix BtPB = (Bd_r.transpose()).multiply(P.multiply(Bd_r));
+
+    Matrix term1 = ((R.add(BtPB)).pseudoInverse());
+
+    Matrix Kd_eff = term1.multiply(Bd_r.transpose()).multiply(P).multiply(Ad_r);
 
     // std::cout << "[LQR] Kd_eff (" << Kd_eff.getRows() << "x" << Kd_eff.getCols() << "):" << std::endl;
     // Kd_eff.print();
 
-    // Reconstruct K_b with activations
-    Matrix reActivate_b = reActivate(activations_b);
-    Matrix Kd_b = reActivate_b.multiply(Kd_eff.multiply(reActivate_b.transpose()));
-
     // std::cout << "[LQR] Kd_b (" << Kd_b.getRows() << "x" << Kd_b.getCols() << "):" << std::endl;
     // Kd_b.print();
-
-    Matrix Kd_r = Matrix(rank, n_u, 0);
-
-    if (rank > 7) {
-        Kd_r = (U_b_t.transpose()).multiply(Kd_b.multiply(V_b_t));
-    } else {
-        Kd_r = (U_b_t.multiply(Kd_b).multiply(V_b_t.transpose())).transpose();
-    }
-
-    // std::cout << "[LQR] Kd_r (" << Kd_r.getRows() << "x" << Kd_r.getCols() << "):" << std::endl; Kd_r.print();
-
-    Matrix Kd = (T.multiply(Kd_r)).transpose();
-
-    std::cout << "[LQR] Kd (" << Kd.getRows() << "x" << Kd.getCols() << "):" << std::endl;
-    Kd.print();
 
     // Assuming T is orthogonal:
 
