@@ -83,11 +83,15 @@ SystemComponents init(std::vector<double> gpsInit, std::vector<std::vector<doubl
 
     EKF_Altitude ekf_z2(initial_z_state, dt, q_scalar_Z, r_scalar_Z, initial_p_Z);
 
+    EKF_Altitude ekf_thrust(initial_z_state, dt, q_scalar_Z, r_scalar_Z, initial_p_Z);
+
+
+
 
 
     
     LQR lqrController;
 
     // Return struct of filters
-    return {madgwickFilter, ekf_xy, ekf_z, ekf_x, ekf_y, ekf_z2, ekf_vx, ekf_vy, ekf_vz, ekf_ox, ekf_oy, ekf_oz, lqrController};
+    return {madgwickFilter, ekf_xy, ekf_z, ekf_x, ekf_y, ekf_z2, ekf_vx, ekf_vy, ekf_vz, ekf_ox, ekf_oy, ekf_oz, ekf_thrust, lqrController};
 }

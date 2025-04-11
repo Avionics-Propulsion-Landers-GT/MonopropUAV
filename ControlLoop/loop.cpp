@@ -280,6 +280,7 @@ LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vecto
     EKF_Altitude& ekf_ox = system.ekf_ox;
     EKF_Altitude& ekf_oy = system.ekf_oy;
     EKF_Altitude& ekf_oz = system.ekf_oz;
+    EKF_Altitude& ekf_thrust = system.ekf_thrust;
     LQR& lqrController = system.lqrController;
 
     // Constants
@@ -628,21 +629,42 @@ LoopOutput loop(const std::vector<std::vector<double>>& values, const std::vecto
     }
 
 
-
     // Compute control command: u = -K * state_error
     Matrix negative_K = lqrController.getK().multiply(-1.0);
-    // Vector control_command = u_d.add(negative_K.multiply(state_error));  // result is 7x1 Matrix
+    
+    Vector control_command = u_d.add(negative_K.multiply(state_error));  // result is 3x1 Matrix
+    Vector filtered_command = u_d.add(negative_K.multiply(state_error));
+    Vector change_command = (negative_K.multiply(state_error));
 
-    // // // std::vector<double> newCommand = toStdVector(control_command);  // control_command is a Matrix (12x1)
-    // // // std::vector<double> error = toStdVector(state_error);           // state_error is a Vector
 
-    // std::vector<double> newCommand = toStdVector(control_command);
-    // std::vector<double> error = toStdVector(state_error);
+    // sanity check on T, a, b
+    if (control_command[0] > 15) control_command[0] = 15;
+    if (control_command[0] < 0) control_command[0] = 0;
+    if (filtered_command[0] > 15) filtered_command[0] = 15;
+    if (filtered_command[0] < 0) filtered_command[0] = 0;
+    if (filtered_command[1] > 1) filtered_command[1] = 1;
+    if (filtered_command[1] < -1) filtered_command[1] = -1;
+    if (filtered_command[2] > 1) filtered_command[2] = 1;
+    if (filtered_command[2] < -1) filtered_command[2] = -1;
 
-    std::vector<double> newCommand = desired_command; 
-    std::vector<double> error = {0,0,0};
+
+    Vector measurement_T(2, 0.0);
+    measurement_T(0, 0) = filtered_command[0];
+    measurement_T(1, 0) = change_command[0];
+    ekf_thrust.update(measurement_T);
+    ekf_thrust.predict();
+    Vector estimated_state_thrust = ekf_thrust.getState();
+    filtered_command[0] = estimated_state_thrust(0, 0);
+    
+    
+    std::vector<double> filteredCommand = toStdVector(filtered_command);
+   
+    std::vector<double> newCommand = toStdVector(control_command);  
+    std::vector<double> error = toStdVector(state_error);
+
+    std::cout << "U:\n"; filtered_command.print();
 
     std::vector<bool> newStatus = {gpsSanityCheck, lidarStatus};
 
-    return {newState, newStatus, newCommand, error, desired_command};
+    return {newState, newStatus, newCommand, error, desired_command, filteredCommand};
 }

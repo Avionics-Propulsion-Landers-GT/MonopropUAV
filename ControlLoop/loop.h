@@ -19,6 +19,7 @@ struct LoopOutput {
     std::vector<double> command;         // Generated command based on state
     std::vector<double> error;         // Error between state and setpoint
     std::vector<double> desired_command;
+    std::vector<double> filteredCommand;
 };
 
 extern LQR lqrController;

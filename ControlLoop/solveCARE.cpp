@@ -86,7 +86,6 @@ Matrix solveCARE(const Matrix& A, const Matrix& B, const Matrix& Q, const Matrix
 
     double* H_data = new double[dim * dim];
     H.toArray(H_data, true);  // Fill in column-major
-    // std::cout << "[DEBUG] H_data @ " << static_cast<void*>(H_data) << ", size = " << (dim * dim) << "\n";
 
     double* vs = new double[dim * dim]();
     double* wr = new double[dim]();
@@ -99,7 +98,6 @@ Matrix solveCARE(const Matrix& A, const Matrix& B, const Matrix& Q, const Matrix
     char jobvs = 'V';
     char sort = 'S';
 
-    // std::cout << "[solveCARE] Querying optimal lwork...\n";
     dgees_(&jobvs, &sort, select_neg_real, &dim, H_data, &dim, &sdim,
            wr, wi, vs, &dim, &work_query, &lwork, bwork, &info);
 
@@ -117,9 +115,6 @@ Matrix solveCARE(const Matrix& A, const Matrix& B, const Matrix& Q, const Matrix
 
     lwork = static_cast<int>(work_query);
     double* work = new double[lwork]();
-    // std::cout << "[DEBUG] work buffer @ " << static_cast<void*>(work) << ", size = " << lwork << "\n";
-
-    // std::cout << "[solveCARE] Running LAPACK Schur decomposition...\n";
     int (*select_fn)(double*, double*) = select_neg_real;
     dgees_(&jobvs, &sort, select_fn, &dim, H_data, &dim, &sdim,
            wr, wi, vs, &dim, work, &lwork, bwork, &info);
