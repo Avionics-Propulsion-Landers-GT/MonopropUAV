@@ -31,7 +31,7 @@ function [symA, symB] = calculateLQRSym()
     full_input = [T a b a_dot b_dot a_dot_dot b_dot_dot];
     % full input matrix, used to take partials
     
-    syms f cDrag areaVar real
+    syms f cDrag areaVar real;
     % density, coefficient of drag and reference areaVar
     
     syms rc_x rc_y rc_z real;

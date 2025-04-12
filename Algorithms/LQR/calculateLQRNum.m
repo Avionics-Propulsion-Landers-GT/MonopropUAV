@@ -1,4 +1,8 @@
-function [K,S,P] = calculateLQRNum(symA, symB, Q, R, t, m_num, state, input, rc_num, rt_num, f_num, cDrag_num, areaVar_num, inertia_num, inertia_s_num, inertia_a_num, inertia_b_num)
+function [K,S,P] = calculateLQRNum(symA, symB, full_state, full_input, m, f, cDrag, areaVar, ...
+    rc, rt, inertia, inertia_s, inertia_a, inertia_b, ...
+    Q, R, t, m_num, state, input, rc_num, ...
+    rt_num, f_num, cDrag_num, areaVar_num, inertia_num, inertia_s_num, inertia_a_num, inertia_b_num)
+    
     A = subs(symA, [m f cDrag areaVar], [m_num f_num cDrag_num areaVar_num]);
     A = subs(symA, full_input, input);
     A = subs(symA, full_state, state);
