@@ -36,4 +36,4 @@ imu_data = pd.DataFrame({
 })
 
 # Save to CSV
-imu_data.to_csv("../imu_data.csv", index=False)
+imu_data.to_csv("../Data/imu_data.csv", index=False)

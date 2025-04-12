@@ -34,4 +34,4 @@ lidar_df = pd.DataFrame({
     "z": z
 })
 
-lidar_df.to_csv(f'../lidar_data.csv', index=False)
+lidar_df.to_csv(f'../Data/lidar_data.csv', index=False)

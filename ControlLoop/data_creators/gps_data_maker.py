@@ -64,5 +64,5 @@ gps_data_noisy = pd.DataFrame({
     "Altitude [m above MSL]": altitudes
 })
 
-csv_noisy_filename = "../gps_data.csv"
+csv_noisy_filename = "../Data/gps_data.csv"
 gps_data_noisy.to_csv(csv_noisy_filename, index=False)

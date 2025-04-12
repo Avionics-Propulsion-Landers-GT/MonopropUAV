@@ -1,8 +1,8 @@
 #ifndef CALCULATE_B_H
 #define CALCULATE_B_H
 
-#include "../Matrix.h"
-#include "../Vector.h"
+#include "../CustomLinear/Matrix.h"
+#include "../CustomLinear/Vector.h"
 
 // Computes the B matrix (12x7) from linearization
 Matrix calculateB(

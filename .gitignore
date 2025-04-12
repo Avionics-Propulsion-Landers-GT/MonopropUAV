@@ -14,3 +14,4 @@ ControlLoop/data_creators/dataEnv/
 ControlLoop/state_lookup.csv
 ControlLoop/state.csv
 ControlLoop/latency.csv
+*.o

@@ -1,20 +1,13 @@
 #include <iostream>
 #include <fstream>
-#include <sstream>
-#include <vector>
 #include <string>
 #include <iomanip> 
 #include <chrono>
 #include <numeric>
-#include "loop.h"
-#include "init.h"
+#include "Loop/loop.h"
+#include "Loop/init.h"
 #include "LQR/calculateA.h"
 #include "LQR/calculateB.h"
-#include "Matrix.h"
-#include "Vector.h"
-#include <thread>
-#include <algorithm> 
-#include <cmath>
 
 /*
 
@@ -60,7 +53,6 @@ std::vector<double> trajectory(double t) { // Replace with waypoint code
         return {0,0,0, 0,0,0, 0,0,0, 0,0,0};
     }
 }
-
 std::vector<double> delta_trajectory(double t) { // Replace with waypoint code
     const double pi = 3.141592653589793;
 
@@ -78,33 +70,26 @@ std::vector<double> delta_trajectory(double t) { // Replace with waypoint code
     }
 }
 
-
-
 std::vector<double> readGPSInit(const std::string& filename) {
     /*
         Read the first line of the GPS CSV file to get 
     */
     std::ifstream file(filename);
     std::vector<double> gpsInit;
-
     if (!file.is_open()) {
         std::cerr << "Error: Could not open GPS CSV file: " << filename << std::endl;
         return gpsInit;
     }
-
     std::string line;
-    
     // Skip the header line
     if (!std::getline(file, line)) {
         std::cerr << "Error: GPS CSV file is empty or header missing!" << std::endl;
         return gpsInit;
     }
-
     // Read the first data line
     if (std::getline(file, line)) {  // Read second line (first data row) to get init values
         std::stringstream ss(line);
         std::string value;
-        
         while (std::getline(ss, value, ',')) { // Parse comma-separated values
             try {
                 gpsInit.push_back(std::stod(value));  // Convert to double
@@ -116,14 +101,12 @@ std::vector<double> readGPSInit(const std::string& filename) {
     } else {
         std::cerr << "Error: No data found in GPS CSV!" << std::endl;
     }
-
     file.close();
     return gpsInit;  // Returns {longitude, latitude, altitude}
 }
 
 bool isNumber(const std::string& str) {
     bool hasDecimal = false;
-
     for (size_t i = 0; i < str.length(); ++i) {
         if (std::isdigit(str[i]) || (str[i] == '-' && i == 0)) {
             continue;  // Allow digits and a negative sign at the start
@@ -182,75 +165,13 @@ int main() {
 
     double dt = SET_DT;
 
-    // Test A and B matrix generation
-
-    // // Test data
-    // double m = 0.7;
-    // double f = 1.2;
-    // double cDrag = 0.8;
-    // double areaVar = 0.004;
-
-    // Vector full_state(12, 0.0); // State vector (12x1)
-    // full_state[0] = 1.0; full_state[1] = 2.0; full_state[2] = 3.0;  // Position
-    // full_state[3] = 0.1; full_state[4] = 0.2; full_state[5] = 5;  // Velocity
-    // full_state[6] = 0.05; full_state[7] = 0.1; full_state[8] = 0.15;  // Euler Angles
-    // full_state[9] = 0.01; full_state[10] = 0.02; full_state[11] = 0.03;  // Angular Velocities
-
-    // Vector full_input(7, 0.0);  // Input vector (7x1)
-    // full_input[0] = 5.0; full_input[1] = 0.1; full_input[2] = 0.2;  // Inputs
-    // full_input[3] = 0.01; full_input[4] = 0.02; full_input[5] = 0.001;
-    // full_input[6] = 0.002;
-
-    // Vector rc(3, 0.0);  // Position vector
-    // rc[0] = 0.001; rc[1] = 0.0; rc[2] = -0.001;
-
-    // Vector rt(3, 0.0);  // Rotation vector
-    // rt[0] = 0.0; rt[1] = 0.0; rt[2] = -0.2;
-
-    // // Inertia matrices
-    // Matrix inertia(3, 3, 0.0);
-    // inertia(0, 0) = 1.0;
-    // inertia(1, 1) = 1.0;
-    // inertia(2, 2) = 1.0;
-
-    // // Matrix inertia_s(3, 3, 0.0);
-    // // inertia_s(0, 0) = 1.1; inertia_s(1, 1) = 2.1; inertia_s(2, 2) = 3.1;
-
-    // Matrix inertia_a(3, 3, 0.0);
-    // inertia_a(0, 0) = 0.05; inertia_a(1, 1) = 0.05; inertia_a(2, 2) = 0.05;
-
-    // Matrix inertia_b(3, 3, 0.0);
-    // inertia_b(0, 0) = 0.05; inertia_b(1, 1) = 0.05; inertia_b(2, 2) = 0.05;
-
-    // // Call calculateA function
-    // Matrix B_out = calculateB(m, f, cDrag, areaVar, full_state, full_input, rc, rt, inertia, inertia_a, inertia_b);
-    // Matrix A_out = calculateA(m, f, cDrag, areaVar, full_state, full_input, rc, rt, inertia, inertia_a, inertia_b);
-
-    // // Print the resulting A matrix
-    // std::cout << "Calculated A matrix:" << std::endl;
-    // for (unsigned int i = 0; i < A_out.getRows(); ++i) {  // Iterate over rows (12 rows)
-    //     for (unsigned int j = 0; j < A_out.getCols(); ++j) {  // Iterate over columns (12 columns)
-    //         std::cout << A_out(i, j) << " ";  // Print each element of A
-    //     }
-    //     std::cout << std::endl;  // New line after each row
-    // }
-
-    // // Print the resulting B matrix
-    // std::cout << "Calculated B matrix:" << std::endl;
-    // for (unsigned int i = 0; i < B_out.getRows(); ++i) {  // Iterate over rows (12 rows)
-    //     for (unsigned int j = 0; j < B_out.getCols(); ++j) {  // Iterate over columns (12 columns)
-    //         std::cout << B_out(i, j) << " ";  // Print each element of A
-    //     }
-    //     std::cout << std::endl;  // New line after each row
-    // }
-
-    // Note to anyone using this: CHECK THESE PATHS!!
+    // Goes away for Electronics
     std::vector<std::string> files = {
-        "imu_data.csv",
-        "ax6_imu_data.csv",
-        "gps_data.csv",
-        "lidar_data.csv",
-        "uwb_combined_distances.csv"
+        "Data/imu_data.csv",
+        "Data/ax6_imu_data.csv",
+        "Data/gps_data.csv",
+        "Data/lidar_data.csv",
+        "Data/uwb_combined_distances.csv"
     };
 
     std::vector<std::ifstream> fileStreams;
@@ -284,11 +205,11 @@ int main() {
     // Create a file called latency.csv where we will store
     // performance data. It and state.csv initialize
     // in the cwd (/ControlLoop/)
-    std::ofstream latencyFile("latency.csv");
+    std::ofstream latencyFile("Data/latency.csv");
     latencyFile << "Iteration,Latency (ms)\n";
 
     // Create a file called state.csv to store the state.
-    std::ofstream dataFile("state.csv");
+    std::ofstream dataFile("Data/state.csv");
     dataFile << "Iteration,x,y,z,vx,vy,vz,theta_x,theta_y,theta_z,omega_x,omega_y,omega_z,thrust,a,b\n";
 
     // This is the loop boolean. If it goes false, theloop stops.
@@ -327,9 +248,6 @@ int main() {
     std::vector<double> prevCommand = out.command;
     std::vector<double> command2 = prevCommand;
     std::vector<double> command3;
-    
-
-   
 
     // Read the initial GPS readings via the function at the beginning of this program & print it
     std::vector<double> gps_init = readGPSInit(files[2]);
@@ -349,7 +267,6 @@ int main() {
     double time_spent;
     while (allFilesHaveData) {
         
-        // std::cout << "Completion... " << iteration << std::endl;
 
         // Start clock
         auto start = std::chrono::high_resolution_clock::now();
@@ -414,8 +331,23 @@ int main() {
             command3 = command2;
             command2 = prevCommand;
             prevCommand = out.command;
+
+            LoopInput in = {
+                values, 
+                out.state, 
+                state2, 
+                system, 
+                status, 
+                dt, 
+                desired_state, 
+                delta_desired_state, 
+                out.command, 
+                command2, 
+                command3, 
+                iteration
+            };
            
-            out = loop(values, out.state, state2, system, status, dt, desired_state, delta_desired_state, out.command, command2, command3, iteration);
+            out = loop(in);
         
 
             

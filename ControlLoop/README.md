@@ -1,41 +1,26 @@
 README - ControlLoop Testing
 
-Use this to compile. You can only compile from the MonopropUAV/ControlLoop directory.
-Make surethat you have g++ installed on your system.
+Has been drastically simplified as of 4/11.
 
-g++ -std=c++17 -o data_mocker data_mocker.cpp loop.cpp init.cpp updatedMadgwick.cpp  \\
-ExtendedKalmanFilterGeneral.cpp EKF_xy.cpp EKF_z.cpp lqr.cpp Vector.cpp \\
-Matrix.cpp LQR/calculateA.cpp LQR/calculateB.cpp
+All you need to do now is navigate to the ControlLoop directory, run:
 
-To generate the plots, navigate to WSL from command prompt or get WSL on your system. 
-It should look like this:
+~/MonopropUAV/ControlLoop$ make
 
-C:\Users\you\> wsl
+And then run
 
-you@YourLaptop:~$
+./data_mocker
 
-Once you are there, create a directory:
+Which will run the loop and fill up the output csv file.
+Reading the CSV file remains the same, naviagte to /data_creators
+and run:
 
-you@YourLaptop:~$ mkdir gtpl
-you@YourLaptop:~$ cd gtpl
+~/MonopropUAV/ControlLoop/data_creators$ python3 plot_state.py
 
-Then pull the repository into gtpl:
+Make sure you are either in the virtual environment (dataEnv) or 
+that you have plotly, numpy, and pandas on your system Python!
 
-you@YourLaptop:~/gtpl$ git pull main
-you@YourLaptop:~/gtpl cd MonopropUAV/ControlLoop/data_creators
+Note: To clean up .o files, please do:
 
-Source python libraries from the venv:
+~/MonopropUAV/ControlLoop$ make clean
 
-you@YourLaptop:~/gtpl/MonopropUAV/ControlLoop/data_creators$ source dataEnv/bin/activate
-
-Then run this Python program. It should automatically open a Plotly tab in Chrome.
-
-(dataEnv) you@YourLaptop:~/gtpl/MonopropUAV/ControlLoop/data_creators$ python3 plot_state.py
-
---> Opens Plotly Tab in Chrome
-
-If you can't do any of this for some reason, go to the file
-(MonopropUAV/ControlLoop/data_creators/plot_state.py) and ask chatgpt
-to modify the lines with "subprocess" in them to make it work for your
-operating system.
-
+Thanks!

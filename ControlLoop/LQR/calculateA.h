@@ -1,8 +1,8 @@
 #ifndef CALCULATE_A_H
 #define CALCULATE_A_H
 
-#include "../Matrix.h"
-#include "../Vector.h"
+#include "../CustomLinear/Matrix.h"
+#include "../CustomLinear/Vector.h"
 
 // Computes the A matrix (12x12) from linearization
 Matrix calculateA(

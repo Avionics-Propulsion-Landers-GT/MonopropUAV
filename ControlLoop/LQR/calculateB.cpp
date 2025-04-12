@@ -1,8 +1,6 @@
-#include "../Matrix.h"
-#include "../Vector.h"
+#include "../CustomLinear/Matrix.h"
+#include "../CustomLinear/Vector.h"
 #include <vector>
-#include <iostream>
-#include <cmath>
 
 inline double sign(double x) {
     return (x > 0) - (x < 0);

@@ -34,7 +34,7 @@ for v in velocity:
 df_full = pd.DataFrame(data_full, columns=["velocity", "alpha_rad", "beta_rad", "area", "cop_x", "cop_y", "cop_z"])
 
 # Save the updated CSV file with the full CoP vector
-full_file_path = '../state_lookup.csv'
+full_file_path = '../Data/state_lookup.csv'
 df_full.to_csv(full_file_path, index=False)
 
 

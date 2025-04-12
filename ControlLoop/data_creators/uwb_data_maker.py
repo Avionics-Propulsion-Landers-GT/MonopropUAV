@@ -47,7 +47,7 @@ def generate_mocked_uwb_data_with_real_anchors(num_points=20001, noise_std=0.00)
 
     # Combine into DataFrame
     uwb_data = pd.DataFrame({'Time': time, **distances})
-    uwb_data.to_csv(os.path.join(directory_path, 'uwb_combined_distances.csv'), index=False)
+    uwb_data.to_csv(os.path.join(directory_path, 'Data/uwb_combined_distances.csv'), index=False)
 
 # Run it
 generate_mocked_uwb_data_with_real_anchors()
