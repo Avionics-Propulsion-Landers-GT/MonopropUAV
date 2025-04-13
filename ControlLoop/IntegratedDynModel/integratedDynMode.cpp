@@ -5,6 +5,11 @@
 #include "../CustomLinear/Matrix.h"
 #include "../CustomLinear/Vector.h"
 #include "../CustomLinear/Quaternion.h"
+#include "../Loop/loop.h"
+#include "../Loop/init.h"
+#include "../LQR/lqr.h"
+#include "../LQR/calculateA.h"
+#include "../LQR/calculateB.h"
 
 using namespace std;
 
@@ -285,27 +290,47 @@ void simulate(RocketParams &P) {
     double dt = P.dt;
     int num_steps = static_cast<int>(round(t_end / dt)) + 1;
     
-    // Build time vector.
+    // Build time vector
     vector<double> time(num_steps);
     for (int i = 0; i < num_steps; i++) {
         time[i] = i * dt;
     }
     
-    // Initial conditions.
-    Vector pos(3, 0.0);            // 3x1 zero vector for position.
-    Vector vel(3, 0.0);            // 3x1 zero velocity.
-    // Initial attitude: identity quaternion (1, 0, 0, 0)
-    Quaternion att(1, 0, 0, 0);
-    Vector ang_vel(3, 0.0);        // angular velocity zero.
+    // Initial conditions
+    Vector pos(3, 0.0);            // 3x1 zero vector for position
+    std::vector<double> gpsInit = {pos(0,0), pos(1,0), pos(2,0)};
+    // Initialize position as a 3x1 vector, expected by init function defining SystemComponents
+    Vector vel(3, 0.0);            // 3x1 zero velocity
+    std::vector<double> vel_std = {vel(0,0), vel(1,0), vel(2,0)};
+    Quaternion att(1, 0, 0, 0);    // Initial attitude: identity quaternion
+    // Matrix attEulerMatrix = att.toEulerMatrix();
+    Vector att_euler(3, 0.0);      // Euler angles (roll, pitch, yaw)
+    std::vector<double> att_euler_std = {att_euler(0,0), att_euler(1,0), att_euler(2,0)};
+    Vector ang_vel(3, 0.0);        // angular velocity zero
+    std::vector<double> ang_vel_std = {ang_vel(0,0), ang_vel(1,0), ang_vel(2,0)};
+
     
-    // Fixed (zero) gimbal.
+    // Initialize control variables
     Vector thrust_gimbal(3, 0.0);
+    double F_thrust_mag = 0.0;
     
-    // Pre-allocate position history.
+    // Initialize LQR components
+    std::vector<std::vector<double>> initState = {{gpsInit},{vel_std}, {att_euler_std}, {ang_vel_std}};
+    SystemComponents system = init(gpsInit, initState, dt); 
+    unsigned int iter = 0;
+    std::vector<double> prevCommand = {0, 0, 0};
+    std::vector<double> prevPrevCommand = {0, 0, 0};
+    std::vector<bool> status = {true, true};
+    
+    // Pre-allocate history
     vector<Vector> pos_history;
+    vector<Vector> vel_history;
+    vector<Vector> command_history;
     pos_history.reserve(num_steps);
+    vel_history.reserve(num_steps);
+    command_history.reserve(num_steps);
     
-    // Build desired trajectory: pure vertical motion.
+    // Build desired trajectory: pure vertical motion
     vector<Vector> pos_desired;
     pos_desired.reserve(num_steps);
     double T_ascent = 10.0;
@@ -327,69 +352,166 @@ void simulate(RocketParams &P) {
         pos_desired.push_back(des);
     }
     
-    // Zero wind.
+    // Zero wind
     Vector v_wind(3, 0.0);
     
-    // Main simulation loop.
+    // Main simulation loop
     for (int step = 0; step < num_steps; step++) {
-        cout << "Step: " << step << " / " << num_steps << "\n";
-        // Gravity force (world frame).
-        Vector F_gravity(3, 0.0);
-        F_gravity(2,0) = -P.m * P.g;
+        // -------------------- LQR CONTROL CALCULATION --------------------
         
-        // Constant thrust magnitude, clipped to [T_min, T_max].
-        double F_thrust_mag = 50.0;
+        // 1. Convert current state to the format expected by the LQR
+        std::vector<double> position = {pos(0,0), pos(1,0), pos(2,0)};
+        std::vector<double> velocity = {vel(0,0), vel(1,0), vel(2,0)};
+        
+        // Convert quaternion to Euler angles for the LQR
+        Matrix euler_attitude_mat = att.toEulerMatrix();
+        // convert euler matrix to std::vector
+        std::vector<double> euler_attitude = {euler_attitude_mat(0,0), 
+                                              euler_attitude_mat(1,0), 
+                                              euler_attitude_mat(2,0)};
+        
+        std::vector<double> angular_velocity = {ang_vel(0,0), ang_vel(1,0), ang_vel(2,0)};
+        
+        // Current state in the format expected by LQR
+        std::vector<std::vector<double>> current_state = {position, velocity, euler_attitude, angular_velocity};
+        
+        // Previous state (use current state if it's the first iteration)
+        std::vector<std::vector<double>> previous_state = (step > 0) ? 
+                                                       current_state : current_state;
+        
+        // 2. Calculate desired state from trajectory
+        std::vector<double> desired_position = {pos_desired[step](0,0), 
+                                               pos_desired[step](1,0), 
+                                               pos_desired[step](2,0)};
+        
+        // Calculate velocity setpoint based on trajectory (simple difference if needed)
+        std::vector<double> desired_velocity = {0, 0, 0};
+        if (step < num_steps - 1) {
+            desired_velocity[0] = (pos_desired[step+1](0,0) - pos_desired[step](0,0)) / dt;
+            desired_velocity[1] = (pos_desired[step+1](1,0) - pos_desired[step](1,0)) / dt;
+            desired_velocity[2] = (pos_desired[step+1](2,0) - pos_desired[step](2,0)) / dt;
+        }
+        
+        // Full desired state vector
+        std::vector<double> desired_state = {
+            desired_position[0], desired_position[1], desired_position[2],
+            desired_velocity[0], desired_velocity[1], desired_velocity[2],
+            0, 0, 0,  // desired attitude (usually zero for hover)
+            0, 0, 0   // desired angular velocity (usually zero)
+        };
+        
+        // Delta desired state for LQR
+        std::vector<double> delta_desired_state(12, 0.0);
+        // Compute actual delta if needed based on trajectory
+        
+        // 3. Set up the input structure for the LQR loop function
+        std::vector<std::vector<double>> sensor_values = {
+            {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), 0, 0, 0, 0, 0, 0}, // Mock IMU data
+            {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), 0, 0, 0}, // Mock 6-axis IMU
+            {0, 0, pos(2,0)}, // Mock GPS
+            {0, pos(2,0)}, // Mock LIDAR
+            {0, pos(0,0), pos(1,0), 0} // Mock UWB
+        };
+        
+        // Create loop input structure
+        LoopInput loopInput = {
+            sensor_values,
+            current_state,
+            previous_state,
+            system,
+            status,
+            dt,
+            desired_state,
+            delta_desired_state,
+            prevCommand,
+            prevPrevCommand,
+            prevCommand,
+            iter
+        };
+        
+        // 4. Call the loop function to get control commands
+        LoopOutput loopOutput = loop(loopInput);
+        
+        // 5. Extract commands from the loop output
+        std::vector<double> command = loopOutput.filteredCommand;
+        
+        // Update previous commands for next iteration
+        prevPrevCommand = prevCommand;
+        prevCommand = command;
+        
+        // 6. Convert commands to thrust and gimbal angles
+        F_thrust_mag = command[0];  // Thrust magnitude
+        thrust_gimbal(0,0) = command[1];  // X-axis gimbal angle
+        thrust_gimbal(1,0) = command[2];  // Y-axis gimbal angle
+        
+        // Clamp thrust to limits
         if (F_thrust_mag < P.T_min) F_thrust_mag = P.T_min;
         if (F_thrust_mag > P.T_max) F_thrust_mag = P.T_max;
         
-        // cout << "Passed thrust limits.\n";
-        // Update COM and COP offsets.
+        // -------------------- DYNAMICS SIMULATION --------------------
+        
+        // Gravity force (world frame)
+        Vector F_gravity(3, 0.0);
+        F_gravity(2,0) = -P.m * P.g;
+        
+        // Update COM and COP offsets
         calculate_COM_and_COP_offset(P, thrust_gimbal);
         
-        // cout << "debug\n";
-        // Compute thrust force and torque (body frame).
+        // Compute thrust force and torque (body frame)
         pair<Vector, Vector> thrust = get_thrust_body(P, F_thrust_mag, thrust_gimbal);
         Vector F_thrust_body = thrust.first;
         Vector T_thrust_body = thrust.second;
-        // cout << "debug thrust force / torque\n";
-        // Compute drag force and torque.
+        
+        // Compute drag force and torque
         pair<Vector, Vector> drag = get_drag_body(P, att, vel, v_wind);
         Vector F_drag_body = drag.first;
         Vector T_drag_body = drag.second;
-        // cout << "debug drag forces\n";
-        // Transform body-frame forces to world frame using the attitude quaternion.
-        Matrix R_att = att.toRotationMatrix();  // 3x3 rotation matrix.
+        
+        // Transform body-frame forces to world frame
+        Matrix R_att = att.toRotationMatrix();
         Vector F_thrust_world = R_att.multiply(F_thrust_body);
         Vector F_drag_world = R_att.multiply(F_drag_body);
         Vector F_net = vectorAdd(F_gravity, vectorAdd(F_thrust_world, F_drag_world));
-        // cout << "debug transform\n";
-        // Total torque (only from thrust and drag, as gimbal torque is zero).
+        
+        // Total torque
         Vector T_net = R_att.multiply(T_thrust_body.add(T_drag_body));
-        // cout << "debug total torque\n";
-        // Update dynamics.
+        
+        // Update dynamics
         State st = update_dynamics(P, pos, vel, att, ang_vel, F_net, T_net, dt);
-        // cout << "debug update dynamics\n";
         pos = st.pos;
         vel = st.vel;
         att = st.att;
         ang_vel = st.ang_vel;
-        // cout << "debug update Dynamics\n";
-        // Record current position.
+        
+        // Record history
         pos_history.push_back(pos);
-        // cout << "end of iteration k";
+        vel_history.push_back(vel);
+        // command_history.push_back(Vector(3, {F_thrust_mag, thrust_gimbal(0,0), thrust_gimbal(1,0)}));
+        
+        // Increment iteration counter
+        iter++;
     }
     
-    // Write position history to CSV.
-    ofstream file("histories.csv");
+    // Write simulation history to CSV
+    ofstream file("simulation_results.csv");
     if (!file) {
-        cerr << "Error opening histories.csv for writing." << endl;
+        cerr << "Error opening simulation_results.csv for writing." << endl;
         return;
     }
+    
+    // Write header
+    file << "time,x,y,z,vx,vy,vz,thrust,gimbal_x,gimbal_y\n";
+    
+    // Write data rows
     for (int i = 0; i < num_steps; i++) {
-        file << pos_history[i](0,0) << "," << pos_history[i](1,0) << "," << pos_history[i](2,0) << "\n";
+        file << time[i] << ","
+             << pos_history[i](0,0) << "," << pos_history[i](1,0) << "," << pos_history[i](2,0) << ","
+             << vel_history[i](0,0) << "," << vel_history[i](1,0) << "," << vel_history[i](2,0) << ","
+             << command_history[i](0,0) << "," << command_history[i](1,0) << "," << command_history[i](2,0) << "\n";
     }
+    
     file.close();
-    cout << "Simulation complete. Position history written to histories.csv" << endl;
+    cout << "Simulation complete. Results written to simulation_results.csv" << endl;
 }
 
 //------------------------- Main Entry Point ---------------------------
