@@ -11,7 +11,10 @@
 //Initialize data pointer to a double which allows for efficient array creation etc. and rows and cols
     
 //Matrix is stored in a 1D array because of memory and elements are stored in the array by row
-Matrix::Matrix(unsigned int rows, unsigned int cols, double val)
+// default constructor
+Matrix::Matrix() : rows (0), cols (0), data(nullptr) {}
+
+Matrix::Matrix(unsigned int rows, unsigned int cols, double val = 0)
     : rows(rows), cols(cols) {
     size_t total = rows * cols;
     // std::cout << "[Matrix] ctor alloc: " << total << " elements\n";
@@ -30,6 +33,20 @@ Matrix::Matrix(unsigned int n)
                 data[i * n + i] = 1.0;
             }
         }
+}
+
+Matrix::Matrix(unsigned int r, unsigned int c, const double* d, FromArrayTag)
+    : rows(r), cols(c), data(nullptr) {
+    if (r == 0 || c == 0) {
+        throw std::invalid_argument("Rows and columns must be greater than zero");
+    }
+    if (d == nullptr) {
+        throw std::invalid_argument("Data pointer cannot be null");
+    }
+    data = new double[r * c];
+    for (unsigned int i = 0; i < r * c; ++i) {
+        data[i] = d[i];
+    }
 }
 
 // GetRows, GetCols
@@ -159,6 +176,72 @@ Matrix Matrix::transpose() const {
     }
     return result;
 }  
+
+Matrix Matrix::inverse() const {
+    if (rows != cols) {
+        return Matrix(0,0,0); //can't compute inverse if matrix is not square
+    } else {
+        double det = determinant();
+        if (det == 0) {
+            return Matrix(0,0,0);
+        }
+
+        Matrix adj(rows, cols);
+        for (unsigned int i = 0; i < rows; ++i) {
+            for (unsigned int j = 0; j < rows; ++j) {
+                adj(j, i) = cofactor(i,j);
+            }
+        }
+        Matrix inv(rows, cols);
+        for (unsigned int i = 0; i < rows; ++i) {
+            for (unsigned int j = 0; j < cols; ++j) {
+                inv(i,j) = adj(i,j) / det;
+            }
+        }
+        return inv;
+    }
+}
+
+double Matrix::determinant() const {
+    if (rows != cols) {
+        return 0;
+    }
+    //2x2: det = ad - bc
+    if (rows == 2) {
+        return (*this)(0,0) * (*this)(1,1) - (*this)(0,1) * (*this)(1,0);
+    }
+
+    double det = 0;
+    for (unsigned int i = 0; i < cols; ++i) {
+        det += (*this)(0,i) * cofactor (0,i);
+    }
+    return det;
+}
+
+double Matrix::cofactor (unsigned int row, unsigned int col) const {
+    Matrix subMatrix = getSubMatrix(row, col);
+    return ((row + col) % 2 == 0 ? 1.0 : -1.0) * subMatrix.determinant();
+}
+
+Matrix Matrix::getSubMatrix(unsigned int row, unsigned int col) const {
+    Matrix subMatrix (rows - 1, cols - 1);
+    unsigned int subRow = 0;
+    for (unsigned int i = 0; i < rows; ++i) {
+        if (i == row) {
+            continue;
+        }
+        unsigned int subCol = 0;
+        for (unsigned int j = 0; j < cols; ++j) {
+            if (j == col) {
+                continue;
+            }
+            subMatrix(subRow, subCol) = (*this)(i,j);
+            subCol++;
+        }
+        subRow++;
+    }
+    return subMatrix;
+}
 
 void Matrix::print() const {
     unsigned int precision = 4;

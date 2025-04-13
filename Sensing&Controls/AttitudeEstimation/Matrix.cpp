@@ -307,3 +307,4 @@ Quaternion Matrix::toQuaternion() const {
     }
 
     return Quaternion(w, x, y, z);
+}
