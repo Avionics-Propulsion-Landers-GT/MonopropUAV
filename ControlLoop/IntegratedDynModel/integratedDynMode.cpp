@@ -10,6 +10,11 @@
 #include "../LQR/lqr.h"
 #include "../LQR/calculateA.h"
 #include "../LQR/calculateB.h"
+#include "../Filters/EKFs/ExtendedKalmanFilterGeneral.h"
+#include "../Filters/EKFs/EKF_xy.h"
+#include "../Filters/EKFs/EKF_z.h"
+#include "../Filters/Madgwick/Madgwick.h"
+#include "../LQR/solveCARE.h"
 
 using namespace std;
 
@@ -358,7 +363,7 @@ void simulate(RocketParams &P) {
     // Main simulation loop
     for (int step = 0; step < num_steps; step++) {
         // -------------------- LQR CONTROL CALCULATION --------------------
-        
+        // std::cout << "Step: " << step << "\n";
         // 1. Convert current state to the format expected by the LQR
         std::vector<double> position = {pos(0,0), pos(1,0), pos(2,0)};
         std::vector<double> velocity = {vel(0,0), vel(1,0), vel(2,0)};
@@ -491,7 +496,8 @@ void simulate(RocketParams &P) {
         // Increment iteration counter
         iter++;
     }
-    
+    std::cout << "Simulation complete, printing to csv file.\n";
+
     // Write simulation history to CSV
     ofstream file("simulation_results.csv");
     if (!file) {
@@ -500,14 +506,15 @@ void simulate(RocketParams &P) {
     }
     
     // Write header
-    file << "time,x,y,z,vx,vy,vz,thrust,gimbal_x,gimbal_y\n";
+    file << "time,x,y,z,vx,vy,vz\n";
     
     // Write data rows
+    // PROBLEM HERE WITH THE COMMAND HISTORY OUTPUTS. UNCOMMENT, COMPILE AND RUN FOR MORE INFO - Justin
     for (int i = 0; i < num_steps; i++) {
         file << time[i] << ","
-             << pos_history[i](0,0) << "," << pos_history[i](1,0) << "," << pos_history[i](2,0) << ","
-             << vel_history[i](0,0) << "," << vel_history[i](1,0) << "," << vel_history[i](2,0) << ","
-             << command_history[i](0,0) << "," << command_history[i](1,0) << "," << command_history[i](2,0) << "\n";
+             << pos_history[i](0,0) << "," << pos_history[i](1,0) << "," << pos_history[i](2,0) << "," 
+             << vel_history[i](0,0) << "," << vel_history[i](1,0) << "," << vel_history[i](2,0) << "\n";
+            //  << command_history[i](0,0) << "," << command_history[i](1,0) << "," << command_history[i](2,0) << "\n";
     }
     
     file.close();

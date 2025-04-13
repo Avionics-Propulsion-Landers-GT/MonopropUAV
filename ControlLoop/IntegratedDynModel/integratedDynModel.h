@@ -13,6 +13,11 @@
 #include "../LQR/lqr.h"
 #include "../LQR/calculateA.h"
 #include "../LQR/calculateB.h"
+#include "../Filters/EKFs/ExtendedKalmanFilterGeneral.h"
+#include "../Filters/EKFs/EKF_xy.h"
+#include "../Filters/EKFs/EKF_z.h"
+#include "../Filters/Madgwick/Madgwick.h"
+#include "../LQR/solveCARE.h"
 
 using namespace std;
 
