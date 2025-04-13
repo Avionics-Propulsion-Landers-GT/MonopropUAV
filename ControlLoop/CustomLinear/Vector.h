@@ -1,10 +1,21 @@
 #ifndef VECTOR_H
 #define VECTOR_H
 #include "Matrix.h"
+
+// struct FromArrayTag {};
+// constexpr FromArrayTag FromArray{};
+
 class Vector : public Matrix {
+    // protected:
+    //     double* data;
+    //     unsigned int rows, cols;
+
     public:
         Vector(unsigned int rows, double initVal)
             : Matrix (rows, 1, initVal) {}
+        // deep copy constructor
+        // Vector(const Vector &other) : rows(other.getRows()), data(nullptr) {};
+        
         Vector(const Matrix& mat) : Matrix(mat) {
                 
             if (mat.getCols() == 1 && mat.getRows() > 0) {

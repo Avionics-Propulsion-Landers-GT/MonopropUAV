@@ -7,6 +7,27 @@ Quaternion::Quaternion() : data(new double[4] {0, 0, 0, 0}) {} //default constru
 
 Quaternion::Quaternion(double w, double x, double y, double z) : data(new double[4] {w, x, y, z}) {} //constructor with parameter
 
+// --- Deep copy constructor ---
+Quaternion::Quaternion(const Quaternion &other)
+    : data(new double[4])
+{
+    for (unsigned int i = 0; i < 4; i++) {
+        data[i] = other.data[i];
+    }
+}
+
+// --- Deep copy assignment operator ---
+Quaternion& Quaternion::operator=(const Quaternion &other) {
+    if (this == &other) 
+        return *this;
+    delete[] data;
+    data = new double[4];
+    for (unsigned int i = 0; i < 4; i++) {
+        data[i] = other.data[i];
+    }
+    return *this;
+}
+
 //destructor
 Quaternion::~Quaternion() {
     delete[] data;

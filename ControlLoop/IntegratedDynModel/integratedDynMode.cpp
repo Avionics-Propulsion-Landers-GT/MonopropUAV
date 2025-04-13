@@ -135,12 +135,13 @@ State update_dynamics(const RocketParams &P,
                       double delta_t)
 {
     State newState;
-    
+    // std::cout << "Translational update\n";
     // --- Translational update ---
     Vector accel = F_net.multiply(1.0 / P.m);
     Vector vel_new = vectorAdd(vel, vectorScale(accel, delta_t));
     Vector pos_new = vectorAdd(pos, vectorScale(vel_new, delta_t));
-    
+    // std::cout << "Rotational update\n";
+
     // --- Rotational update ---
     // Angular acceleration: ang_accel = Inv_I * T_net.
     Vector ang_accel = P.Inv_I.multiply(T_net);
@@ -148,21 +149,26 @@ State update_dynamics(const RocketParams &P,
     
     // Create an "omega quaternion" from the new angular velocity.
     // Standard formulation: ω_quat = [0, ωx, ωy, ωz]
+    // std::cout << "Quaternion update\n";
+
     Quaternion omega(0, ang_vel_new(0,0), ang_vel_new(1,0), ang_vel_new(2,0));
     // Compute quaternion derivative: q_dot = 0.5 * (att * ω_quat)
     Quaternion q_dot = att * omega * 0.5;
     // Euler integrate: att_new = att + q_dot * dt, then normalize.
     Quaternion att_new = att + q_dot * delta_t;
     att_new = att_new.normalize();
-    
+    // std::cout << "Assign new values\n";
+
     newState.pos = pos_new;
     newState.vel = vel_new;
     newState.accel = accel;
     newState.att = att_new;
     newState.ang_vel = ang_vel_new;
     newState.ang_accel = ang_accel;
-    
+    // std::cout << "Return new values\n";
+
     return newState;
+    // std::cout << "Returned\n";
 }
 
 //------------------------- Extrinsic Rotation Functions ---------------------------
@@ -240,15 +246,16 @@ pair<Vector, Vector> get_drag_body(const RocketParams &P, const Quaternion &att,
     Quaternion att_inv = att.inverse();
     Matrix R_body = att_inv.toRotationMatrix();
     Vector vel_rel_body = R_body.multiply(vel_rel);
-    cout << "get drag body func check 1\n";
+    
+    // vel_rel_body is a 0 vector right now. 
     double v_rel_norm = vel_rel_body.magnitude();
     // Build a diagonal vector for drag coefficients.
-    // future notes: SHIT DOESNT WORK!!!!! LOOPING INDEFINITELY - Justin
+    // is this really a diagonal "vector"??? - Justin
     Vector diagVals(3, 0.0);
     diagVals(0,0) = P.Cd_x * P.A_x;
     diagVals(1,0) = P.Cd_y * P.A_y;
     diagVals(2,0) = P.Cd_z * P.A_z;
-    cout << "get drag body func check 2\n";
+    // cout << "get drag body func check 2\n";
     double factor = 0.5 * P.air_density * v_rel_norm;
     Vector drag_force = vel_rel_body; 
     // Elementwise multiply by diagVals.
@@ -256,7 +263,7 @@ pair<Vector, Vector> get_drag_body(const RocketParams &P, const Quaternion &att,
         double temp = drag_force(i,0) * diagVals(i,0);
         drag_force(i,0) = -factor * temp;
     }
-    cout << "get drag body func check 3\n";
+    // cout << "get drag body func check 3\n";
     // Drag torque: COP_offset x drag_force.
     Vector drag_torque = P.COP_offset.crossProduct(drag_force);
     return make_pair(drag_force, drag_torque);
@@ -339,36 +346,37 @@ void simulate(RocketParams &P) {
         // Update COM and COP offsets.
         calculate_COM_and_COP_offset(P, thrust_gimbal);
         
-        cout << "debug\n";
+        // cout << "debug\n";
         // Compute thrust force and torque (body frame).
         pair<Vector, Vector> thrust = get_thrust_body(P, F_thrust_mag, thrust_gimbal);
         Vector F_thrust_body = thrust.first;
         Vector T_thrust_body = thrust.second;
-        cout << "debug thrust force / torque\n";
+        // cout << "debug thrust force / torque\n";
         // Compute drag force and torque.
         pair<Vector, Vector> drag = get_drag_body(P, att, vel, v_wind);
         Vector F_drag_body = drag.first;
         Vector T_drag_body = drag.second;
-        cout << "debug drag forces\n";
+        // cout << "debug drag forces\n";
         // Transform body-frame forces to world frame using the attitude quaternion.
         Matrix R_att = att.toRotationMatrix();  // 3x3 rotation matrix.
         Vector F_thrust_world = R_att.multiply(F_thrust_body);
         Vector F_drag_world = R_att.multiply(F_drag_body);
         Vector F_net = vectorAdd(F_gravity, vectorAdd(F_thrust_world, F_drag_world));
-        cout << "debug transform\n";
+        // cout << "debug transform\n";
         // Total torque (only from thrust and drag, as gimbal torque is zero).
         Vector T_net = R_att.multiply(T_thrust_body.add(T_drag_body));
-        cout << "debug total torque\n";
+        // cout << "debug total torque\n";
         // Update dynamics.
         State st = update_dynamics(P, pos, vel, att, ang_vel, F_net, T_net, dt);
+        // cout << "debug update dynamics\n";
         pos = st.pos;
         vel = st.vel;
         att = st.att;
         ang_vel = st.ang_vel;
-        cout << "debug update Dynamics\n";
+        // cout << "debug update Dynamics\n";
         // Record current position.
         pos_history.push_back(pos);
-        cout << "end of iteration k";
+        // cout << "end of iteration k";
     }
     
     // Write position history to CSV.

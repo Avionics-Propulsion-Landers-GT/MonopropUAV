@@ -10,6 +10,9 @@ class Quaternion {
         Quaternion();
         ~Quaternion();
         Quaternion(double w, double x, double y, double z);
+        Quaternion(const Quaternion &other);
+        Quaternion& operator=(const Quaternion &other);
+
         double& operator[](unsigned int index);
         const double& operator[](unsigned int index) const;
         Quaternion operator+(const Quaternion& other) const;
