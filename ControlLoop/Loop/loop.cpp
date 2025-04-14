@@ -3,6 +3,8 @@
 #include "../LQR/lqr.h"
 #include "../LQR/calculateA.h"
 #include "../LQR/calculateB.h"
+#include <iostream>
+
 
 /*
 
@@ -68,8 +70,8 @@ const std::vector<double> Q_MATRIX = { // 12 x 12
 const std::vector<double> R_MATRIX = { // 3 x 3
 /* Starting values based of Bryson's Rule */
     1, 0.0, 0.0, 
-    0.0, 1600.0, 0.0, 
-    0.0, 0.0, 1600.0, 
+    0.0, 16.0, 0.0, 
+    0.0, 0.0, 16.0, 
 };
 
 

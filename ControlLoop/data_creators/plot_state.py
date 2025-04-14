@@ -133,8 +133,8 @@ fig5.write_html(wsl_html_path5)
 win_path5= f"\\\\wsl.localhost\\{distro_name}" + wsl_html_path5.replace("/", "\\")
 
 # Open the HTML file in the default Windows browser using WSL
-subprocess.run(["chrome.exe", win_path])  # For Ubuntu 20.04+, use `wslview`
-subprocess.run(["chrome.exe", win_path2])
-subprocess.run(["chrome.exe", win_path3])
-subprocess.run(["chrome.exe", win_path4])
+# subprocess.run(["chrome.exe", win_path])  # For Ubuntu 20.04+, use `wslview`
+# subprocess.run(["chrome.exe", win_path2])
+# subprocess.run(["chrome.exe", win_path3])
+# subprocess.run(["chrome.exe", win_path4])
 subprocess.run(["chrome.exe", win_path5])

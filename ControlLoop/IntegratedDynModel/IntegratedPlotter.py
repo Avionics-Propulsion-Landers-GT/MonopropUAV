@@ -1,44 +1,56 @@
 import pandas as pd
-import matplotlib.pyplot as plt
-import mpld3
+import plotly.graph_objs as go
+import plotly.offline as pyo
+import os
 import subprocess
 
-# Read the CSV file. Adjust the filename if needed.
-data = pd.read_csv("simulation_results.csv")
+# Get base directory
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
-# Figure 1: Plot positions (x, y, z) versus time
-fig1, ax1 = plt.subplots()
-ax1.plot(data['time'], data['x'], label='x')
-ax1.plot(data['time'], data['y'], label='y')
-ax1.plot(data['time'], data['z'], label='z')
-ax1.set_xlabel('Time')
-ax1.set_ylabel('Position')
-ax1.set_title('Position vs. Time')
-ax1.legend()
+# Load the simulation data
+csv_path = os.path.join(BASE_DIR, "build/simulation_results.csv")
+data = pd.read_csv(csv_path)
 
-# Figure 2: Plot velocities (vx, vy, vz) versus time
-fig2, ax2 = plt.subplots()
-ax2.plot(data['time'], data['vx'], label='vx')
-ax2.plot(data['time'], data['vy'], label='vy')
-ax2.plot(data['time'], data['vz'], label='vz')
-ax2.set_xlabel('Time')
-ax2.set_ylabel('Velocity')
-ax2.set_title('Velocity vs. Time')
-ax2.legend()
+# --- Position Plot ---
+trace_x = go.Scatter(x=data['time'], y=data['x'], mode='lines', name='x')
+trace_y = go.Scatter(x=data['time'], y=data['y'], mode='lines', name='y')
+trace_z = go.Scatter(x=data['time'], y=data['z'], mode='lines', name='z')
 
-# Convert the Matplotlib figures to HTML strings using mpld3.
-html_str_pos = mpld3.fig_to_html(fig1)
-html_str_vel = mpld3.fig_to_html(fig2)
+layout_pos = go.Layout(
+    title='Position vs. Time',
+    xaxis=dict(title='Time'),
+    yaxis=dict(title='Position')
+)
 
-# Save the HTML strings to files.
-with open("position_plot.html", "w") as f:
-    f.write(html_str_pos)
-with open("velocity_plot.html", "w") as f:
-    f.write(html_str_vel)
+fig_pos = go.Figure(data=[trace_x, trace_y, trace_z], layout=layout_pos)
 
-print("Plots saved to 'position_plot.html' and 'velocity_plot.html'.")
+# --- Velocity Plot ---
+trace_vx = go.Scatter(x=data['time'], y=data['vx'], mode='lines', name='vx')
+trace_vy = go.Scatter(x=data['time'], y=data['vy'], mode='lines', name='vy')
+trace_vz = go.Scatter(x=data['time'], y=data['vz'], mode='lines', name='vz')
 
-# Now open the HTML files in your browser via 'wslview' (common on WSL)
-# If you prefer to use chrome.exe, change the command accordingly.
-subprocess.run(["wslview", "position_plot.html"])
-subprocess.run(["wslview", "velocity_plot.html"])
+layout_vel = go.Layout(
+    title='Velocity vs. Time',
+    xaxis=dict(title='Time'),
+    yaxis=dict(title='Velocity')
+)
+
+fig_vel = go.Figure(data=[trace_vx, trace_vy, trace_vz], layout=layout_vel)
+
+# --- Save HTML files ---
+position_path = os.path.join(BASE_DIR, "position_plot.html")
+velocity_path = os.path.join(BASE_DIR, "velocity_plot.html")
+
+pyo.plot(fig_pos, filename=position_path, auto_open=False)
+pyo.plot(fig_vel, filename=velocity_path, auto_open=False)
+
+print("Plots saved to:")
+print(f"  {position_path}")
+print(f"  {velocity_path}")
+
+# --- Try to open the files in Windows browser (if WSL) ---
+try:
+    subprocess.Popen(["/mnt/c/Program Files/Google/Chrome/Application/chrome.exe", position_path])
+    subprocess.Popen(["/mnt/c/Program Files/Google/Chrome/Application/chrome.exe", velocity_path])
+except FileNotFoundError:
+    print("Couldn't open in Chrome. Please open the HTML files manually.")

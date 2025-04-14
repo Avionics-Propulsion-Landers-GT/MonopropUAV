@@ -115,7 +115,7 @@ void LQR::calculateK(double dt) {
     Matrix Sigma(n, n, 0.0);
     Matrix V(n, n, 0.0);
     Matrix C_T = C.transpose();
-    C_T.thinJacobiSVD(U, Sigma, V, rankEps, maxIter);
+    C_T.thinJacobiSVD(U, Sigma, V, rankEps, maxIter); // Do C_transpose for sanity
 
     // std::cout << "[LQR] Controllability matrix size: " << C.getRows() << "x" << C.getCols() << "\n";
     // std::cout << "\nC:" << std::endl; C.print();
@@ -123,23 +123,24 @@ void LQR::calculateK(double dt) {
     // std::cout << "\nU:" << std::endl; U.print(); 
     // std::cout << "\nV:" << std::endl; V.print();
     // std::cout << "\nSigma:" << std::endl;  Sigma.print();
+
+    // std::cout << "Rank of C: " << C.rank(1e-8) << std::endl;
     
     // 4. Determine rank from singular values
     int rank = 0;
     Matrix activations(m, 1, 0);
     for (unsigned int i = 0; i < m; ++i) {
-        if (Sigma(i, i) > rankEps) {
+        if (Sigma(i, i) > 1e-8) {
             ++rank;
             activations(i, 0) = 1;
         }
     }
 
-    // 5. Get basis for controllable subspace: columns of U(:, 0:rank-1)
-    Matrix T(V.getRows(), rank, 0.0);  // T will be (n x r)
+    Matrix T(V.getRows(), A.getRows(), 0.0);  // Final Kalman transformation T (n x n)
 
     int t_col = 0;
     for (int i = 0; i < activations.getRows(); ++i) {
-        if (activations(i, 0) == 1) {
+        if (activations(i, 0) == 1) {  // controllable
             for (int row = 0; row < V.getRows(); ++row) {
                 T(row, t_col) = V(row, i);
             }
@@ -147,11 +148,49 @@ void LQR::calculateK(double dt) {
         }
     }
 
-    // 6. Project system onto controllable subspace
+    for (int i = 0; i < activations.getRows(); ++i) {
+        if (activations(i, 0) == 0) {  // uncontrollable
+            for (int row = 0; row < V.getRows(); ++row) {
+                T(row, t_col) = V(row, i);
+            }
+            ++t_col;
+        }
+    }
+
+    // 6. Project system into Kalman space
     Matrix Tt = T.transpose(); // Tᵗ
-    Matrix A_r = Tt.multiply(A.multiply(T));
-    Matrix Q_r = Tt.multiply(Q.multiply(T));
-    Matrix B_r = Tt.multiply(B);
+    Matrix A_kal = Tt.multiply(A.multiply(T));     // Tᵗ A T
+    Matrix Q_kal = Tt.multiply(Q.multiply(T));     // Tᵗ Q T
+    Matrix B_kal = Tt.multiply(B);                 // Tᵗ B
+
+    // 7. Extract controllable subspace
+    Matrix A_r(rank, rank, 0.0);
+    for (int i = 0; i < rank; ++i) {
+        for (int j = 0; j < rank; ++j) {
+            A_r(i, j) = A_kal(i, j);
+        }
+    }
+
+    Matrix Q_r(rank, rank, 0.0);
+    for (int i = 0; i < rank; ++i) {
+        for (int j = 0; j < rank; ++j) {
+            Q_r(i, j) = Q_kal(i, j);
+        }
+    }
+
+    Matrix B_r(rank, B_kal.getCols(), 0.0);
+    for (int i = 0; i < rank; ++i) {
+        for (int j = 0; j < B_kal.getCols(); ++j) {
+            B_r(i, j) = B_kal(i, j);
+        }
+    }
+
+    Matrix Tc(T.getRows(), rank, 0.0);  // (n x r)
+    for (int row = 0; row < T.getRows(); ++row) {
+        for (int col = 0; col < rank; ++col) {
+            Tc(row, col) = T(row, col);
+        }
+    }
 
     // std::cout << "[LQR] Rank of controllability matrix: " << rank << "\n";
     // std::cout << "activations: " << std::endl; activations.print();
@@ -164,7 +203,7 @@ void LQR::calculateK(double dt) {
     // std::cout << "[CARE-IN] Q_r:\n"; Q_r.print();
     // std::cout << "[CARE-IN] R:\n"; R.print();
 
-    // 7. CARE on reduced system
+    // 8. CARE on reduced system
     Matrix P = Q_r;
     try {
         P = solveCARE(A_r, B_r, Q_r, R);
@@ -172,26 +211,21 @@ void LQR::calculateK(double dt) {
         std::cerr << "Error solving CARE: " << e.what() << "\n";
     }
 
-    // Do ZOH Discretization Approximation
+    // 9.  Do ZOH Discretization Approximation
     Matrix Ad_r = Matrix(A_r.getRows()).add(A_r.multiply(dt));
     Matrix Bd_r = B_r.multiply(dt);
     Matrix BtPB = (Bd_r.transpose()).multiply(P.multiply(Bd_r));
     Matrix term1 = ((R.add(BtPB)).pseudoInverseJacobi(1e-12, 100));
-    Matrix Kd_eff = term1.multiply(Bd_r.transpose()).multiply(P).multiply(Ad_r);
+    Matrix Kd_r = term1.multiply(Bd_r.transpose()).multiply(P).multiply(Ad_r);
 
-    // Project back into original space
-    Matrix reA = reActivate(activations);
-    Matrix Kd_reA = Kd_eff.multiply(reA.transpose());
-    Matrix Kd = Kd_reA.multiply(V);
+    // 10. Project back out of Kalman space (works because z = Tc^t*x)
+    Matrix Kd = Kd_r.multiply(Tc.transpose());
 
-    // std::cout << "[LQR] Kd_eff (" << Kd_eff.getRows() << "x" << Kd_eff.getCols() << "):" << std::endl;
-    // Kd_eff.print();
-    // std::cout << "[LQR] reA (" << reA.getRows() << "x" << reA.getCols() << "):" << std::endl;
-    // reA.print();
-    // std::cout << "[LQR] Kd_reA (" << Kd_reA.getRows() << "x" << Kd_reA.getCols() << "):" << std::endl;
-    // Kd_reA.print();
-    // std::cout << "[LQR] Kd (" << Kd.getRows() << "x" << Kd.getCols() << "):" << std::endl;
-    // Kd.print();
+
+    std::cout << "[LQR] Kd_r (" << Kd_r.getRows() << "x" << Kd_r.getCols() << "):" << std::endl;
+    Kd_r.print();
+    std::cout << "[LQR] Kd (" << Kd.getRows() << "x" << Kd.getCols() << "):" << std::endl;
+    Kd.print();
 
     // Return Kd
     K = Kd;
