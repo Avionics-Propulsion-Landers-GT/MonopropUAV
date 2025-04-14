@@ -524,7 +524,7 @@ LoopOutput loop(LoopInput in) {
     }
 
     // Compute control command: u = -K * state_error
-    Matrix negative_K = lqrController.getK().multiply(-1.0);
+    Matrix negative_K = lqrController.getK().multiply(0.0);
 
     // Compute control commands
     Vector control_command = u_d.add(negative_K.multiply(state_error));  // result is 3x1 Matrix

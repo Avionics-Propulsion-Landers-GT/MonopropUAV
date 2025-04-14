@@ -328,34 +328,41 @@ void simulate(RocketParams &P) {
     std::vector<bool> status = {true, true};
     
     // Pre-allocate history
-    vector<Vector> pos_history;
-    vector<Vector> vel_history;
-    vector<Vector> command_history;
+    std::vector<std::vector<double>> pos_history;
+    std::vector<std::vector<double>> vel_history;
+    std::vector<std::vector<double>> command_history;
     pos_history.reserve(num_steps);
     vel_history.reserve(num_steps);
     command_history.reserve(num_steps);
     
     // Build desired trajectory: pure vertical motion
-    vector<Vector> pos_desired;
-    pos_desired.reserve(num_steps);
-    double T_ascent = 10.0;
-    double T_hover_top = 5.0;
-    double T_descent = 10.0;
-    for (int i = 0; i < num_steps; i++) {
-        double t_val = time[i];
-        double z_desired = 0.0;
-        if (t_val <= T_ascent)
-            z_desired = (100.0 / T_ascent) * t_val;
-        else if (t_val <= T_ascent + T_hover_top)
-            z_desired = 100.0;
-        else if (t_val <= T_ascent + T_hover_top + T_descent)
-            z_desired = 100.0 - (100.0 / T_descent) * (t_val - T_ascent - T_hover_top);
-        else
-            z_desired = 0.0;
-        Vector des(3, 0.0);
-        des(2,0) = z_desired;
-        pos_desired.push_back(des);
-    }
+    // vector<Vector> pos_desired;
+    // pos_desired.reserve(num_steps);
+    // double T_ascent = 10.0;
+    // double T_hover_top = 5.0;
+    // double T_descent = 10.0;
+    // for (int i = 0; i < num_steps; i++) {
+    //     double t_val = time[i];
+    //     double z_desired = 0.0;
+    //     if (t_val <= T_ascent)
+    //         z_desired = (100.0 / T_ascent) * t_val;
+    //     else if (t_val <= T_ascent + T_hover_top)
+    //         z_desired = 100.0;
+    //     else if (t_val <= T_ascent + T_hover_top + T_descent)
+    //         z_desired = 100.0 - (100.0 / T_descent) * (t_val - T_ascent - T_hover_top);
+    //     else
+    //         z_desired = 0.0;
+    //     Vector des(3, 0.0);
+    //     des(2,0) = z_desired;
+    //     pos_desired.push_back(des);
+    // }
+
+    // build desired trajectory: ascent hop, 40 seconds, no hover, no descent
+    double T = 40.0;
+    Vector pos_desired(3, 0.0);
+    pos_desired(0,0) = 0.0;
+    pos_desired(1,0) = 0.0;
+    pos_desired(2,0) = 50.0;
     
     // Zero wind
     Vector v_wind(3, 0.0);
@@ -385,17 +392,18 @@ void simulate(RocketParams &P) {
                                                        current_state : current_state;
         
         // 2. Calculate desired state from trajectory
-        std::vector<double> desired_position = {pos_desired[step](0,0), 
-                                               pos_desired[step](1,0), 
-                                               pos_desired[step](2,0)};
+        std::vector<double> desired_position = {pos_desired(0,0), 
+                                               pos_desired(1,0), 
+                                               pos_desired(2,0)};
         
         // Calculate velocity setpoint based on trajectory (simple difference if needed)
-        std::vector<double> desired_velocity = {0, 0, 0};
-        if (step < num_steps - 1) {
-            desired_velocity[0] = (pos_desired[step+1](0,0) - pos_desired[step](0,0)) / dt;
-            desired_velocity[1] = (pos_desired[step+1](1,0) - pos_desired[step](1,0)) / dt;
-            desired_velocity[2] = (pos_desired[step+1](2,0) - pos_desired[step](2,0)) / dt;
-        }
+        std::vector<double> desired_velocity = {0, 0, pos_desired(2,0) / T};
+        // if (step < num_steps - 1) {
+        //     desired_velocity[0] = (pos_desired(0,0) - pos_desired[step](0,0)) / dt;
+        //     desired_velocity[1] = (pos_desired[step+1](1,0) - pos_desired[step](1,0)) / dt;
+        //     desired_velocity[2] = (pos_desired[step+1](2,0) - pos_desired[step](2,0)) / dt;
+        // }
+
         
         // Full desired state vector
         std::vector<double> desired_state = {
@@ -446,6 +454,8 @@ void simulate(RocketParams &P) {
         
         // 6. Convert commands to thrust and gimbal angles
         F_thrust_mag = command[0];  // Thrust magnitude
+        // std::cout << "F_thrust_mag: " << F_thrust_mag << "\n";
+        // debugging statement
         thrust_gimbal(0,0) = command[1];  // X-axis gimbal angle
         thrust_gimbal(1,0) = command[2];  // Y-axis gimbal angle
         
@@ -489,10 +499,19 @@ void simulate(RocketParams &P) {
         ang_vel = st.ang_vel;
         
         // Record history
-        pos_history.push_back(pos);
-        vel_history.push_back(vel);
-        // command_history.push_back(Vector(3, {F_thrust_mag, thrust_gimbal(0,0), thrust_gimbal(1,0)}));
-        
+        std::vector<double> pos_std = {pos(0,0), pos(1,0), pos(2,0)};
+        std::vector<double> vel_std = {vel(0,0), vel(1,0), vel(2,0)};
+        std::vector<double> command_std = {command[0], command[1], command[2]};
+        Matrix att_euler_mat = att.toEulerMatrix();
+        std::vector<double> att_euler_std = {att_euler_mat(0,0), 
+                                              att_euler_mat(1,0), 
+                                              att_euler_mat(2,0)};
+        // Convert to std::vector for history
+
+        pos_history.push_back(pos_std);
+        vel_history.push_back(vel_std);
+        command_history.push_back(command_std);
+        // todo: add att_euler_std to history 
         // Increment iteration counter
         iter++;
     }
@@ -506,19 +525,18 @@ void simulate(RocketParams &P) {
     }
     
     // Write header
-    file << "time,x,y,z,vx,vy,vz\n";
+    file << "time,x,y,z,vx,vy,vz,thrust,a,b\n";
     
     // Write data rows
-    // PROBLEM HERE WITH THE COMMAND HISTORY OUTPUTS. UNCOMMENT, COMPILE AND RUN FOR MORE INFO - Justin
     for (int i = 0; i < num_steps; i++) {
-        file << time[i] << ","
-             << pos_history[i](0,0) << "," << pos_history[i](1,0) << "," << pos_history[i](2,0) << "," 
-             << vel_history[i](0,0) << "," << vel_history[i](1,0) << "," << vel_history[i](2,0) << "\n";
-            //  << command_history[i](0,0) << "," << command_history[i](1,0) << "," << command_history[i](2,0) << "\n";
+        file << time[i] << "," 
+            << pos_history[i][0] << "," << pos_history[i][1] << "," << pos_history[i][2] << "," 
+             << vel_history[i][0] << "," << vel_history[i][1] << "," << vel_history[i][2] << ","
+             << command_history[i][0] << "," << command_history[i][1] << "," << command_history[i][2] << "\n";
     }
     
     file.close();
-    cout << "Simulation complete. Results written to simulation_results.csv" << endl;
+    std::cout << "Simulation complete. Results written to simulation_results.csv" << endl;
 }
 
 //------------------------- Main Entry Point ---------------------------
@@ -526,10 +544,12 @@ void simulate(RocketParams &P) {
 int main() {
     // Define and initialize rocket parameters.
     RocketParams P;
-    P.m_static = 1.0;
-    P.m_gimbal_top = 1.0;
-    P.m_gimbal_bottom = 1.0;
+    P.m_static = 0.5;
+    P.m_gimbal_top = 0.1;
+    P.m_gimbal_bottom = 0.1;
     P.m = P.m_static + P.m_gimbal_top + P.m_gimbal_bottom;
+
+    // std::cout << "Total mass: " << P.m << "\n";
     
     // Set all offset vectors to zero (3x1).
     P.gimbal_top_COM_offset = Vector(3, 0.0);

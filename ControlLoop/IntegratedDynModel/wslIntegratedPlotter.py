@@ -72,7 +72,7 @@ else:
     path3 = None
 
 # --- Open plots in browser (Windows Chrome via WSL) ---
-subprocess.run(["chrome.exe", path1])
-subprocess.run(["chrome.exe", path2])
+subprocess.run(["wslview", path1])
+subprocess.run(["wslview", path2])
 if path3:
-    subprocess.run(["chrome.exe", path3])
+    subprocess.run(["wslview", path3])

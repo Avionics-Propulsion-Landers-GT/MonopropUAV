@@ -222,10 +222,10 @@ void LQR::calculateK(double dt) {
     Matrix Kd = Kd_r.multiply(Tc.transpose());
 
 
-    std::cout << "[LQR] Kd_r (" << Kd_r.getRows() << "x" << Kd_r.getCols() << "):" << std::endl;
-    Kd_r.print();
-    std::cout << "[LQR] Kd (" << Kd.getRows() << "x" << Kd.getCols() << "):" << std::endl;
-    Kd.print();
+    // std::cout << "[LQR] Kd_r (" << Kd_r.getRows() << "x" << Kd_r.getCols() << "):" << std::endl;
+    // Kd_r.print();
+    // std::cout << "[LQR] Kd (" << Kd.getRows() << "x" << Kd.getCols() << "):" << std::endl;
+    // Kd.print();
 
     // Return Kd
     K = Kd;
