@@ -507,13 +507,9 @@ void simulate(RocketParams &P) {
         std::vector<std::vector<double>> sensor_values = {
             {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), 0, 0, 0, 0, 0, 0}, // Mock IMU data
             {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), 0, 0, 0}, // Mock 6-axis IMU
-            {pos(0,0), pos(1,0), pos(2,0)}, // Mock GPS
+            {0, 0, pos(2,0)}, // Mock GPS
             {0, pos(2,0)}, // Mock LIDAR
-            {0,
-                (pos.subtract(anchor1)).magnitude(), // compute euclidean norm of distance
-                (pos.subtract(anchor2)).magnitude(), // It matters what positions go to which
-                (pos.subtract(anchor3)).magnitude()  // anchors
-            }// Mock UWB
+            {0, pos(0,0), pos(1,0), 0} // Mock UWB
         };
 
         std::cout << "IMU Data: "; printVector(sensor_values[0], "");
