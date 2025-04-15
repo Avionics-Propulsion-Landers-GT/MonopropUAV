@@ -419,11 +419,11 @@ void simulate(RocketParams &P) {
         
         // 3. Set up the input structure for the LQR loop function
         std::vector<std::vector<double>> sensor_values = {
-            {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), 0, 0, 0, 0, 0, 0}, // Mock IMU data
-            {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), 0, 0, 0}, // Mock 6-axis IMU
-            {0, 0, pos(2,0)}, // Mock GPS
-            {0, pos(2,0)}, // Mock LIDAR
-            {0, pos(0,0), pos(1,0), 0} // Mock UWB
+            {step*dt, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), 0, 0, 0, 0, 0, 0}, // Mock IMU data
+            {step*dt, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), 0, 0, 0}, // Mock 6-axis IMU
+            {0, 0, pos(2,0)}, // Mock GPS. THIS WILL BE A PROBLEM LATER. SET 0 TO ACTUAL VALUES (LAT LON)!!!! - Justin
+            {step*dt, pos(2,0)}, // Mock LIDAR
+            {step*dt, pos(0,0), pos(1,0), 0} // Mock UWB
         };
         
         // Create loop input structure
