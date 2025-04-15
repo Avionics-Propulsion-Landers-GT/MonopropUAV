@@ -564,6 +564,14 @@ Matrix reActivate(const Matrix& activations) {
     return result;
 }
 
+double Matrix::magnitude() const {
+    double sum = 0.0;
+    for (unsigned int i = 0; i < rows * cols; ++i) {
+        sum += data[i] * data[i];
+    }
+    return std::sqrt(sum);
+}
+
 void Matrix::sanitizeNaNs() {
     double replacement = 0.0;
     for (unsigned int i = 0; i < this->rows; ++i) {

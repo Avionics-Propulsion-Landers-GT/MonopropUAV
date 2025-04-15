@@ -41,6 +41,7 @@ class Matrix {
         Matrix transpose() const;
         Matrix inverse() const;
         double determinant() const;
+        double magnitude() const;
         double cofactor (unsigned int row, unsigned int col) const;
         Matrix getSubMatrix(unsigned int row, unsigned int col) const;
         void print() const;

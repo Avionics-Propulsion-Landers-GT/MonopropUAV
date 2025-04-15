@@ -28,6 +28,7 @@ using namespace std;
 Vector vectorAdd(const Vector &a, const Vector &b);
 Vector vectorSubtract(const Vector &a, const Vector &b);
 Vector vectorScale(const Vector &a, double scalar);
+void printVector(const std::vector<double>& vec, const std::string& label = "");
 
 //------------------------- State Structure ---------------------------------
 

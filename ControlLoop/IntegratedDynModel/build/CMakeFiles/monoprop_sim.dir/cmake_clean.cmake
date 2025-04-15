@@ -1,0 +1,37 @@
+file(REMOVE_RECURSE
+  "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Matrix.cpp.o"
+  "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Matrix.cpp.o.d"
+  "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Quaternion.cpp.o"
+  "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Quaternion.cpp.o.d"
+  "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Vector.cpp.o"
+  "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Vector.cpp.o.d"
+  "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_xy.cpp.o"
+  "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_xy.cpp.o.d"
+  "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_z.cpp.o"
+  "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_z.cpp.o.d"
+  "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/ExtendedKalmanFilterGeneral.cpp.o"
+  "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/ExtendedKalmanFilterGeneral.cpp.o.d"
+  "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/Madgwick/updatedMadgwick.cpp.o"
+  "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/Madgwick/updatedMadgwick.cpp.o.d"
+  "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateA.cpp.o"
+  "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateA.cpp.o.d"
+  "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateB.cpp.o"
+  "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateB.cpp.o.d"
+  "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/lqr.cpp.o"
+  "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/lqr.cpp.o.d"
+  "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/solveCARE.cpp.o"
+  "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/solveCARE.cpp.o.d"
+  "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Loop/init.cpp.o"
+  "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Loop/init.cpp.o.d"
+  "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Loop/loop.cpp.o"
+  "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Loop/loop.cpp.o.d"
+  "CMakeFiles/monoprop_sim.dir/integratedDynMode.cpp.o"
+  "CMakeFiles/monoprop_sim.dir/integratedDynMode.cpp.o.d"
+  "monoprop_sim"
+  "monoprop_sim.pdb"
+)
+
+# Per-language clean rules from dependency scanning.
+foreach(lang CXX)
+  include(CMakeFiles/monoprop_sim.dir/cmake_clean_${lang}.cmake OPTIONAL)
+endforeach()

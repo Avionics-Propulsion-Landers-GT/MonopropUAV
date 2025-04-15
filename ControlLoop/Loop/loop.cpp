@@ -41,7 +41,7 @@ const Matrix ANCHORS = initAnchors();
 
 // Structures numbers
 const double M = 0.7; // kg; mass of uav
-const double F = 1.2; // kg/m3; density of air
+const double F = 1.225; // kg/m3; density of air
 const std::vector<double> INERTIA = {0.00940, 0, 0, 0, 0.00940, 0, 0, 0, 0.00014}; // kgm2; static inertia tensor about cylidner CoM
 const double THRUST_OFFSET = 7*24*0.001; // thrust offset from CoM in meters
 std::vector<double> G_VECTOR = {0,0,0, 0,0,-9.80665, 0,0,0, 0,0,0};
@@ -479,6 +479,7 @@ LoopOutput loop(LoopInput in) {
     A.sanitizeNaNs();
     B.sanitizeNaNs();
 
+
     // std::cout << "" << std::endl;
     // A.print();
     // std::cout << "" << std::endl;
@@ -500,7 +501,14 @@ LoopOutput loop(LoopInput in) {
     Vector u_d = B_pinv.multiply(r); 
     std::vector<double> desired_command = {u_d[0], 0, 0};
 
+    std::cout << "xact:\n"; current_state.print();
+    std::cout << "uact:\n"; current_input.print();
+
     // std::cout << "U:\n"; u_d.print();
+
+    // Make new A, B for actual states
+    A = calculateA(m, f, Cd, area, current_state, current_input, rc, rt, inertia, inertia_a, inertia_b, toVector(angular_states));
+    B = calculateB(m, f, Cd, area, current_state, current_input, rc, rt, inertia, inertia_a, inertia_b, toVector(angular_states));
 
     // Read in Q, R matrices
     Matrix Q = toRectMatrix(Q_MATRIX, 12, 12);
@@ -519,12 +527,12 @@ LoopOutput loop(LoopInput in) {
     Vector state_error = lqrController.getState().add(Vector(neg_setpoint));
 
     // Recalculate K if needed (e.g., time-varying system)
-    if (iter % 5 == 0) {
-        lqrController.calculateK(dt);
-    }
+    // if (iter % 5 == 0) {
+    lqrController.calculateK(dt);
+    // }
 
     // Compute control command: u = -K * state_error
-    Matrix negative_K = lqrController.getK().multiply(0.0);
+    Matrix negative_K = lqrController.getK().multiply(-1.0);
 
     // Compute control commands
     Vector control_command = u_d.add(negative_K.multiply(state_error));  // result is 3x1 Matrix
