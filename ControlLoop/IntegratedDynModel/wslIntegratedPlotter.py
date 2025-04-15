@@ -60,7 +60,7 @@ trace_yac = go.Scatter(x=data['time'], y=data['yac'], mode='lines', name='y_desi
 trace_zac = go.Scatter(x=data['time'], y=data['zac'], mode='lines', name='z_desired')
 
 layout_pos_des = go.Layout(
-    title='Desired Position vs. Time',
+    title='Actual Position vs. Time',
     xaxis=dict(title='Time'),
     yaxis=dict(title='Desired Position')
 )
@@ -73,7 +73,7 @@ trace_vyac = go.Scatter(x=data['time'], y=data['vyac'], mode='lines', name='vy_d
 trace_vzac = go.Scatter(x=data['time'], y=data['vzac'], mode='lines', name='vz_desired')
 
 layout_vel_des = go.Layout(
-    title='Desired Velocity vs. Time',
+    title='Actual Velocity vs. Time',
     xaxis=dict(title='Time'),
     yaxis=dict(title='Desired Velocity')
 )

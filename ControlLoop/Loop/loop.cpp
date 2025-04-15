@@ -55,17 +55,17 @@ const std::vector<double> Q_MATRIX = { // 12 x 12
     0.00, 1.78, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
     0.00, 0.00, 4.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
     // Linear velocity (vx, vy, vz)
-    0.0, 0.0, 0.0,  0.25, 0.00, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    0.0, 0.0, 0.0,  0.00, 0.25, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    0.0, 0.0, 0.0,  0.00, 0.00, 0.50,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0,  100, 0.00, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0,  0.00, 100, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0,  0.00, 0.00, 100,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
     // Angular position (roll, pitch, yaw)
     0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.01, 0.00, 0.00,  0.0, 0.0, 0.0,
     0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 16.0, 0.00,  0.0, 0.0, 0.0,
     0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 0.00, 16.0,  0.0, 0.0, 0.0,
     // Angular velocity (wx, wy, wz)
     0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.01, 0.00, 0.00,
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 4.00, 0.00,
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 0.00, 4.00
+    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 400.00, 0.00,
+    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 0.00, 400.00
 }; 
 const std::vector<double> R_MATRIX = { // 3 x 3
 /* Starting values based of Bryson's Rule */
@@ -366,14 +366,14 @@ LoopOutput loop(LoopInput in) {
     ekf_x.update(measurement_x); ekf_x.predict();
     ekf_y.update(measurement_y); ekf_y.predict();
     ekf_z2.update(measurement_z2); ekf_z2.predict(); 
-    Vector estimated_state_x = ekf_x.getState(); x_actual = estimated_state_x(0, 0);
-    Vector estimated_state_y = ekf_y.getState(); y_actual = estimated_state_y(0, 0);
+    // Vector estimated_state_x = ekf_x.getState(); x_actual = estimated_state_x(0, 0);
+    // Vector estimated_state_y = ekf_y.getState(); y_actual = estimated_state_y(0, 0);
     Vector estimated_state_z2 = ekf_z2.getState(); z_actual = estimated_state_z2(0, 0);
 
     // Slap a low pass filter onto velocity
-    double vx = (x_actual - prevState[0][0])/(2*dt);
-    double vy = (y_actual - prevState[0][1])/(2*dt);
-    double vz = (z_actual - prevState[0][2])/(2*dt);
+    double vx = (x_actual - prevState[0][0]); 
+    double vy = (y_actual - prevState[0][1]);
+    double vz = (z_actual - prevState[0][2]);
     Vector measurement_vx(2, 0.0); Vector measurement_vy(2, 0.0); Vector measurement_vz(2, 0.0);
     measurement_vx(0, 0) = vx; measurement_vx(1, 0) = 0;
     measurement_vy(0, 0) = vy; measurement_vy(1, 0) = 0; 
@@ -386,9 +386,9 @@ LoopOutput loop(LoopInput in) {
     Vector estimated_state_vz = ekf_vz.getState(); double vz_actual = estimated_state_vz(0, 0);
 
     // Slap a low pass filter onto angular velocity
-    double ox = (new_attitude[0] - prevState[2][0])/(2*dt);
-    double oy = (new_attitude[1] - prevState[2][1])/(2*dt);
-    double oz = (new_attitude[2] - prevState[2][2])/(2*dt);
+    double ox = (new_attitude[0] - prevState[2][0]);
+    double oy = (new_attitude[1] - prevState[2][1]);
+    double oz = (new_attitude[2] - prevState[2][2]);
     Vector measurement_ox(2, 0.0); Vector measurement_oy(2, 0.0); Vector measurement_oz(2, 0.0);
     measurement_ox(0, 0) = ox; measurement_ox(1, 0) = 0;
     measurement_oy(0, 0) = oy; measurement_oy(1, 0) = 0; 
@@ -527,12 +527,12 @@ LoopOutput loop(LoopInput in) {
     Vector state_error = lqrController.getState().add(Vector(neg_setpoint));
 
     // Recalculate K if needed (e.g., time-varying system)
-    // if (iter % 5 == 0) {
-    lqrController.calculateK(dt);
-    // }
+    if (iter % 5 == 0) {
+        lqrController.calculateK(dt);
+    }
 
     // Compute control command: u = -K * state_error
-    Matrix negative_K = lqrController.getK().multiply(-1.0);
+    Matrix negative_K = lqrController.getK().multiply(-0.001);
 
     // Compute control commands
     Vector control_command = u_d.add(negative_K.multiply(state_error));  // result is 3x1 Matrix

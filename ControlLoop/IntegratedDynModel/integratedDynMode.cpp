@@ -307,6 +307,9 @@ void calculate_COM_and_COP_offset(RocketParams &P, const Vector &thrust_gimbal) 
 //------------------------- Simulation Function ---------------------------
 
 void simulate(RocketParams &P) {
+
+    LoopOutput loopOutput;
+
     double t_end = 20.0;         // total simulation time in seconds
     double dt = P.dt;
     int num_steps = static_cast<int>(round(t_end / dt)) + 1;
@@ -345,8 +348,6 @@ void simulate(RocketParams &P) {
     std::vector<std::vector<double>> initState = {{gpsInit},{vel_std}, {att_euler_std}, {ang_vel_std}};
     SystemComponents system = init(gpsInit, initState, dt); 
     unsigned int iter = 0;
-    std::vector<double> prevCommand = {0, 0, 0};
-    std::vector<double> prevPrevCommand = {0, 0, 0};
     std::vector<bool> status = {true, true};
     
     // Pre-allocate history
@@ -433,6 +434,17 @@ void simulate(RocketParams &P) {
 
     // Zero wind
     Vector v_wind(3, 0.0);
+
+    // Set up command and state feedback loops
+    loopOutput.state = {{0,0,0}, {0,0,0}, {0,0.2,0}, {0,0,0}};
+    std::vector<std::vector<double>> prevState = loopOutput.state;
+    std::vector<std::vector<double>> previous_state;
+
+    loopOutput.command = {0,0,0};
+    std::vector<double> prevCommand = loopOutput.command;
+    std::vector<double> previous_command = prevCommand;
+    std::vector<double> previous_previous_command;
+
     
     // Main simulation loop
     for (int step = 0; step < num_steps; step++) {
@@ -453,11 +465,7 @@ void simulate(RocketParams &P) {
         
         // Current state in the format expected by LQR
         std::vector<std::vector<double>> current_state = {position, velocity, euler_attitude, angular_velocity};
-        
-        // Previous state (use current state if it's the first iteration)
-        std::vector<std::vector<double>> previous_state = (step > 0) ? 
-                                                       current_state : current_state;
-        
+       
         // 2. Calculate desired state from trajectory
         std::vector<double> desired_position = {
             pos_desired[step](0,0), 
@@ -501,8 +509,7 @@ void simulate(RocketParams &P) {
             0, 0, 0   // desired angular acceleration (usually zero)
         };
 
-        
-        
+
         // 3. Set up the input structure for the LQR loop function
         std::vector<std::vector<double>> sensor_values = {
             {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), 0, 0, 0, 0, 0, 0}, // Mock IMU data
@@ -512,38 +519,42 @@ void simulate(RocketParams &P) {
             {0, pos(0,0), pos(1,0), 0} // Mock UWB
         };
 
-        std::cout << "IMU Data: "; printVector(sensor_values[0], "");
-        std::cout << "M6IMU Data: "; printVector(sensor_values[1], "");
-        std::cout << "MGPS Data: "; printVector(sensor_values[2], "");
-        std::cout << "MLIDAR Data: "; printVector(sensor_values[3], "");
-        std::cout << "MUWB Data: "; printVector(sensor_values[4], "");
+        // std::cout << "IMU Data: "; printVector(sensor_values[0], "");
+        // std::cout << "M6IMU Data: "; printVector(sensor_values[1], "");
+        // std::cout << "MGPS Data: "; printVector(sensor_values[2], "");
+        // std::cout << "MLIDAR Data: "; printVector(sensor_values[3], "");
+        // std::cout << "MUWB Data: "; printVector(sensor_values[4], "");
 
+
+        // Set prevCommands
+        previous_state = prevState;
+        prevState = loopOutput.state; 
+        previous_previous_command = previous_command;
+        previous_command = prevCommand;
+        prevCommand = loopOutput.command; 
 
         // Create loop input structure
         LoopInput loopInput = {
             sensor_values,
-            current_state,
+            loopOutput.state,
             previous_state,
             system,
             status,
             dt,
             desired_state,
             delta_desired_state,
-            prevCommand,
-            prevPrevCommand,
-            prevCommand,
+            loopOutput.command,
+            previous_command,
+            previous_previous_command,
             iter
         };
         
         // 4. Call the loop function to get control commands
-        LoopOutput loopOutput = loop(loopInput);
-        
+        loopOutput = loop(loopInput);
+
         // 5. Extract commands from the loop output
         std::vector<double> command = loopOutput.filteredCommand;
-        
-        // Update previous commands for next iteration
-        prevPrevCommand = prevCommand;
-        prevCommand = command;
+        // std::vector<double> command = loopOutput.command;
         
         // 6. Convert commands to thrust and gimbal angles
         F_thrust_mag = command[0];  // Thrust magnitude
@@ -664,8 +675,8 @@ int main() {
     P.gimbal_offset = Vector(3, 0.0);
     P.gimbal_x_distance = Vector(3, 0.0);
     P.gimbal_y_distance = Vector(3, 0.0);
-    
-    P.g = 9.81;
+
+    P.g = 9.80665;
     P.Cd_x = 0.1;  P.Cd_y = 0.1;  P.Cd_z = 0.1;
     P.A_x = 0.7;   P.A_y = 0.7;   P.A_z = 0.3;
     P.air_density = 1.225;
