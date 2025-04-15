@@ -119,11 +119,11 @@ void LQR::calculateK(double dt) {
 
     // std::cout << "[LQR] Controllability matrix size: " << C.getRows() << "x" << C.getCols() << "\n";
     // std::cout << "\nC:" << std::endl; C.print();
-    std::cout << "B:\n"; B.print();
-    std::cout << "A:\n"; A.print();
-    std::cout << "\nU:" << std::endl; U.print(); 
-    std::cout << "\nV:" << std::endl; V.print();
-    std::cout << "\nSigma:" << std::endl;  Sigma.print();
+    // std::cout << "B:\n"; B.print();
+    // std::cout << "A:\n"; A.print();
+    // std::cout << "\nU:" << std::endl; U.print(); 
+    // std::cout << "\nV:" << std::endl; V.print();
+    // std::cout << "\nSigma:" << std::endl;  Sigma.print();
 
     // std::cout << "Rank of C: " << C.rank(1e-8) << std::endl;
     
@@ -193,16 +193,16 @@ void LQR::calculateK(double dt) {
         }
     }
 
-    std::cout << "[LQR] Rank of controllability matrix: " << rank << "\n";
-    std::cout << "activations: " << std::endl; activations.print();
-    std::cout << "[LQR] T (" << V.getRows() <<", " << rank << "):" << std::endl; T.print();
-    std::cout << "T: " << T.getRows() << "x" << T.getCols() << std::endl;
-    std::cout << "B_d: " << B.getRows() << "x" << B.getCols() << std::endl;
-    std::cout << "B_r: " << B_r.getRows() << "x" << B_r.getCols() << std::endl;
-    std::cout << "[CARE-IN] A_r:\n"; A_r.print();
-    std::cout << "[CARE-IN] B_r:\n"; B_r.print();
-    std::cout << "[CARE-IN] Q_r:\n"; Q_r.print();
-    std::cout << "[CARE-IN] R:\n"; R.print();
+    // std::cout << "[LQR] Rank of controllability matrix: " << rank << "\n";
+    // std::cout << "activations: " << std::endl; activations.print();
+    // std::cout << "[LQR] T (" << V.getRows() <<", " << rank << "):" << std::endl; T.print();
+    // std::cout << "T: " << T.getRows() << "x" << T.getCols() << std::endl;
+    // std::cout << "B_d: " << B.getRows() << "x" << B.getCols() << std::endl;
+    // std::cout << "B_r: " << B_r.getRows() << "x" << B_r.getCols() << std::endl;
+    // std::cout << "[CARE-IN] A_r:\n"; A_r.print();
+    // std::cout << "[CARE-IN] B_r:\n"; B_r.print();
+    // std::cout << "[CARE-IN] Q_r:\n"; Q_r.print();
+    // std::cout << "[CARE-IN] R:\n"; R.print();
 
     // 8. CARE on reduced system
     Matrix P = Q_r;
@@ -223,11 +223,11 @@ void LQR::calculateK(double dt) {
     Matrix Kd = Kd_r.multiply(Tc.transpose());
 
 
-    std::cout << "[LQR] Kd_r (" << Kd_r.getRows() << "x" << Kd_r.getCols() << "):" << std::endl;
-    Kd_r.print();
+    // std::cout << "[LQR] Kd_r (" << Kd_r.getRows() << "x" << Kd_r.getCols() << "):" << std::endl;
+    // Kd_r.print();
     
-    std::cout << "[LQR] Kd (" << Kd.getRows() << "x" << Kd.getCols() << "):" << std::endl;
-    Kd.print();
+    // std::cout << "[LQR] Kd (" << Kd.getRows() << "x" << Kd.getCols() << "):" << std::endl;
+    // Kd.print();
 
     // Return Kd
     K = Kd;

@@ -54,35 +54,52 @@ layout_cmd = go.Layout(
 
 fig_cmd = go.Figure(data=[trace_thrust, trace_a, trace_b], layout=layout_cmd)
 
+# --- Desired Position Plot ---
+trace_xac = go.Scatter(x=data['time'], y=data['xac'], mode='lines', name='x_desired')
+trace_yac = go.Scatter(x=data['time'], y=data['yac'], mode='lines', name='y_desired')
+trace_zac = go.Scatter(x=data['time'], y=data['zac'], mode='lines', name='z_desired')
+
+layout_pos_des = go.Layout(
+    title='Desired Position vs. Time',
+    xaxis=dict(title='Time'),
+    yaxis=dict(title='Desired Position')
+)
+
+fig_pos_des = go.Figure(data=[trace_xac, trace_yac, trace_zac], layout=layout_pos_des)
+
+# --- Desired Velocity Plot ---
+trace_vxac = go.Scatter(x=data['time'], y=data['vxac'], mode='lines', name='vx_desired')
+trace_vyac = go.Scatter(x=data['time'], y=data['vyac'], mode='lines', name='vy_desired')
+trace_vzac = go.Scatter(x=data['time'], y=data['vzac'], mode='lines', name='vz_desired')
+
+layout_vel_des = go.Layout(
+    title='Desired Velocity vs. Time',
+    xaxis=dict(title='Time'),
+    yaxis=dict(title='Desired Velocity')
+)
+
+fig_vel_des = go.Figure(data=[trace_vxac, trace_vyac, trace_vzac], layout=layout_vel_des)
+
 # --- Save HTML files (double write with abspath) ---
 position_path = os.path.join(BASE_DIR, "position_plot.html")
 velocity_path = os.path.join(BASE_DIR, "velocity_plot.html")
 command_path  = os.path.join(BASE_DIR, "command_plot.html")
+pos_des_path  = os.path.join(BASE_DIR, "desired_position_plot.html")
+vel_des_path  = os.path.join(BASE_DIR, "desired_velocity_plot.html")
 
 fig_pos.write_html(position_path)
 fig_vel.write_html(velocity_path)
 fig_cmd.write_html(command_path)
+fig_pos_des.write_html(pos_des_path)
+fig_vel_des.write_html(vel_des_path)
 
 # Absolute paths
-abs_position_path = os.path.abspath(position_path)
-abs_velocity_path = os.path.abspath(velocity_path)
-abs_command_path  = os.path.abspath(command_path)
-
-fig_pos.write_html(abs_position_path)
-fig_vel.write_html(abs_velocity_path)
-fig_cmd.write_html(abs_command_path)
-
-# --- Convert to Windows UNC path ---
-win_pos = to_windows_path(abs_position_path)
-win_vel = to_windows_path(abs_velocity_path)
-win_cmd = to_windows_path(abs_command_path)
+abs_paths = [os.path.abspath(p) for p in [
+    position_path, velocity_path, command_path, pos_des_path, vel_des_path
+]]
+win_paths = [to_windows_path(p) for p in abs_paths]
 
 print("Plots saved and opening in Chrome:")
-print(f"  {win_pos}")
-print(f"  {win_vel}")
-print(f"  {win_cmd}")
-
-# --- Open in Windows Chrome ---
-subprocess.run(["chrome.exe", win_pos])
-subprocess.run(["chrome.exe", win_vel])
-subprocess.run(["chrome.exe", win_cmd])
+for path in win_paths:
+    print(f"  {path}")
+    subprocess.run(["chrome.exe", path])
