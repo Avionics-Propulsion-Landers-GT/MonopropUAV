@@ -505,18 +505,24 @@ void simulate(RocketParams &P) {
         
         // 3. Set up the input structure for the LQR loop function
         std::vector<std::vector<double>> sensor_values = {
-            {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), 0, 0, 0, 0, 0, 0}, // Mock IMU data
-            {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), 0, 0, 0}, // Mock 6-axis IMU
-            {0, 0, pos(2,0)}, // Mock GPS
-            {0, pos(2,0)}, // Mock LIDAR
-            {0, pos(0,0), pos(1,0), 0} // Mock UWB
+            // {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), 0, 0, 0, 0, 0, 0}, // Mock IMU data
+            // {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), 0, 0, 0}, // Mock 6-axis IMU
+            // {0, 0, pos(2,0)}, // Mock GPS
+            // {0, pos(2,0)}, // Mock LIDAR
+            // {0, pos(0,0), pos(1,0), 0} // Mock UWB
+
+            // Mock Mock data used for Testing. FEEDS DIRECTLY TO LOOP
+            {pos(0,0), pos(1,0), pos(2,0)},
+            {vel(0,0), vel(1,0), vel(2,0)},
+            {att_euler(0,0), att_euler(1,0), att_euler(2,0)},
+            {ang_vel(0,0), ang_vel(1,0), ang_vel(2,0)}
         };
 
-        std::cout << "IMU Data: "; printVector(sensor_values[0], "");
-        std::cout << "M6IMU Data: "; printVector(sensor_values[1], "");
-        std::cout << "MGPS Data: "; printVector(sensor_values[2], "");
-        std::cout << "MLIDAR Data: "; printVector(sensor_values[3], "");
-        std::cout << "MUWB Data: "; printVector(sensor_values[4], "");
+        // std::cout << "IMU Data: "; printVector(sensor_values[0], "");
+        // std::cout << "M6IMU Data: "; printVector(sensor_values[1], "");
+        // std::cout << "MGPS Data: "; printVector(sensor_values[2], "");
+        // std::cout << "MLIDAR Data: "; printVector(sensor_values[3], "");
+        // std::cout << "MUWB Data: "; printVector(sensor_values[4], "");
 
 
         // Create loop input structure
