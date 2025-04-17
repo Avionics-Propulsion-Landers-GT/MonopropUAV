@@ -48,6 +48,17 @@ void printVector(const std::vector<double>& vec, const std::string& label) {
     std::cout << "]" << std::endl;
 }
 
+std::vector<double> quaternionToEuler(Quaternion quaternion) {
+
+    return {
+        std::atan2(2 * (quaternion[0] * quaternion[1] + quaternion[2] * quaternion[3]), 
+                   1 - 2 * (quaternion[1] * quaternion[1] + quaternion[2] * quaternion[2])),
+        std::asin(2 * (quaternion[0] * quaternion[2] - quaternion[3] * quaternion[1])),
+        std::atan2(2 * (quaternion[0] * quaternion[3] + quaternion[1] * quaternion[2]), 
+                   1 - 2 * (quaternion[2] * quaternion[2] + quaternion[3] * quaternion[3]))
+    };
+}
+
 // --------------------------- Constants ------------------------------------
 
 
@@ -512,8 +523,8 @@ void simulate(RocketParams &P) {
 
         // 3. Set up the input structure for the LQR loop function
         std::vector<std::vector<double>> sensor_values = {
-            {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), 0, 0, 0, 0, 0, 0}, // Mock IMU data
-            {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), 0, 0, 0}, // Mock 6-axis IMU
+            {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), 0, 0, -9.81, 0.005, 0, 0}, // Mock IMU data
+            {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), 0, 0, -9.81}, // Mock 6-axis IMU
             {0, 0, pos(2,0)}, // Mock GPS
             {0, pos(2,0)}, // Mock LIDAR
             {0,
@@ -523,11 +534,11 @@ void simulate(RocketParams &P) {
             } 
         };
 
-        std::cout << "IMU Data: "; printVector(sensor_values[0], "");
-        std::cout << "M6IMU Data: "; printVector(sensor_values[1], "");
-        std::cout << "MGPS Data: "; printVector(sensor_values[2], "");
-        std::cout << "MLIDAR Data: "; printVector(sensor_values[3], "");
-        std::cout << "MUWB Data: "; printVector(sensor_values[4], "");
+        // std::cout << "IMU Data: "; printVector(sensor_values[0], "");
+        // std::cout << "M6IMU Data: "; printVector(sensor_values[1], "");
+        // std::cout << "MGPS Data: "; printVector(sensor_values[2], "");
+        // std::cout << "MLIDAR Data: "; printVector(sensor_values[3], "");
+        // std::cout << "MUWB Data: "; printVector(sensor_values[4], "");
 
 
         // Set prevCommands
@@ -584,9 +595,12 @@ void simulate(RocketParams &P) {
         Vector T_thrust_body = thrust.second;
         
         // Compute drag force and torque
-        pair<Vector, Vector> drag = get_drag_body(P, att, vel, v_wind);
-        Vector F_drag_body = drag.first;
-        Vector T_drag_body = drag.second;
+        // pair<Vector, Vector> drag = get_drag_body(P, att, vel, v_wind);
+        // Vector F_drag_body = drag.first;
+        // Vector T_drag_body = drag.second;
+       
+        Vector F_drag_body = Vector(3,0);
+        Vector T_drag_body = Vector(3,0);
         
         // Transform body-frame forces to world frame
         Matrix R_att = att.toRotationMatrix();
@@ -614,17 +628,30 @@ void simulate(RocketParams &P) {
         command_history.push_back(cmd_vec);
 
         Vector pos_Vec = Vector(3, 0.0);
-        pos_Vec(0,0) = loopOutput.state[0][0];
-        pos_Vec(1,0) = loopOutput.state[0][1];
-        pos_Vec(2,0) = loopOutput.state[0][2];
+        pos_Vec(0,0) = quaternionToEuler(att)[0];
+        pos_Vec(1,0) = quaternionToEuler(att)[1];
+        pos_Vec(2,0) = quaternionToEuler(att)[2];
         pos_v_history.push_back(pos_Vec);
         
         
         Vector vel_Vec = Vector(3, 0.0);
-        vel_Vec(0,0) = loopOutput.state[1][0];
-        vel_Vec(1,0) = loopOutput.state[1][1];
-        vel_Vec(2,0) = loopOutput.state[1][2];
+        vel_Vec(0,0) = ang_vel(0,0);
+        vel_Vec(1,0) = ang_vel(1,0);
+        vel_Vec(2,0) = ang_vel(2,0);
         vel_v_history.push_back(vel_Vec);
+
+        // Vector pos_Vec = Vector(3, 0.0);
+        // pos_Vec(0,0) = loopOutput.state[2][0];
+        // pos_Vec(1,0) = loopOutput.state[2][1];
+        // pos_Vec(2,0) = loopOutput.state[2][2];
+        // pos_v_history.push_back(pos_Vec);
+        
+        
+        // Vector vel_Vec = Vector(3, 0.0);
+        // vel_Vec(0,0) = loopOutput.state[3][0];
+        // vel_Vec(1,0) = loopOutput.state[3][1];
+        // vel_Vec(2,0) = loopOutput.state[3][2];
+        // vel_v_history.push_back(vel_Vec);
         
         // Increment iteration counter
         iter++;
@@ -674,10 +701,11 @@ int main() {
     P.gimbal_top_COM_offset = Vector(3, 0.0);
     P.gimbal_bottom_COM_offset = Vector(3, 0.0);
     P.COM_offset = Vector(3, 0.0);
-    P.COM_offset(2,0) = 7*24*0.001;
+    // P.COM_offset(2,0) = 7*24*0.001;
     P.COP = Vector(3, 0.0);          // Can be set as needed.
     P.COP_offset = Vector(3, 0.0);
     P.gimbal_offset = Vector(3, 0.0);
+    P.gimbal_offset(2,0) = 7*24*0.001;
     P.gimbal_x_distance = Vector(3, 0.0);
     P.gimbal_y_distance = Vector(3, 0.0);
 
@@ -688,9 +716,9 @@ int main() {
     
     // Inertia: define a 3x3 matrix.
     P.I = Matrix(3, 3, 0.0);
-    P.I(0,0) = 1;  P.I(0,1) = 0;  P.I(0,2) = 0;
-    P.I(1,0) = 0;  P.I(1,1) = 1;  P.I(1,2) = 0;
-    P.I(2,0) = 0;  P.I(2,1) = 0;  P.I(2,2) = 1;
+    P.I(0,0) = 0.00940;  P.I(0,1) = 0;  P.I(0,2) = 0;
+    P.I(1,0) = 0;  P.I(1,1) = 0.00940;  P.I(1,2) = 0;
+    P.I(2,0) = 0;  P.I(2,1) = 0;  P.I(2,2) = 0.00014;
     P.Inv_I = P.I.inverse();
     
     P.gimbal_top_I = 1.0;

@@ -47,6 +47,7 @@ const double THRUST_OFFSET = 7*24*0.001; // thrust offset from CoM in meters
 std::vector<double> G_VECTOR = {0,0,0, 0,0,-9.80665, 0,0,0, 0,0,0};
 
 static Vector IE = Vector(12,0);
+static Vector static_input = Vector(3, 0.0);
 
 
 // Q & R Matrices
@@ -234,6 +235,16 @@ Vector trilaterateXY(const Matrix& anchors, double d1, double d2, double d3) {
     return resultXY;
 }
 
+void printVector(const std::vector<double>& vec) {
+
+    std::cout << "[";
+    for (size_t i = 0; i < vec.size(); ++i) {
+        std::cout << vec[i];
+        if (i != vec.size() - 1) std::cout << ", ";
+    }
+    std::cout << "]" << std::endl;
+}
+
 
 /*
                      -=- LOOP -=-
@@ -304,10 +315,17 @@ LoopOutput loop(LoopInput in) {
 
     // Set up and update Madgwick filter
     std::vector<double> euler_attitude = state[2];
+
+    
+    
     std::vector<double> q = madgwickFilter.eulerToQuaternion(euler_attitude);
     std::vector<double> qnew = madgwickFilter.madgwickUpdate(q, gyro, accel, mag, dt);
-    std::vector<double> new_attitude = madgwickFilter.quaternionToEuler(qnew);
+    // std::vector<double> new_attitude = madgwickFilter.quaternionToEuler(qnew);
 
+    std::vector<double> new_attitude = {state[2][0] + gyro[0]*dt, state[2][1] + gyro[1]*dt, state[2][2] + gyro[2]*dt};
+
+
+    
 
     // ---------------------- ii. EKF for Position ----------------------------
 
@@ -389,9 +407,9 @@ LoopOutput loop(LoopInput in) {
     Vector estimated_state_vz = ekf_vz.getState(); double vz_actual = estimated_state_vz(0, 0);
 
     // Slap a low pass filter onto angular velocity
-    double ox = (new_attitude[0] - prevState[2][0])/(2*dt);
-    double oy = (new_attitude[1] - prevState[2][1])/(2*dt);
-    double oz = (new_attitude[2] - prevState[2][2])/(2*dt);
+    double ox = gyro[0];
+    double oy = gyro[1];
+    double oz = gyro[2];
     Vector measurement_ox(2, 0.0); Vector measurement_oy(2, 0.0); Vector measurement_oz(2, 0.0);
     measurement_ox(0, 0) = ox; measurement_ox(1, 0) = 0;
     measurement_oy(0, 0) = oy; measurement_oy(1, 0) = 0; 
@@ -483,8 +501,8 @@ LoopOutput loop(LoopInput in) {
     Matrix inertia_b = toMatrix(getInertiaB(command[2]));
     
     // 7. Calculate A and B Matrices
-    Matrix A = calculateA(m, f, Cd, area, toVector(desired_state), current_input, rc, rt, inertia, inertia_a, inertia_b, toVector(angular_states));
-    Matrix B = calculateB(m, f, Cd, area, toVector(desired_state), current_input, rc, rt, inertia, inertia_a, inertia_b, toVector(angular_states));
+    Matrix A = calculateA(m, f, Cd, area, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector(angular_states));
+    Matrix B = calculateB(m, f, Cd, area, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector(angular_states));
 
     // 8. Sanitize NaNs that pop up from numerical errors close to zero.
     A.sanitizeNaNs();
@@ -512,23 +530,25 @@ LoopOutput loop(LoopInput in) {
     Vector u_d = B_pinv.multiply(r); 
     std::vector<double> desired_command = {u_d[0], 0, 0};
 
+    static_input = u_d;
+
     // std::cout << "xact:\n"; current_state.print();
     // std::cout << "uact:\n"; current_input.print();
 
     std::vector<double> K_MATRIX = {
-        0,0,1,  0,0,1,     0,0,0,  0,0,0,
-        0,0,0,  0,0,0,     0,0,0,  0,0,0,
-        0,0,0,  0,0,0,     0,0,0,  0,0,0,
+        0,0,1,         0,0,1,           0,0,0,          0,0,0,
+        0,0,0,         0,0,0,           0,0,0,          0,0,0,
+        0,0,0,         0,0,0,           0,0,0,          0,0,0,
     };
 
     std::vector<double> I_MATRIX = {
-        0,0,0.03,  0,0,0.03,  0,0,0,  0,0,0,
+        0,0,0.03,  0,0,0.03,      0,0,0,  0,0,0,
         0,0,0,  0,0,0,      0,0,0,  0,0,0,
         0,0,0,  0,0,0,      0,0,0,  0,0,0,
     };
 
     std::vector<double> D_MATRIX = {
-        0,0,0.5,  0,0,0.5,  0,0,0,  0,0,0,
+        0,0,0.5,  0,0,0.5,     0,0,0,  0,0,0, 
         0,0,0,  0,0,0,     0,0,0,  0,0,0,
         0,0,0,  0,0,0,     0,0,0,  0,0,0,
     };
@@ -576,8 +596,8 @@ LoopOutput loop(LoopInput in) {
             T(9 + i, 9 + j) = R(i, j);
 
    
-    // D = D.multiply(T.pseudoInverseJacobi(rankEps, 100)); I = I.multiply(T.pseudoInverseJacobi(rankEps, 100)); K = K.multiply(T.pseudoInverseJacobi(rankEps, 100));
-   
+    D = D.multiply(T.pseudoInverseJacobi(rankEps, 100)); I = I.multiply(T.pseudoInverseJacobi(rankEps, 100)); K = K.multiply(T.pseudoInverseJacobi(rankEps, 100));
+
     // Compute control command: u = -K * state_error
     Vector state_error = current_state.subtract(toVector(desired_state));
 
