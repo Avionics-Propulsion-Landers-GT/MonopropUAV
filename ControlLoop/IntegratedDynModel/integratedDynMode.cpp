@@ -516,7 +516,11 @@ void simulate(RocketParams &P) {
             {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), 0, 0, 0}, // Mock 6-axis IMU
             {0, 0, pos(2,0)}, // Mock GPS
             {0, pos(2,0)}, // Mock LIDAR
-            { }
+            {0,
+                (pos.subtract(anchor1)).magnitude(),
+                (pos.subtract(anchor2)).magnitude(),
+                (pos.subtract(anchor3)).magnitude()
+            } 
         };
 
         std::cout << "IMU Data: "; printVector(sensor_values[0], "");
