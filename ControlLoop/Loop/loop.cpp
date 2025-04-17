@@ -46,6 +46,8 @@ const std::vector<double> INERTIA = {0.00940, 0, 0, 0, 0.00940, 0, 0, 0, 0.00014
 const double THRUST_OFFSET = 7*24*0.001; // thrust offset from CoM in meters
 std::vector<double> G_VECTOR = {0,0,0, 0,0,-9.80665, 0,0,0, 0,0,0};
 
+static Vector IE = Vector(12,0);
+
 
 // Q & R Matrices
 const std::vector<double> Q_MATRIX = { // 12 x 12
@@ -232,6 +234,7 @@ Vector trilaterateXY(const Matrix& anchors, double d1, double d2, double d3) {
     return resultXY;
 }
 
+
 /*
                      -=- LOOP -=-
 */
@@ -386,9 +389,9 @@ LoopOutput loop(LoopInput in) {
     Vector estimated_state_vz = ekf_vz.getState(); double vz_actual = estimated_state_vz(0, 0);
 
     // Slap a low pass filter onto angular velocity
-    double ox = (new_attitude[0] - prevState[2][0]);
-    double oy = (new_attitude[1] - prevState[2][1]);
-    double oz = (new_attitude[2] - prevState[2][2]);
+    double ox = (new_attitude[0] - prevState[2][0])/(2*dt);
+    double oy = (new_attitude[1] - prevState[2][1])/(2*dt);
+    double oz = (new_attitude[2] - prevState[2][2])/(2*dt);
     Vector measurement_ox(2, 0.0); Vector measurement_oy(2, 0.0); Vector measurement_oz(2, 0.0);
     measurement_ox(0, 0) = ox; measurement_ox(1, 0) = 0;
     measurement_oy(0, 0) = oy; measurement_oy(1, 0) = 0; 
@@ -463,6 +466,14 @@ LoopOutput loop(LoopInput in) {
     current_state(6, 0) = new_attitude[0]; current_state(7, 0) = new_attitude[1]; current_state(8, 0) = new_attitude[2];
     current_state(9, 0) = angular_velocity[0]; current_state(10, 0) = angular_velocity[1]; current_state(11, 0) = angular_velocity[2];
 
+    Vector previous_state(12, 0.0);
+    previous_state(0, 0) = prevState[0][0]; previous_state(1, 0) = prevState[0][1]; previous_state(2, 0) = prevState[0][2];
+    previous_state(3, 0) = prevState[1][0]; previous_state(4, 0) = prevState[1][1]; previous_state(5, 0) = prevState[1][2];
+    previous_state(6, 0) = prevState[2][0]; previous_state(7, 0) = prevState[2][1]; previous_state(8, 0) = prevState[2][2];
+    previous_state(9, 0) = prevState[3][0]; previous_state(10, 0) = prevState[3][1]; previous_state(11, 0) = prevState[3][2];
+
+
+
     // 5. Construct input Vector
     Vector current_input = toVector(command);
 
@@ -505,22 +516,79 @@ LoopOutput loop(LoopInput in) {
     // std::cout << "uact:\n"; current_input.print();
 
     std::vector<double> K_MATRIX = {
-        0,0,0,  0,0,1,  0,0,0,  0,0,0,
-        0,0,0,  0,0,0,  0,0,0,  0,0,0,
-        0,0,0,  0,0,0,  0,0,0,  0,0,0,
+        0,0,1,  0,0,1,     0,0,0,  0,0,0,
+        0,0,0,  0,0,0,     0,0,0,  0,0,0,
+        0,0,0,  0,0,0,     0,0,0,  0,0,0,
     };
 
-    Matrix K = toRectMatrix(K_MATRIX, 3, 12);
+    std::vector<double> I_MATRIX = {
+        0,0,0.03,  0,0,0.03,  0,0,0,  0,0,0,
+        0,0,0,  0,0,0,      0,0,0,  0,0,0,
+        0,0,0,  0,0,0,      0,0,0,  0,0,0,
+    };
 
+    std::vector<double> D_MATRIX = {
+        0,0,0.5,  0,0,0.5,  0,0,0,  0,0,0,
+        0,0,0,  0,0,0,     0,0,0,  0,0,0,
+        0,0,0,  0,0,0,     0,0,0,  0,0,0,
+    };
+    
+    Matrix K = toRectMatrix(K_MATRIX, 3, 12);
+    Matrix I = toRectMatrix(I_MATRIX, 3, 12);
+    Matrix D = toRectMatrix(D_MATRIX, 3, 12);
+
+    double roll  = current_state(6, 0);
+    double pitch = current_state(7, 0);
+    double yaw   = current_state(8, 0);
+
+    double cr = cos(roll),  sr = sin(roll);
+    double cp = cos(pitch), sp = sin(pitch);
+    double cy = cos(yaw),   sy = sin(yaw);
+
+    // Body-to-world rotation matrix (ZYX order)
+    Matrix R(3, 3, 0.0);
+    R(0, 0) = cp * cy;
+    R(0, 1) = cy * sp * sr - cr * sy;
+    R(0, 2) = sr * sy + cr * cy * sp;
+    R(1, 0) = cp * sy;
+    R(1, 1) = cr * cy + sp * sr * sy;
+    R(1, 2) = cr * sp * sy - cy * sr;
+    R(2, 0) = -sp;
+    R(2, 1) = cp * sr;
+    R(2, 2) = cr * cp;
+
+    Matrix T(12, 12, 0.0);
+
+    // Set identity blocks for position and orientation
+    for (int i = 0; i < 3; ++i) {
+        T(i, i) = 1.0;        // Position block
+        T(6 + i, 6 + i) = 1.0; // Euler angles block
+    }
+
+    // Copy R into linear velocity block (rows 3–5, cols 3–5)
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j)
+            T(3 + i, 3 + j) = R(i, j);
+
+    // Copy R into angular velocity block (rows 9–11, cols 9–11)
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j)
+            T(9 + i, 9 + j) = R(i, j);
+
+   
+    // D = D.multiply(T.pseudoInverseJacobi(rankEps, 100)); I = I.multiply(T.pseudoInverseJacobi(rankEps, 100)); K = K.multiply(T.pseudoInverseJacobi(rankEps, 100));
+   
     // Compute control command: u = -K * state_error
-    Matrix negative_K = K.multiply(-1.0);
     Vector state_error = current_state.subtract(toVector(desired_state));
 
-    std::cout << state_error[5] << "; " << iter*0.001 << std::endl;
+    Vector DE = (current_state.subtract(previous_state)).multiply(1/dt); // Assuming u_d rel. unchanged
+
+    IE = IE.add(state_error.multiply(dt));
+
 
     // Compute control commands
-    Vector control_command = u_d.add(negative_K.multiply(state_error));  // result is 3x1 Matrix
-    Vector filtered_command = u_d.add(negative_K.multiply(state_error));
+    Vector control_command = u_d.subtract(((K.multiply(state_error)).add(I.multiply(IE))).add(D.multiply(DE)));  // result is 3x1 Matrix
+    Vector filtered_command = control_command;
     // Vector change_command = (negative_K.multiply(state_error));
 
     // sanity checks on T for feedback command

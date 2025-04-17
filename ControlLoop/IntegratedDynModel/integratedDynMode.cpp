@@ -332,7 +332,7 @@ void simulate(RocketParams &P) {
     // Initialize position as a 3x1 vector, expected by init function defining SystemComponents
     Vector vel(3, 0.0);            // 3x1 zero velocity
     std::vector<double> vel_std = {vel(0,0), vel(1,0), vel(2,0)};
-    Quaternion att(1, 0, 0, 0);    // Initial attitude: identity quaternion
+    Quaternion att(1, 0, 0.1, 0);    // Initial attitude: identity quaternion
     // Matrix attEulerMatrix = att.toEulerMatrix();
     Vector att_euler(3, 0.0);      // Euler angles (roll, pitch, yaw)
     std::vector<double> att_euler_std = {att_euler(0,0), att_euler(1,0), att_euler(2,0)};
@@ -516,14 +516,14 @@ void simulate(RocketParams &P) {
             {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), 0, 0, 0}, // Mock 6-axis IMU
             {0, 0, pos(2,0)}, // Mock GPS
             {0, pos(2,0)}, // Mock LIDAR
-            {0, pos(0,0), pos(1,0), 0} // Mock UWB
+            { }
         };
 
-        // std::cout << "IMU Data: "; printVector(sensor_values[0], "");
-        // std::cout << "M6IMU Data: "; printVector(sensor_values[1], "");
-        // std::cout << "MGPS Data: "; printVector(sensor_values[2], "");
-        // std::cout << "MLIDAR Data: "; printVector(sensor_values[3], "");
-        // std::cout << "MUWB Data: "; printVector(sensor_values[4], "");
+        std::cout << "IMU Data: "; printVector(sensor_values[0], "");
+        std::cout << "M6IMU Data: "; printVector(sensor_values[1], "");
+        std::cout << "MGPS Data: "; printVector(sensor_values[2], "");
+        std::cout << "MLIDAR Data: "; printVector(sensor_values[3], "");
+        std::cout << "MUWB Data: "; printVector(sensor_values[4], "");
 
 
         // Set prevCommands
