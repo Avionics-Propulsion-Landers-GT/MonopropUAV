@@ -436,7 +436,7 @@ void simulate(RocketParams &P) {
     Vector v_wind(3, 0.0);
 
     // Set up command and state feedback loops
-    loopOutput.state = {{0,0,0}, {0,0,0}, {0,0.2,0}, {0,0,0}};
+    loopOutput.state = {{0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}};
     std::vector<std::vector<double>> prevState = loopOutput.state;
     std::vector<std::vector<double>> previous_state;
 
@@ -553,7 +553,7 @@ void simulate(RocketParams &P) {
         loopOutput = loop(loopInput);
 
         // 5. Extract commands from the loop output
-        std::vector<double> command = loopOutput.filteredCommand;
+        std::vector<double> command = loopOutput.command;
         // std::vector<double> command = loopOutput.command;
         
         // 6. Convert commands to thrust and gimbal angles
@@ -670,6 +670,7 @@ int main() {
     P.gimbal_top_COM_offset = Vector(3, 0.0);
     P.gimbal_bottom_COM_offset = Vector(3, 0.0);
     P.COM_offset = Vector(3, 0.0);
+    P.COM_offset(2,0) = 7*24*0.001;
     P.COP = Vector(3, 0.0);          // Can be set as needed.
     P.COP_offset = Vector(3, 0.0);
     P.gimbal_offset = Vector(3, 0.0);

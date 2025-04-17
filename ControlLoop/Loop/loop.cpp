@@ -51,27 +51,27 @@ std::vector<double> G_VECTOR = {0,0,0, 0,0,-9.80665, 0,0,0, 0,0,0};
 const std::vector<double> Q_MATRIX = { // 12 x 12
     /* Starting values based of Bryson's Rule */
     // Position (x, y, z)
-    1.78, 0.00, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    0.00, 1.78, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    0.00, 0.00, 4.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+    1.0, 0.00, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+    0.00, 1.0, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+    0.00, 0.00, 1.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
     // Linear velocity (vx, vy, vz)
-    0.0, 0.0, 0.0,  100, 0.00, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    0.0, 0.0, 0.0,  0.00, 100, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    0.0, 0.0, 0.0,  0.00, 0.00, 100,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0,  1.0, 0.00, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0,  0.00, 1.0, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0,  0.00, 0.00, 1.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
     // Angular position (roll, pitch, yaw)
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.01, 0.00, 0.00,  0.0, 0.0, 0.0,
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 16.0, 0.00,  0.0, 0.0, 0.0,
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 0.00, 16.0,  0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  1.0, 0.00, 0.00,  0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 1.0, 0.00,  0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 0.00, 1.0,  0.0, 0.0, 0.0,
     // Angular velocity (wx, wy, wz)
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.01, 0.00, 0.00,
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 400.00, 0.00,
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 0.00, 400.00
+    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  1.0, 0.00, 0.00,
+    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 1.0, 0.00,
+    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 0.00, 1.0
 }; 
 const std::vector<double> R_MATRIX = { // 3 x 3
 /* Starting values based of Bryson's Rule */
     1, 0.0, 0.0, 
-    0.0, 16.0, 0.0, 
-    0.0, 0.0, 16.0, 
+    0.0, 1.0, 0.0, 
+    0.0, 0.0, 1.0, 
 };
 
 
@@ -371,9 +371,9 @@ LoopOutput loop(LoopInput in) {
     Vector estimated_state_z2 = ekf_z2.getState(); z_actual = estimated_state_z2(0, 0);
 
     // Slap a low pass filter onto velocity
-    double vx = (x_actual - prevState[0][0]); 
-    double vy = (y_actual - prevState[0][1]);
-    double vz = (z_actual - prevState[0][2]);
+    double vx = (x_actual - prevState[0][0])/(2*dt); 
+    double vy = (y_actual - prevState[0][1])/(2*dt);
+    double vz = (z_actual - prevState[0][2])/(2*dt);
     Vector measurement_vx(2, 0.0); Vector measurement_vy(2, 0.0); Vector measurement_vz(2, 0.0);
     measurement_vx(0, 0) = vx; measurement_vx(1, 0) = 0;
     measurement_vy(0, 0) = vy; measurement_vy(1, 0) = 0; 
@@ -501,38 +501,22 @@ LoopOutput loop(LoopInput in) {
     Vector u_d = B_pinv.multiply(r); 
     std::vector<double> desired_command = {u_d[0], 0, 0};
 
-    std::cout << "xact:\n"; current_state.print();
-    std::cout << "uact:\n"; current_input.print();
+    // std::cout << "xact:\n"; current_state.print();
+    // std::cout << "uact:\n"; current_input.print();
 
-    // std::cout << "U:\n"; u_d.print();
+    std::vector<double> K_MATRIX = {
+        0,0,0,  0,0,1,  0,0,0,  0,0,0,
+        0,0,0,  0,0,0,  0,0,0,  0,0,0,
+        0,0,0,  0,0,0,  0,0,0,  0,0,0,
+    };
 
-    // Make new A, B for actual states
-    A = calculateA(m, f, Cd, area, current_state, current_input, rc, rt, inertia, inertia_a, inertia_b, toVector(angular_states));
-    B = calculateB(m, f, Cd, area, current_state, current_input, rc, rt, inertia, inertia_a, inertia_b, toVector(angular_states));
-
-    // Read in Q, R matrices
-    Matrix Q = toRectMatrix(Q_MATRIX, 12, 12);
-    Matrix R = toRectMatrix(R_MATRIX, 3, 3);
-
-    // Set state and setpoint in LQR controller
-    lqrController.setA(A); lqrController.setB(B);
-    lqrController.setQ(Q); lqrController.setR(R);
-
-    // Read in current + desired states
-    lqrController.setState(current_state);
-    lqrController.setPoint = toVector(desired_state); // Assuming setPoint is a std::vector
-
-    // Compute error between current state and desired state
-    Matrix neg_setpoint = lqrController.setPoint.multiply(-1.0);
-    Vector state_error = lqrController.getState().add(Vector(neg_setpoint));
-
-    // Recalculate K if needed (e.g., time-varying system)
-    if (iter % 5 == 0) {
-        lqrController.calculateK(dt);
-    }
+    Matrix K = toRectMatrix(K_MATRIX, 3, 12);
 
     // Compute control command: u = -K * state_error
-    Matrix negative_K = lqrController.getK().multiply(-0.001);
+    Matrix negative_K = K.multiply(-1.0);
+    Vector state_error = current_state.subtract(toVector(desired_state));
+
+    std::cout << state_error[5] << "; " << iter*0.001 << std::endl;
 
     // Compute control commands
     Vector control_command = u_d.add(negative_K.multiply(state_error));  // result is 3x1 Matrix
