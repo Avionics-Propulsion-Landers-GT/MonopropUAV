@@ -136,6 +136,7 @@ void LQR::calculateK(double dt) {
             activations(i, 0) = 1;
         }
     }
+    
 
     Matrix T(V.getRows(), A.getRows(), 0.0);  // Final Kalman transformation T (n x n)
 
