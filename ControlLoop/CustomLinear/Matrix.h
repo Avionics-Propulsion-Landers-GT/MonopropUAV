@@ -43,6 +43,7 @@ class Matrix {
         double determinant() const;
         double magnitude() const;
         double cofactor (unsigned int row, unsigned int col) const;
+        void swapRows(unsigned int r1, unsigned int r2);
         Matrix getSubMatrix(unsigned int row, unsigned int col) const;
         void print() const;
         Matrix pseudoInverseJacobi(double rankEps, int maxIter) const;

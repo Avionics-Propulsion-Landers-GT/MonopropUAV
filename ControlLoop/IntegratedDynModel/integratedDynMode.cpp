@@ -408,7 +408,7 @@ void simulate(RocketParams &P) {
         } else if (t_val >= 10.0 && t_val < 20.0) {
             dz_dt = 0.0;
         } else if (t_val >= 20.0 && t_val < 30.0) {
-            dz_dt = -50.0 * 0.5 * (M_PI / 10.0) * sin(M_PI * (t_val - 20.0) / 10.0);
+            dz_dt = -49.0 * 0.5 * (M_PI / 10.0) * sin(M_PI * (t_val - 20.0) / 10.0);
         } else if (t_val >= 30.0 && t_val <= 40.0) {
             dz_dt = 0.0;
         }
