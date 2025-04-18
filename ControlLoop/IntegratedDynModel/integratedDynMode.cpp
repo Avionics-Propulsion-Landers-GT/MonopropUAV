@@ -59,6 +59,26 @@ std::vector<double> quaternionToEuler(Quaternion quaternion) {
     };
 }
 
+Quaternion eulerToQuaternion(const std::vector<double>& euler) {
+    double roll = euler[0];
+    double pitch = euler[1];
+    double yaw = euler[2];
+
+    double cy = std::cos(yaw * 0.5);
+    double sy = std::sin(yaw * 0.5);
+    double cp = std::cos(pitch * 0.5);
+    double sp = std::sin(pitch * 0.5);
+    double cr = std::cos(roll * 0.5);
+    double sr = std::sin(roll * 0.5);
+
+    double w = cr * cp * cy + sr * sp * sy;
+    double x = sr * cp * cy - cr * sp * sy;
+    double y = cr * sp * cy + sr * cp * sy;
+    double z = cr * cp * sy - sr * sp * cy;
+
+    return {w, x, y, z};
+}
+
 // --------------------------- Constants ------------------------------------
 
 
@@ -321,7 +341,7 @@ void simulate(RocketParams &P) {
 
     LoopOutput loopOutput;
 
-    double t_end = 20.0;         // total simulation time in seconds
+    double t_end = 40.0;         // total simulation time in seconds
     double dt = P.dt;
     int num_steps = static_cast<int>(round(t_end / dt)) + 1;
 
@@ -343,11 +363,13 @@ void simulate(RocketParams &P) {
     // Initialize position as a 3x1 vector, expected by init function defining SystemComponents
     Vector vel(3, 0.0);            // 3x1 zero velocity
     std::vector<double> vel_std = {vel(0,0), vel(1,0), vel(2,0)};
-    Quaternion att(1, 0, 0.1, 0);    // Initial attitude: identity quaternion
-    // Matrix attEulerMatrix = att.toEulerMatrix();
-    Vector att_euler(3, 0.0);      // Euler angles (roll, pitch, yaw)
-    std::vector<double> att_euler_std = {att_euler(0,0), att_euler(1,0), att_euler(2,0)};
+
+    std::vector<double> init_att = {0.1, -0.1, 0};
+
+    Quaternion att = eulerToQuaternion(init_att); // Initial attitude: identity quaternion
+    std::vector<double> att_euler_std = quaternionToEuler(att);
     Vector ang_vel(3, 0.0);        // angular velocity zero
+    ang_vel(1,0) = 0;
     std::vector<double> ang_vel_std = {ang_vel(0,0), ang_vel(1,0), ang_vel(2,0)};
 
     
@@ -356,7 +378,7 @@ void simulate(RocketParams &P) {
     double F_thrust_mag = 0.0;
     
     // Initialize LQR components
-    std::vector<std::vector<double>> initState = {{gpsInit},{vel_std}, {att_euler_std}, {ang_vel_std}};
+    std::vector<std::vector<double>> initState = {{gpsInit}, {vel_std}, {att_euler_std}, {ang_vel_std}};
     SystemComponents system = init(gpsInit, initState, dt); 
     unsigned int iter = 0;
     std::vector<bool> status = {true, true};
@@ -374,29 +396,6 @@ void simulate(RocketParams &P) {
     vel_v_history.reserve(num_steps);
     
     // Build desired trajectory: pure vertical motion
-    vector<Vector> pos_desired;
-    pos_desired.reserve(num_steps);
-    const double pi = 3.141592653589793;
-
-    for (int i = 0; i < num_steps; i++) {
-        double t_val = time[i];
-        double z_desired = 0.0;
-
-        if (t_val >= 0.0 && t_val < 5.0) {
-            z_desired = -0.5 * cos(pi * t_val / 5.0) + 0.5;
-        } else if (t_val >= 5.0 && t_val < 10.0) {
-            z_desired = 1.0;
-        } else if (t_val >= 10.0 && t_val < 15.0) {
-            z_desired = 0.5 * cos(pi * (t_val - 10.0) / 5.0) + 0.5;
-        } else if (t_val >= 15.0 && t_val <= 20.0) {
-            z_desired = 0.0;
-        }
-
-        Vector des(3, 0.0);     // 3x1 zero vector
-        des(2,0) = z_desired;   // Only z varies
-        pos_desired.push_back(des);
-    }
-
     vector<Vector> delta_pos_desired;
     delta_pos_desired.reserve(num_steps);
 
@@ -404,50 +403,73 @@ void simulate(RocketParams &P) {
         double t_val = time[i];
         double dz_dt = 0.0;
 
-        if (t_val >= 0.0 && t_val < 5.0) {
-            dz_dt = 0.5 * (pi / 5.0) * sin(pi * t_val / 5.0);
-        } else if (t_val >= 5.0 && t_val < 10.0) {
+        if (t_val >= 0.0 && t_val < 10.0) {
+            dz_dt = 50.0 * 0.5 * (M_PI / 10.0) * sin(M_PI * t_val / 10.0);
+        } else if (t_val >= 10.0 && t_val < 20.0) {
             dz_dt = 0.0;
-        } else if (t_val >= 10.0 && t_val < 15.0) {
-            dz_dt = -0.5 * (pi / 5.0) * sin(pi * (t_val - 10.0) / 5.0);
-        } else if (t_val >= 15.0 && t_val <= 20.0) {
+        } else if (t_val >= 20.0 && t_val < 30.0) {
+            dz_dt = -50.0 * 0.5 * (M_PI / 10.0) * sin(M_PI * (t_val - 20.0) / 10.0);
+        } else if (t_val >= 30.0 && t_val <= 40.0) {
             dz_dt = 0.0;
         }
 
-        Vector vel_des(3, 0.0);     // Initialize 3x1 vector
-        vel_des(2,0) = dz_dt;       // Only z velocity is non-zero
+        Vector vel_des(3, 0.0);
+        vel_des(2,0) = dz_dt;
         delta_pos_desired.push_back(vel_des);
     }
-    
+
     vector<Vector> accel_desired;
     accel_desired.reserve(num_steps);
 
     for (int i = 0; i < num_steps; i++) {
         double t_val = time[i];
         double d2z_dt2 = 0.0;
-        double pi_over_5 = pi / 5.0;
-        double factor = 0.5 * pi_over_5 * pi_over_5;
+        double pi_over_10 = M_PI / 10.0;
+        double factor = 50.0 * 0.5 * pi_over_10 * pi_over_10;
 
-        if (t_val >= 0.0 && t_val < 5.0) {
-            d2z_dt2 = factor * cos(pi_over_5 * t_val);
-        } else if (t_val >= 5.0 && t_val < 10.0) {
+        if (t_val >= 0.0 && t_val < 10.0) {
+            d2z_dt2 = factor * cos(pi_over_10 * t_val);
+        } else if (t_val >= 10.0 && t_val < 20.0) {
             d2z_dt2 = 0.0;
-        } else if (t_val >= 10.0 && t_val < 15.0) {
-            d2z_dt2 = -factor * cos(pi_over_5 * (t_val - 10.0));
-        } else if (t_val >= 15.0 && t_val <= 20.0) {
+        } else if (t_val >= 20.0 && t_val < 30.0) {
+            d2z_dt2 = -factor * cos(pi_over_10 * (t_val - 20.0));
+        } else if (t_val >= 30.0 && t_val <= 40.0) {
             d2z_dt2 = 0.0;
         }
 
-        Vector acc_des(3, 0.0);       // 3x1 acceleration vector
+        Vector acc_des(3, 0.0);
         acc_des(2,0) = d2z_dt2;
         accel_desired.push_back(acc_des);
     }
+
+    vector<Vector> pos_desired;
+    pos_desired.reserve(num_steps);
+
+    // Initial position z = 0
+    double z = 0.0;
+    pos_desired.push_back(Vector(3, 0.0));
+
+    for (int i = 1; i < num_steps; i++) {
+        double dt = time[i] - time[i - 1];
+        double v_prev = delta_pos_desired[i - 1](2,0);
+        double v_curr = delta_pos_desired[i](2,0);
+
+        // Trapezoidal integration
+        z += 0.5 * (v_prev + v_curr) * dt;
+
+        Vector pos(3, 0.0);
+        pos(2,0) = z;
+        pos_desired.push_back(pos);
+    }
+
+
+    
 
     // Zero wind
     Vector v_wind(3, 0.0);
 
     // Set up command and state feedback loops
-    loopOutput.state = {{0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}};
+    loopOutput.state = {gpsInit, vel_std, att_euler_std, ang_vel_std};
     std::vector<std::vector<double>> prevState = loopOutput.state;
     std::vector<std::vector<double>> previous_state;
 
@@ -627,31 +649,31 @@ void simulate(RocketParams &P) {
         cmd_vec(2, 0) = thrust_gimbal(1, 0);
         command_history.push_back(cmd_vec);
 
-        Vector pos_Vec = Vector(3, 0.0);
-        pos_Vec(0,0) = quaternionToEuler(att)[0];
-        pos_Vec(1,0) = quaternionToEuler(att)[1];
-        pos_Vec(2,0) = quaternionToEuler(att)[2];
-        pos_v_history.push_back(pos_Vec);
-        
-        
-        Vector vel_Vec = Vector(3, 0.0);
-        vel_Vec(0,0) = ang_vel(0,0);
-        vel_Vec(1,0) = ang_vel(1,0);
-        vel_Vec(2,0) = ang_vel(2,0);
-        vel_v_history.push_back(vel_Vec);
-
         // Vector pos_Vec = Vector(3, 0.0);
-        // pos_Vec(0,0) = loopOutput.state[2][0];
-        // pos_Vec(1,0) = loopOutput.state[2][1];
-        // pos_Vec(2,0) = loopOutput.state[2][2];
+        // pos_Vec(0,0) = quaternionToEuler(att)[0];
+        // pos_Vec(1,0) = quaternionToEuler(att)[1];
+        // pos_Vec(2,0) = quaternionToEuler(att)[2];
         // pos_v_history.push_back(pos_Vec);
         
         
         // Vector vel_Vec = Vector(3, 0.0);
-        // vel_Vec(0,0) = loopOutput.state[3][0];
-        // vel_Vec(1,0) = loopOutput.state[3][1];
-        // vel_Vec(2,0) = loopOutput.state[3][2];
+        // vel_Vec(0,0) = ang_vel(0,0);
+        // vel_Vec(1,0) = ang_vel(1,0);
+        // vel_Vec(2,0) = ang_vel(2,0);
         // vel_v_history.push_back(vel_Vec);
+
+        Vector pos_Vec = Vector(3, 0.0);
+        pos_Vec(0,0) = loopOutput.state[2][0];
+        pos_Vec(1,0) = loopOutput.state[2][1];
+        pos_Vec(2,0) = loopOutput.state[2][2];
+        pos_v_history.push_back(pos_Vec);
+        
+        
+        Vector vel_Vec = Vector(3, 0.0);
+        vel_Vec(0,0) = loopOutput.state[3][0];
+        vel_Vec(1,0) = loopOutput.state[3][1];
+        vel_Vec(2,0) = loopOutput.state[3][2];
+        vel_v_history.push_back(vel_Vec);
         
         // Increment iteration counter
         iter++;

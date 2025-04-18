@@ -410,6 +410,7 @@ LoopOutput loop(LoopInput in) {
     double ox = gyro[0];
     double oy = gyro[1];
     double oz = gyro[2];
+
     Vector measurement_ox(2, 0.0); Vector measurement_oy(2, 0.0); Vector measurement_oz(2, 0.0);
     measurement_ox(0, 0) = ox; measurement_ox(1, 0) = 0;
     measurement_oy(0, 0) = oy; measurement_oy(1, 0) = 0; 
@@ -420,6 +421,7 @@ LoopOutput loop(LoopInput in) {
     Vector estimated_state_ox = ekf_ox.getState(); double ox_actual = estimated_state_ox(0, 0);
     Vector estimated_state_oy = ekf_oy.getState(); double oy_actual = estimated_state_oy(0, 0);
     Vector estimated_state_oz = ekf_oz.getState(); double oz_actual = estimated_state_oz(0, 0);
+
 
     // Check for timestamp problems
     double time1 = nineAxisIMU[0];
@@ -537,8 +539,8 @@ LoopOutput loop(LoopInput in) {
 
     std::vector<double> K_MATRIX = {
         0,0,1,         0,0,1,           0,0,0,          0,0,0,
-        0,0,0,         0,0,0,           0,0,0,          0,0,0,
-        0,0,0,         0,0,0,           0,0,0,          0,0,0,
+        0,0,0,         0,0,0,           1,0,0,          0,0,0,
+        0,0,0,         0,0,0,           0,1,0,          0,0,0,
     };
 
     std::vector<double> I_MATRIX = {
@@ -549,8 +551,8 @@ LoopOutput loop(LoopInput in) {
 
     std::vector<double> D_MATRIX = {
         0,0,0.5,  0,0,0.5,     0,0,0,  0,0,0, 
-        0,0,0,  0,0,0,     0,0,0,  0,0,0,
-        0,0,0,  0,0,0,     0,0,0,  0,0,0,
+        0,0,0,  0,0,0,     0,0,0,  0.015,0,0,
+        0,0,0,  0,0,0,     0,0,0,  0,0.015,0,
     };
     
     Matrix K = toRectMatrix(K_MATRIX, 3, 12);
