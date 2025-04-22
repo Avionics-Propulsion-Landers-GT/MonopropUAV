@@ -3,6 +3,8 @@
 #include "../LQR/lqr.h"
 #include "../LQR/calculateA.h"
 #include "../LQR/calculateB.h"
+#include "../LQR/calculateABF.h"
+#include "../LQR/calculateBBF.h"
 #include <iostream>
 
 
@@ -545,7 +547,7 @@ LoopOutput loop(LoopInput in) {
     int maxIter = 100;
     Matrix B_pinv = B.pseudoInverseJacobi(rankEps, maxIter);
     Vector u_d = B_pinv.multiply(r); 
-    std::vector<double> desired_command = {u_d[0], 0, 0};
+    std::vector<double> desired_command = {u_d[0], u_d[1], u_d[2]};
 
     static_input = u_d;
 

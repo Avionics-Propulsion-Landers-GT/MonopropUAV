@@ -16,6 +16,8 @@ SOURCES = \
     CustomLinear/Matrix.cpp \
     LQR/calculateA.cpp \
     LQR/calculateB.cpp \
+    LQR/calculateABF.cpp \
+    LQR/calculateBBF.cpp \
     LQR/solveCARE.cpp
 
 STATIC_LIBS = lapack/lapack_routine/libmylapack.a

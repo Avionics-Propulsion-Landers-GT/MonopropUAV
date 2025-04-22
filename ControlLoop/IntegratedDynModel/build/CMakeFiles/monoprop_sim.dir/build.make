@@ -195,10 +195,38 @@ CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calcu
 	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateB.cpp.s"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateB.cpp -o CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateB.cpp.s
 
+CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp.o: CMakeFiles/monoprop_sim.dir/flags.make
+CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp.o: /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp
+CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp.o: CMakeFiles/monoprop_sim.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/IntegratedDynModel/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_10) "Building CXX object CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp.o -MF CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp.o.d -o CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp.o -c /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp
+
+CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp > CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp.i
+
+CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp -o CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp.s
+
+CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp.o: CMakeFiles/monoprop_sim.dir/flags.make
+CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp.o: /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp
+CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp.o: CMakeFiles/monoprop_sim.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/IntegratedDynModel/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_11) "Building CXX object CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp.o -MF CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp.o.d -o CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp.o -c /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp
+
+CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Preprocessing CXX source to CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp.i"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp > CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp.i
+
+CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green "Compiling CXX source to assembly CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp.s"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp -o CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp.s
+
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/solveCARE.cpp.o: CMakeFiles/monoprop_sim.dir/flags.make
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/solveCARE.cpp.o: /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/solveCARE.cpp
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/solveCARE.cpp.o: CMakeFiles/monoprop_sim.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/IntegratedDynModel/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_10) "Building CXX object CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/solveCARE.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/IntegratedDynModel/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_12) "Building CXX object CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/solveCARE.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/solveCARE.cpp.o -MF CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/solveCARE.cpp.o.d -o CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/solveCARE.cpp.o -c /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/solveCARE.cpp
 
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/solveCARE.cpp.i: cmake_force
@@ -212,7 +240,7 @@ CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/solve
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/ExtendedKalmanFilterGeneral.cpp.o: CMakeFiles/monoprop_sim.dir/flags.make
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/ExtendedKalmanFilterGeneral.cpp.o: /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/ExtendedKalmanFilterGeneral.cpp
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/ExtendedKalmanFilterGeneral.cpp.o: CMakeFiles/monoprop_sim.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/IntegratedDynModel/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_11) "Building CXX object CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/ExtendedKalmanFilterGeneral.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/IntegratedDynModel/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_13) "Building CXX object CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/ExtendedKalmanFilterGeneral.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/ExtendedKalmanFilterGeneral.cpp.o -MF CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/ExtendedKalmanFilterGeneral.cpp.o.d -o CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/ExtendedKalmanFilterGeneral.cpp.o -c /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/ExtendedKalmanFilterGeneral.cpp
 
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/ExtendedKalmanFilterGeneral.cpp.i: cmake_force
@@ -226,7 +254,7 @@ CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/E
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_xy.cpp.o: CMakeFiles/monoprop_sim.dir/flags.make
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_xy.cpp.o: /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_xy.cpp
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_xy.cpp.o: CMakeFiles/monoprop_sim.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/IntegratedDynModel/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_12) "Building CXX object CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_xy.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/IntegratedDynModel/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_14) "Building CXX object CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_xy.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_xy.cpp.o -MF CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_xy.cpp.o.d -o CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_xy.cpp.o -c /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_xy.cpp
 
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_xy.cpp.i: cmake_force
@@ -240,7 +268,7 @@ CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/E
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_z.cpp.o: CMakeFiles/monoprop_sim.dir/flags.make
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_z.cpp.o: /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_z.cpp
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_z.cpp.o: CMakeFiles/monoprop_sim.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/IntegratedDynModel/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_13) "Building CXX object CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_z.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/IntegratedDynModel/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_15) "Building CXX object CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_z.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_z.cpp.o -MF CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_z.cpp.o.d -o CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_z.cpp.o -c /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_z.cpp
 
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_z.cpp.i: cmake_force
@@ -254,7 +282,7 @@ CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/E
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/Madgwick/updatedMadgwick.cpp.o: CMakeFiles/monoprop_sim.dir/flags.make
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/Madgwick/updatedMadgwick.cpp.o: /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/Madgwick/updatedMadgwick.cpp
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/Madgwick/updatedMadgwick.cpp.o: CMakeFiles/monoprop_sim.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/IntegratedDynModel/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_14) "Building CXX object CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/Madgwick/updatedMadgwick.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --progress-dir=/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/IntegratedDynModel/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_16) "Building CXX object CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/Madgwick/updatedMadgwick.cpp.o"
 	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/Madgwick/updatedMadgwick.cpp.o -MF CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/Madgwick/updatedMadgwick.cpp.o.d -o CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/Madgwick/updatedMadgwick.cpp.o -c /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/Madgwick/updatedMadgwick.cpp
 
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/Madgwick/updatedMadgwick.cpp.i: cmake_force
@@ -276,6 +304,8 @@ monoprop_sim_OBJECTS = \
 "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/lqr.cpp.o" \
 "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateA.cpp.o" \
 "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateB.cpp.o" \
+"CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp.o" \
+"CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp.o" \
 "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/solveCARE.cpp.o" \
 "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/ExtendedKalmanFilterGeneral.cpp.o" \
 "CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_xy.cpp.o" \
@@ -294,6 +324,8 @@ monoprop_sim: CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/Control
 monoprop_sim: CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/lqr.cpp.o
 monoprop_sim: CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateA.cpp.o
 monoprop_sim: CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateB.cpp.o
+monoprop_sim: CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp.o
+monoprop_sim: CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp.o
 monoprop_sim: CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/solveCARE.cpp.o
 monoprop_sim: CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/ExtendedKalmanFilterGeneral.cpp.o
 monoprop_sim: CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_xy.cpp.o
@@ -303,7 +335,7 @@ monoprop_sim: CMakeFiles/monoprop_sim.dir/build.make
 monoprop_sim: /usr/lib/x86_64-linux-gnu/libopenblas.so
 monoprop_sim: /usr/lib/x86_64-linux-gnu/libopenblas.so
 monoprop_sim: CMakeFiles/monoprop_sim.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/IntegratedDynModel/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_15) "Linking CXX executable monoprop_sim"
+	@$(CMAKE_COMMAND) -E cmake_echo_color --switch=$(COLOR) --green --bold --progress-dir=/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/IntegratedDynModel/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_17) "Linking CXX executable monoprop_sim"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/monoprop_sim.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.
