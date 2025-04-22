@@ -243,6 +243,18 @@ Matrix Matrix::getSubMatrix(unsigned int row, unsigned int col) const {
     return subMatrix;
 }
 
+void Matrix::swapRows(unsigned int r1, unsigned int r2) {
+    if (r1 >= rows || r2 >= rows) {
+        throw std::out_of_range("Row index out of bounds in swapRows");
+    }
+
+    for (unsigned int col = 0; col < cols; ++col) {
+        double temp = (*this)(r1, col);
+        (*this)(r1, col) = (*this)(r2, col);
+        (*this)(r2, col) = temp;
+    }
+}
+
 void Matrix::print() const {
     unsigned int precision = 4;
     for (unsigned int i = 0; i < rows; ++i) {

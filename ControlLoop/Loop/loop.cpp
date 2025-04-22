@@ -55,25 +55,25 @@ static Vector static_input = Vector(3, 0.0);
 const std::vector<double> Q_MATRIX = { // 12 x 12
     /* Starting values based of Bryson's Rule */
     // Position (x, y, z)
-    1.0, 0.00, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    0.00, 1.0, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    0.00, 0.00, 1.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+    0.0, 0.00, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+    0.00, 0.0, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+    0.00, 0.00, 400.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
     // Linear velocity (vx, vy, vz)
-    0.0, 0.0, 0.0,  1.0, 0.00, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    0.0, 0.0, 0.0,  0.00, 1.0, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    0.0, 0.0, 0.0,  0.00, 0.00, 1.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0,  0.0, 0.00, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0,  0.00, 0.0, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0,  0.00, 0.00, 100.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
     // Angular position (roll, pitch, yaw)
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  1.0, 0.00, 0.00,  0.0, 0.0, 0.0,
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 1.0, 0.00,  0.0, 0.0, 0.0,
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 0.00, 1.0,  0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  100.0, 0.00, 0.00,  0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 100.0, 0.00,  0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 0.00, 0.0,  0.0, 0.0, 0.0,
     // Angular velocity (wx, wy, wz)
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  1.0, 0.00, 0.00,
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 1.0, 0.00,
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 0.00, 1.0
+    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  2.5, 0.00, 0.00,
+    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 2.5, 0.00,
+    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 0.00, 0.0
 }; 
 const std::vector<double> R_MATRIX = { // 3 x 3
 /* Starting values based of Bryson's Rule */
-    1, 0.0, 0.0, 
+    1.0, 0.0, 0.0, 
     0.0, 1.0, 0.0, 
     0.0, 0.0, 1.0, 
 };
@@ -182,7 +182,7 @@ double areaRegression(double AoA) {
 }
 
 double copRegression(double AoA) {
-    return 0.048 - 0.00053333333333*AoA;
+    return 0.048 - 0.00053333333333*AoA; // z-direction offset of CoP
 }
 
 std::vector<double> getInertiaA(double a) {
@@ -251,6 +251,21 @@ void printVector(const std::vector<double>& vec) {
         if (i != vec.size() - 1) std::cout << ", ";
     }
     std::cout << "]" << std::endl;
+}
+
+
+double frobeniusNorm(Matrix a) {
+    double sum = 0.0;
+    unsigned int rows = a.getRows();
+    unsigned int cols = a.getCols();
+
+    for (unsigned int i = 0; i < rows; ++i) {
+        for (unsigned int j = 0; j < cols; ++j) {
+            double val = a(i, j);
+            sum += val * val;
+        }
+    }
+    return std::sqrt(sum);
 }
 
 
@@ -480,7 +495,7 @@ LoopOutput loop(LoopInput in) {
     double Cd = cdRegression(AoA);
     double area = areaRegression(AoA);
     double CoP_offset = copRegression(AoA);
-    std::vector<double> rc_raw = {0, 0, -CoP_offset}; 
+    std::vector<double> rc_raw = {0, 0, 0}; // -COP_OFFSET
     Vector rc = toVector(rc_raw);
 
     // 3. Construct rt
@@ -510,9 +525,9 @@ LoopOutput loop(LoopInput in) {
     Matrix inertia_a = toMatrix(getInertiaA(command[1]));
     Matrix inertia_b = toMatrix(getInertiaB(command[2]));
     
-    // 7. Calculate A and B Matrices
-    Matrix A = calculateA(m, f, Cd, area, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector(angular_states));
-    Matrix B = calculateB(m, f, Cd, area, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector(angular_states));
+    // 7. Calculate A and B Matrices << NOTE AERO HAS BEEN ZEROED
+    Matrix A = calculateA(m, f, 0, 0, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector({0,0,0,0}));
+    Matrix B = calculateB(m, f, 0, 0, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector({0,0,0,0}));
 
     // 8. Sanitize NaNs that pop up from numerical errors close to zero.
     A.sanitizeNaNs();
@@ -618,6 +633,39 @@ LoopOutput loop(LoopInput in) {
 
     // Compute control commands
     Vector control_command = u_d.subtract(((K.multiply(state_error)).add(I.multiply(IE))).add(D.multiply(DE)));  // result is 3x1 Matrix
+
+
+    //  // Read in Q, R matrices
+    //  Matrix Q = toRectMatrix(Q_MATRIX, 12, 12);
+    //  Matrix R = toRectMatrix(R_MATRIX, 3, 3);
+
+    //  std::cout << "\nAfn: " << frobeniusNorm(A);
+    //  std::cout << "\nBfn: " << frobeniusNorm(B);
+
+ 
+    //  // Set state and setpoint in LQR controller
+    //  lqrController.setA(A);
+    //  lqrController.setB(B);
+    //  lqrController.setQ(Q);
+    //  lqrController.setR(R);
+ 
+    //  // Read in current + desired states
+    //  lqrController.setState(current_state);
+    //  lqrController.setPoint = toVector(desired_state); // Assuming setPoint is a std::vector
+ 
+    //  // Compute error between current state and desired state
+    //  Matrix neg_setpoint = lqrController.setPoint.multiply(-1.0);
+    //  Vector state_error = lqrController.getState().add(Vector(neg_setpoint));
+ 
+    //  // Recalculate K if needed (e.g., time-varying system)
+    //  if ( iter % 5 == 0) {
+    //     lqrController.calculateK(dt);
+    //  }
+ 
+    //  // // // // Compute control command: u = -K * state_error
+
+    // Matrix negative_K = lqrController.getK().multiply(-1.0);
+    // Vector control_command = u_d.add(negative_K.multiply(state_error)); 
     Vector filtered_command = control_command;
     // Vector change_command = (negative_K.multiply(state_error));
 
