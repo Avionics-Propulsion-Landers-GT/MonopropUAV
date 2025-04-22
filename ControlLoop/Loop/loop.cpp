@@ -4,6 +4,7 @@
 #include "../LQR/calculateA.h"
 #include "../LQR/calculateB.h"
 #include <iostream>
+#include <cmath>
 
 
 /*
@@ -166,8 +167,15 @@ std::vector<double> toStdVector(const Matrix& mat) {
 */
 
 double cdRegression(double AoA) {
-    return ((2.5/90)*AoA+(1.5/10000)*(AoA*AoA)); //placeholder regression, accurate enough
+    // return ((2.5/90)*AoA+(1.5/10000)*(AoA*AoA)); //placeholder regression, accurate enough
+    double cd_x = -0.449*std::cos(3.028*AoA*M_PI/180) + 0.463;
+    double cd_y = -0.376*std::cos(5.675*AoA*M_PI/180) + 1.854;
+
+    return std::sqrt(cd_x*cd_x + cd_y*cd_y); // sqrt of sum of squares
+    // is this method right? Might cause problems later.
+    
 }
+
 
 double areaRegression(double AoA) {
     return 0.0072382 + 0.000226775*AoA;
