@@ -321,6 +321,30 @@ home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateA.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/monoprop_sim.dir/build.make CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateA.cpp.s
 .PHONY : home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateA.cpp.s
 
+home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.o: home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp.o
+.PHONY : home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.o
+
+# target to build an object file
+home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/monoprop_sim.dir/build.make CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp.o
+.PHONY : home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp.o
+
+home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.i: home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp.i
+.PHONY : home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.i
+
+# target to preprocess a source file
+home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/monoprop_sim.dir/build.make CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp.i
+.PHONY : home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp.i
+
+home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.s: home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp.s
+.PHONY : home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.s
+
+# target to generate assembly for a file
+home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/monoprop_sim.dir/build.make CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp.s
+.PHONY : home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp.s
+
 home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateB.o: home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateB.cpp.o
 .PHONY : home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateB.o
 
@@ -344,6 +368,30 @@ home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateB.s: home/sdatnmdt/gtpl/
 home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateB.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/monoprop_sim.dir/build.make CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateB.cpp.s
 .PHONY : home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateB.cpp.s
+
+home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.o: home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp.o
+.PHONY : home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.o
+
+# target to build an object file
+home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/monoprop_sim.dir/build.make CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp.o
+.PHONY : home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp.o
+
+home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.i: home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp.i
+.PHONY : home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.i
+
+# target to preprocess a source file
+home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/monoprop_sim.dir/build.make CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp.i
+.PHONY : home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp.i
+
+home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.s: home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp.s
+.PHONY : home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.s
+
+# target to generate assembly for a file
+home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/monoprop_sim.dir/build.make CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp.s
+.PHONY : home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp.s
 
 home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/lqr.o: home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/lqr.cpp.o
 .PHONY : home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/lqr.o
@@ -498,9 +546,15 @@ help:
 	@echo "... home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateA.o"
 	@echo "... home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateA.i"
 	@echo "... home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateA.s"
+	@echo "... home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.o"
+	@echo "... home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.i"
+	@echo "... home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.s"
 	@echo "... home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateB.o"
 	@echo "... home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateB.i"
 	@echo "... home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateB.s"
+	@echo "... home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.o"
+	@echo "... home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.i"
+	@echo "... home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.s"
 	@echo "... home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/lqr.o"
 	@echo "... home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/lqr.i"
 	@echo "... home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/lqr.s"

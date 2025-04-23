@@ -589,38 +589,6 @@ Matrix calculateABF(
         )
     };
     
-    std::vector<double> mt3 = {
-        t165 * t257 * t385 - t163 * t257 * t388 - t199 * t257 * t383,
-        t163 * t257 * t383 + t164 * t257 * t385 + t198 * t257 * t388,
-        0.0, 0.0, 0.0,
-        
-        -t32 * (
-            (areaVar * cDrag * f * t262 * t326) / 2.0 + 
-            (areaVar * cDrag * f * t271 * t327 * t360) / 4.0
-        ),
-
-        t32 * (
-            (areaVar * cDrag * f * t263 * t326) / 2.0 - 
-            (areaVar * cDrag * f * t272 * t327 * t360) / 4.0
-        ),
-
-        -t32 * (
-            (areaVar * cDrag * f * t231 * t326) / 2.0 + 
-            (areaVar * cDrag * f * t239 * t327 * t360) / 4.0
-        ),
-
-        0.0, 0.0, 0.0,
-        t165 * t257 * t391 - t164 * t257 * t394 - t200 * t257 * t392,
-        -t163 * t257 * t394 + t165 * t257 * t392 - t199 * t257 * t391,
-        t163 * t257 * t391 + t164 * t257 * t392 + t198 * t257 * t394,
-        0.0, 0.0, 0.0,
-        
-        -t32 * (
-            (areaVar * cDrag * f * t254 * t326) / 2.0 + 
-            (areaVar * cDrag * f * t271 * t327 * t357) / 4.0
-        )
-    };
-    
     std::vector<double> mt4 = {
         -t32 * (
             (areaVar * cDrag * f * t255 * t326) / 2.0 + 

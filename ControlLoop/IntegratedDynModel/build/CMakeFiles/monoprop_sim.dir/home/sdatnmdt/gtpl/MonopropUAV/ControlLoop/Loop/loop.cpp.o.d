@@ -170,8 +170,11 @@ CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Loop/loop
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Loop/../LQR/lqr.h \
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Loop/../LQR/../CustomLinear/Vector.h \
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Loop/../LQR/../CustomLinear/Matrix.h \
+ /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Loop/../CustomLinear/Matrix.h \
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Loop/../LQR/calculateA.h \
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Loop/../LQR/calculateB.h \
+ /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Loop/../LQR/calculateABF.h \
+ /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Loop/../LQR/calculateBBF.h \
  /usr/include/c++/11/iostream /usr/include/c++/11/ostream \
  /usr/include/c++/11/ios /usr/include/c++/11/bits/ios_base.h \
  /usr/include/c++/11/bits/locale_classes.h \

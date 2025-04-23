@@ -3,6 +3,8 @@
 #include "../LQR/lqr.h"
 #include "../LQR/calculateA.h"
 #include "../LQR/calculateB.h"
+#include "../LQR/calculateABF.h"
+#include "../LQR/calculateBBF.h"
 #include <iostream>
 #include <cmath>
 
@@ -46,7 +48,6 @@ const double F = 1.225; // kg/m3; density of air
 const std::vector<double> INERTIA = {0.00940, 0, 0, 0, 0.00940, 0, 0, 0, 0.00014}; // kgm2; static inertia tensor about cylidner CoM
 const double THRUST_OFFSET = 7*24*0.001; // thrust offset from CoM in meters
 std::vector<double> G_VECTOR = {0,0,0, 0,0,-9.80665, 0,0,0, 0,0,0};
-
 static Vector IE = Vector(12,0);
 static Vector static_input = Vector(3, 0.0);
 
@@ -135,6 +136,17 @@ Matrix toMatrix(const std::vector<double>& v) {
         }
     }
     return result;
+}
+
+double frobeniusNorm(const Matrix& A) {
+    double sum = 0.0;
+    for (unsigned int i = 0; i < A.getRows(); ++i) {
+        for (unsigned int j = 0; j < A.getCols(); ++j) {
+            double val = A(i, j);
+            sum += val * val;
+        }
+    }
+    return std::sqrt(sum);
 }
 
 Matrix toRectMatrix(const std::vector<double>& v, unsigned int m, unsigned int n) {
@@ -252,22 +264,6 @@ void printVector(const std::vector<double>& vec) {
     }
     std::cout << "]" << std::endl;
 }
-
-
-double frobeniusNorm(Matrix a) {
-    double sum = 0.0;
-    unsigned int rows = a.getRows();
-    unsigned int cols = a.getCols();
-
-    for (unsigned int i = 0; i < rows; ++i) {
-        for (unsigned int j = 0; j < cols; ++j) {
-            double val = a(i, j);
-            sum += val * val;
-        }
-    }
-    return std::sqrt(sum);
-}
-
 
 /*
                      -=- LOOP -=-
@@ -529,14 +525,18 @@ LoopOutput loop(LoopInput in) {
     Matrix A = calculateA(m, f, 0, 0, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector({0,0,0,0}));
     Matrix B = calculateB(m, f, 0, 0, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector({0,0,0,0}));
 
+    // Matrix A = calculateABF(m, f, 0, 0, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector({0,0,0,0}));
+    // Matrix B = calculateBBF(m, f, 0, 0, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector({0,0,0,0}));
+
+
     // 8. Sanitize NaNs that pop up from numerical errors close to zero.
     A.sanitizeNaNs();
     B.sanitizeNaNs();
 
 
-    // std::cout << "" << std::endl;
+    // std::cout << "\nA:" << std::endl;
     // A.print();
-    // std::cout << "" << std::endl;
+    // std::cout << "\nB:" << std::endl;
     // B.print();
     // std::cout << "" << std::endl;
 
@@ -560,114 +560,121 @@ LoopOutput loop(LoopInput in) {
     // std::cout << "xact:\n"; current_state.print();
     // std::cout << "uact:\n"; current_input.print();
 
-    std::vector<double> K_MATRIX = {
-        0,0,4,         0,0,1,           0,0,0,          0,0,0,
-        0,0,0,         0,0,0,           1,0,0,          0,0,0,
-        0,0,0,         0,0,0,           0,1,0,          0,0,0,
-    };
+    // std::vector<double> K_MATRIX = {
+    //     0,0,4,         0,0,1,           0,0,0,          0,0,0,
+    //     0,0,0,         0,0,0,           1,0,0,          0,0,0,
+    //     0,0,0,         0,0,0,           0,1,0,          0,0,0,
+    // };
 
-    std::vector<double> I_MATRIX = {
-        0,0,0.03,  0,0,0.03,      0,0,0,  0,0,0,
-        0,0,0,  0,0,0,      0,0,0,  0,0,0,
-        0,0,0,  0,0,0,      0,0,0,  0,0,0,
-    };
+    // std::vector<double> I_MATRIX = {
+    //     0,0,0.03,  0,0,0.03,      0,0,0,  0,0,0,
+    //     0,0,0,  0,0,0,      0,0,0,  0,0,0,
+    //     0,0,0,  0,0,0,      0,0,0,  0,0,0,
+    // };
 
-    std::vector<double> D_MATRIX = {
-        0,0,1,  0,0,0.5,     0,0,0,  0,0,0, 
-        0,0,0,  0,0,0,     0,0,0,  0.025,0,0,
-        0,0,0,  0,0,0,     0,0,0,  0,0.025,0,
-    };
+    // std::vector<double> D_MATRIX = {
+    //     0,0,1,  0,0,0.5,     0,0,0,  0,0,0, 
+    //     0,0,0,  0,0,0,     0,0,0,  0.025,0,0,
+    //     0,0,0,  0,0,0,     0,0,0,  0,0.025,0,
+    // };
     
-    Matrix K = toRectMatrix(K_MATRIX, 3, 12);
-    Matrix I = toRectMatrix(I_MATRIX, 3, 12);
-    Matrix D = toRectMatrix(D_MATRIX, 3, 12);
+    // Matrix K = toRectMatrix(K_MATRIX, 3, 12);
+    // Matrix I = toRectMatrix(I_MATRIX, 3, 12);
+    // Matrix D = toRectMatrix(D_MATRIX, 3, 12);
 
-    double roll  = current_state(6, 0);
-    double pitch = current_state(7, 0);
-    double yaw   = current_state(8, 0);
+    // double roll  = current_state(6, 0);
+    // double pitch = current_state(7, 0);
+    // double yaw   = current_state(8, 0);
 
-    double cr = cos(roll),  sr = sin(roll);
-    double cp = cos(pitch), sp = sin(pitch);
-    double cy = cos(yaw),   sy = sin(yaw);
+    // double cr = cos(roll),  sr = sin(roll);
+    // double cp = cos(pitch), sp = sin(pitch);
+    // double cy = cos(yaw),   sy = sin(yaw);
 
-    // Body-to-world rotation matrix (ZYX order)
-    Matrix R(3, 3, 0.0);
-    R(0, 0) = cp * cy;
-    R(0, 1) = cy * sp * sr - cr * sy;
-    R(0, 2) = sr * sy + cr * cy * sp;
-    R(1, 0) = cp * sy;
-    R(1, 1) = cr * cy + sp * sr * sy;
-    R(1, 2) = cr * sp * sy - cy * sr;
-    R(2, 0) = -sp;
-    R(2, 1) = cp * sr;
-    R(2, 2) = cr * cp;
+    // // Body-to-world rotation matrix (ZYX order)
+    // Matrix R(3, 3, 0.0);
+    // R(0, 0) = cp * cy;
+    // R(0, 1) = cy * sp * sr - cr * sy;
+    // R(0, 2) = sr * sy + cr * cy * sp;
+    // R(1, 0) = cp * sy;
+    // R(1, 1) = cr * cy + sp * sr * sy;
+    // R(1, 2) = cr * sp * sy - cy * sr;
+    // R(2, 0) = -sp;
+    // R(2, 1) = cp * sr;
+    // R(2, 2) = cr * cp;
 
-    Matrix T(12, 12, 0.0);
+    // Matrix T(12, 12, 0.0);
 
-    // Set identity blocks for position and orientation
-    for (int i = 0; i < 3; ++i) {
-        T(i, i) = 1.0;        // Position block
-        T(6 + i, 6 + i) = 1.0; // Euler angles block
-    }
+    // // Set identity blocks for position and orientation
+    // for (int i = 0; i < 3; ++i) {
+    //     T(i, i) = 1.0;        // Position block
+    //     T(6 + i, 6 + i) = 1.0; // Euler angles block
+    // }
 
-    // Copy R into linear velocity block (rows 3–5, cols 3–5)
-    for (int i = 0; i < 3; ++i)
-        for (int j = 0; j < 3; ++j)
-            T(3 + i, 3 + j) = R(i, j);
+    // // Copy R into linear velocity block (rows 3–5, cols 3–5)
+    // for (int i = 0; i < 3; ++i)
+    //     for (int j = 0; j < 3; ++j)
+    //         T(3 + i, 3 + j) = R(i, j);
 
-    // Copy R into angular velocity block (rows 9–11, cols 9–11)
-    for (int i = 0; i < 3; ++i)
-        for (int j = 0; j < 3; ++j)
-            T(9 + i, 9 + j) = R(i, j);
+    // // Copy R into angular velocity block (rows 9–11, cols 9–11)
+    // for (int i = 0; i < 3; ++i)
+    //     for (int j = 0; j < 3; ++j)
+    //         T(9 + i, 9 + j) = R(i, j);
 
    
-    D = D.multiply(T.pseudoInverseJacobi(rankEps, 100)); I = I.multiply(T.pseudoInverseJacobi(rankEps, 100)); K = K.multiply(T.pseudoInverseJacobi(rankEps, 100));
+    // D = D.multiply(T.pseudoInverseJacobi(rankEps, 100)); I = I.multiply(T.pseudoInverseJacobi(rankEps, 100)); K = K.multiply(T.pseudoInverseJacobi(rankEps, 100));
 
     // Compute control command: u = -K * state_error
-    Vector state_error = current_state.subtract(toVector(desired_state));
+    // Vector state_error = current_state.subtract(toVector(desired_state));
 
-    Vector DE = (current_state.subtract(previous_state)).multiply(1/dt); // Assuming u_d rel. unchanged
+    // Vector DE = (current_state.subtract(previous_state)).multiply(1/dt); // Assuming u_d rel. unchanged
 
-    IE = IE.add(state_error.multiply(dt));
-
+    // IE = IE.add(state_error.multiply(dt));
 
     // Compute control commands
-    Vector control_command = u_d.subtract(((K.multiply(state_error)).add(I.multiply(IE))).add(D.multiply(DE)));  // result is 3x1 Matrix
+    // Vector control_command = u_d.subtract(((K.multiply(state_error)).add(I.multiply(IE))).add(D.multiply(DE)));  // result is 3x1 Matrix
 
 
-    //  // Read in Q, R matrices
-    //  Matrix Q = toRectMatrix(Q_MATRIX, 12, 12);
-    //  Matrix R = toRectMatrix(R_MATRIX, 3, 3);
+    // Read in Q, R matrices
+    Matrix Q = toRectMatrix(Q_MATRIX, 12, 12);
+    Matrix R = toRectMatrix(R_MATRIX, 3, 3);
 
-    //  std::cout << "\nAfn: " << frobeniusNorm(A);
-    //  std::cout << "\nBfn: " << frobeniusNorm(B);
+    // std::cout << "\nAfn: " << frobeniusNorm(A);
+    // std::cout << "\nBfn: " << frobeniusNorm(B);
 
- 
-    //  // Set state and setpoint in LQR controller
-    //  lqrController.setA(A);
-    //  lqrController.setB(B);
-    //  lqrController.setQ(Q);
-    //  lqrController.setR(R);
- 
-    //  // Read in current + desired states
-    //  lqrController.setState(current_state);
-    //  lqrController.setPoint = toVector(desired_state); // Assuming setPoint is a std::vector
- 
-    //  // Compute error between current state and desired state
-    //  Matrix neg_setpoint = lqrController.setPoint.multiply(-1.0);
-    //  Vector state_error = lqrController.getState().add(Vector(neg_setpoint));
- 
-    //  // Recalculate K if needed (e.g., time-varying system)
-    //  if ( iter % 5 == 0) {
-    //     lqrController.calculateK(dt);
-    //  }
- 
-    //  // // // // Compute control command: u = -K * state_error
+    // Set state and setpoint in LQR controller
+    lqrController.setA(A);
+    lqrController.setB(B);
+    lqrController.setQ(Q);
+    lqrController.setR(R);
 
-    // Matrix negative_K = lqrController.getK().multiply(-1.0);
-    // Vector control_command = u_d.add(negative_K.multiply(state_error)); 
+    // Read in current + desired states
+    lqrController.setState(current_state);
+    lqrController.setPoint = toVector(desired_state); // Assuming setPoint is a std::vector
+
+    // Compute error between current state and desired state
+    Matrix neg_setpoint = lqrController.setPoint.multiply(-1.0);
+    Vector state_error = lqrController.getState().add(Vector(neg_setpoint));
+   
+    Matrix prevK = lqrController.getK();
+    
+    double pfnX = in.prevX;
+    double fnX = pfnX;
+
+    if (iter % 5 == 0) {
+        lqrController.calculateK(dt, pfnX);
+    }
+
+    Matrix K = lqrController.getK();
+    
+
+    Matrix negative_K = K.multiply(-1.0);
+    Vector control_command = u_d.add(negative_K.multiply(state_error)); 
     Vector filtered_command = control_command;
+    
+
     // Vector change_command = (negative_K.multiply(state_error));
+
+    
 
     // sanity checks on T for feedback command
     if (control_command[0] > 15) control_command[0] = 15;
@@ -693,7 +700,8 @@ LoopOutput loop(LoopInput in) {
         newCommand, 
         error, 
         desired_command, 
-        filteredCommand
+        filteredCommand,
+        fnX,
     };
 
     return out;

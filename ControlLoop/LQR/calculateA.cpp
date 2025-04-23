@@ -54,7 +54,7 @@ Matrix calculateA(
     double Iyz_a = inertia_a(1, 2);
     double Izz_a = inertia_a(2, 2);
 
-    // From lower TVC inertia
+    // From lower TVC inertia  
     double Ixx_b = inertia_b(0, 0);
     double Ixy_b = inertia_b(0, 1);
     double Ixz_b = inertia_b(0, 2);
@@ -62,6 +62,7 @@ Matrix calculateA(
     double Iyz_b = inertia_b(1, 2);
     double Izz_b = inertia_b(2, 2);
     
+    // Inputs <-- Changed a/b gimbal ordering to fix problem
     double T          = full_input[0];
     double a          = full_input[1];
     double b          = full_input[2];

@@ -499,11 +499,15 @@ void simulate(RocketParams &P) {
     std::vector<double> previous_command = prevCommand;
     std::vector<double> previous_previous_command;
 
+    Matrix Kin = Matrix(3,12,0.0);
+    double prevX = 0;
+    loopOutput.newX = prevX;
+
     
     // Main simulation loop
     for (int step = 0; step < num_steps; step++) {
         // -------------------- LQR CONTROL CALCULATION --------------------
-        std::cout << "Step: " << step << "\n";
+        // std::cout << "Step: " << step << "\n";
         // 1. Convert current state to the format expected by the LQR
         std::vector<double> position = {pos(0,0), pos(1,0), pos(2,0)};
         std::vector<double> velocity = {vel(0,0), vel(1,0), vel(2,0)};
@@ -583,13 +587,15 @@ void simulate(RocketParams &P) {
         // std::cout << "MLIDAR Data: "; printVector(sensor_values[3], "");
         // std::cout << "MUWB Data: "; printVector(sensor_values[4], "");
 
-
         // Set prevCommands
         previous_state = prevState;
         prevState = loopOutput.state; 
         previous_previous_command = previous_command;
         previous_command = prevCommand;
         prevCommand = loopOutput.command; 
+        prevX = loopOutput.newX;
+
+        // std::cout << "\nPrevK: "; prevK.print();
 
         // Create loop input structure
         LoopInput loopInput = {
@@ -604,11 +610,14 @@ void simulate(RocketParams &P) {
             loopOutput.command,
             previous_command,
             previous_previous_command,
-            iter
+            iter,
+            prevX
         };
         
         // 4. Call the loop function to get control commands
         loopOutput = loop(loopInput);
+
+        
 
         // 5. Extract commands from the loop output
         std::vector<double> command = loopOutput.command;
@@ -652,12 +661,12 @@ void simulate(RocketParams &P) {
         } 
         // Update drag coefficients based on AoA and regression formulas. NOTE: ONLY ACCURATE FOR MONOPROP!
 
-        P.Cd_x = -0.449*std::cos(3.028*AoA*M_PI/180) + 0.463;
-        P.Cd_y = -0.376*std::cos(5.675*AoA*M_PI/180) + 1.854;
+        // P.Cd_x = -0.449*std::cos(3.028*AoA*M_PI/180) + 0.463;
+        // P.Cd_y = -0.376*std::cos(5.675*AoA*M_PI/180) + 1.854;
         // debug statement
         // current problem: these 2 are not changing.
-        std::cout << AoA << "\n";
-        std::cout << "Cd_x: " << P.Cd_x << ", Cd_y: " << P.Cd_y << "\n";
+        // std::cout << AoA << "\n";
+        // std::cout << "Cd_x: " << P.Cd_x << ", Cd_y: " << P.Cd_y << "\n";
 
         pair<Vector, Vector> drag = get_drag_body(P, att, vel, v_wind);
         Vector F_drag_body = drag.first;

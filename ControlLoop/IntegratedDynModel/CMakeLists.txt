@@ -19,6 +19,8 @@ set(SOURCES
     ../LQR/lqr.cpp
     ../LQR/calculateA.cpp
     ../LQR/calculateB.cpp
+    ../LQR/calculateABF.cpp
+    ../LQR/calculateBBF.cpp
     ../LQR/solveCARE.cpp
     ../Filters/EKFs/ExtendedKalmanFilterGeneral.cpp
     ../Filters/EKFs/EKF_xy.cpp

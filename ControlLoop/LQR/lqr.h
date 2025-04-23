@@ -25,10 +25,11 @@ public:
     void setR(Matrix&& R);
     void setK(const Matrix& K);
     void setK(Matrix&& K);
+    void setX(Matrix&& X);
     void setState(const Vector& state);
     void setState(Vector&& state);
 
-    void calculateK(double dt); // Calculate K matrix
+    double calculateK(double dt, double fnX); // Calculate K matrix
 
     double frobeniusNormDiff(const Matrix& A, const Matrix& B) const;
     double frobeniusNorm(const Matrix& A) const;

@@ -1,21 +1,43 @@
 #include "../CustomLinear/Matrix.h"
 #include <iostream>
 
+#include "../CustomLinear/Matrix.h"
+#include <iostream>
+#include <vector>
+
 extern "C" {
+    // Eigenvalue selector for Schur form
     int select_neg_real(double* wr, double* wi) {
-        return (*wr < 0.0); // Select eigenvalues with negative real part
+        return (*wr < -1e-2); // Select eigenvalues with negative real part
     }
+
+    // Schur decomposition (real, double precision)
     void dgees_(
         char* jobvs, char* sort, int (*select)(double*, double*),
         int* n, double* a, int* lda, int* sdim,
         double* wr, double* wi, double* vs, int* ldvs,
         double* work, int* lwork, int* bwork, int* info
     );
-    void dgetrf_(int* m, int* n, double* a, int* lda, int* ipiv, int* info);
-    void dgetri_(int* n, double* a, int* lda, int* ipiv, double* work, int* lwork, int* info);
+
+    void dgesv_(
+        int* n, int* nrhs, double* a, int* lda,
+        int* ipiv, double* b, int* ldb, int* info
+    );
 }
 
-Matrix solveCARE(const Matrix& A, const Matrix& B, const Matrix& Q, const Matrix& R) {
+double frobeniusNorm2(const Matrix& A) {
+    double sum = 0.0;
+    for (unsigned int i = 0; i < A.getRows(); ++i) {
+        for (unsigned int j = 0; j < A.getCols(); ++j) {
+            double val = A(i, j);
+            sum += val * val;
+        }
+    }
+    return std::sqrt(sum);
+}
+
+
+std::vector<Matrix> solveCARE(const Matrix& A, const Matrix& B, const Matrix& Q, const Matrix& R) {
     const int n = A.getRows();
     const int m = B.getCols();
     int dim = 2 * n;
@@ -25,7 +47,7 @@ Matrix solveCARE(const Matrix& A, const Matrix& B, const Matrix& Q, const Matrix
     if (B.getRows() != n) throw std::runtime_error("[solveCARE] B must have " + std::to_string(n) + " rows.");
     if (R.getRows() != m || R.getCols() != m) throw std::runtime_error("[solveCARE] R must be " + std::to_string(m) + "x" + std::to_string(m));
 
-    Matrix Rinv = R.pseudoInverseJacobi(10e-12, 100);
+    Matrix Rinv = R.pseudoInverseJacobi(1e-15, 100);
     Matrix BRBt = B.multiply(Rinv).multiply(B.transpose());
 
     Matrix H(dim, dim, 0.0);
@@ -77,8 +99,94 @@ Matrix solveCARE(const Matrix& A, const Matrix& B, const Matrix& Q, const Matrix
             U21(i, j) = Z(i + n, j);
         }
 
-    Matrix U11inv = U11.pseudoInverseJacobi(1e-12, 100);
-    Matrix X = U21.multiply(U11inv);
+    // std::cout << "\nU11: \n"; U11.print();
+    // std::cout << "\nU21: \n"; U21.print();
+
+    // -- Regularization strength --
+    double lambda = 1e-8;
+
+    // -- Sizes --
+    int n_reg = U11.getRows();
+    int k_rhs = U21.getCols();
+
+    // -- Step 1: Compute AᵗA = U11ᵗ * U11 --
+    Matrix U11T = U11.transpose();
+    Matrix ATA = U11T.multiply(U11);
+
+    // -- Step 2: Add λI --
+    for (int i = 0; i < n_reg; ++i) {
+        ATA(i, i) += lambda;
+    }
+
+    // -- Step 3: Compute U11ᵗ * U21 --
+    Matrix ATB = U11T.multiply(U21);
+
+    // -- Step 4: Solve (ATA) * X = ATB using dgesv_ --
+    double* ATA_data = new double[n_reg * n_reg];
+    double* ATB_data = new double[n_reg * k_rhs];
+
+    ATA.toArray(ATA_data, true); // column-major
+    ATB.toArray(ATB_data, true);
+
+    int* ipiv_reg = new int[n_reg];
+    int info_reg;
+
+    dgesv_(&n_reg, &k_rhs, ATA_data, &n_reg, ipiv_reg, ATB_data, &n_reg, &info_reg);
+    if (info_reg != 0) {
+        delete[] ATA_data;
+        delete[] ATB_data;
+        delete[] ipiv_reg;
+        throw std::runtime_error("[Tikhonov] Regularized solve failed.");
+    }
+
+    // -- Step 5: Wrap result in Matrix --
+    Matrix X = Matrix::fromArray(n_reg, k_rhs, ATB_data, true);
+
+    // -- Cleanup --
+    delete[] ATA_data;
+    delete[] ATB_data;
+    delete[] ipiv_reg;
+
+    // Compute M = R + Bdᵗ * P * Bd
+    Matrix BtPB = B.transpose().multiply(X.multiply(B));
+    Matrix M = R.add(BtPB);
+
+    // Dimensions
+    int rdim = M.getRows();
+    int nrhs = A.getCols(); // K will match columns of Ad_r
+
+    // Form RHS: Bdᵗ * P * Ad
+    Matrix BTPA = B.transpose().multiply(X).multiply(A);
+
+    // Prepare raw data
+    double* M_data = new double[rdim * rdim];
+    double* RHS_data = new double[rdim * nrhs];
+
+    M.toArray(M_data, true);      // column-major
+    BTPA.toArray(RHS_data, true); // column-major
+
+    int* ipiv_k = new int[rdim];
+    int info_k;
+
+    // Solve M * X = RHS using LAPACK
+    dgesv_(&rdim, &nrhs, M_data, &rdim, ipiv_k, RHS_data, &rdim, &info_k);
+    if (info_k != 0) {
+        delete[] M_data;
+        delete[] RHS_data;
+        delete[] ipiv_k;
+        throw std::runtime_error("[Kd] dgesv solve failed.");
+    }
+
+    // Convert result to Matrix
+    Matrix Kd_r = Matrix::fromArray(rdim, nrhs, RHS_data, true);
+
+    // Cleanup
+    delete[] M_data;
+    delete[] RHS_data;
+    delete[] ipiv_k;
+
+
+    // std::cout << "\nX: \n"; X.print();
 
     delete[] H_data;
     delete[] vs;
@@ -87,5 +195,5 @@ Matrix solveCARE(const Matrix& A, const Matrix& B, const Matrix& Q, const Matrix
     delete[] bwork;
     delete[] work;
 
-    return X;
+    return {Kd_r, X};
 }

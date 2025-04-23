@@ -166,6 +166,21 @@ Matrix Matrix::multiply(double scalar) const {
     return result;
 }
 
+double frobeniusNorm(Matrix a) {
+    double sum = 0.0;
+    unsigned int rows = a.getRows();
+    unsigned int cols = a.getCols();
+
+    for (unsigned int i = 0; i < rows; ++i) {
+        for (unsigned int j = 0; j < cols; ++j) {
+            double val = a(i, j);
+            sum += val * val;
+        }
+    }
+    return std::sqrt(sum);
+}
+
+
 // Transpose
 Matrix Matrix::transpose() const {
     Matrix result(cols, rows, 0);
