@@ -180,8 +180,8 @@ std::vector<double> toStdVector(const Matrix& mat) {
 
 double cdRegression(double AoA) {
     // return ((2.5/90)*AoA+(1.5/10000)*(AoA*AoA)); //placeholder regression, accurate enough
-    double cd_x = -0.449*std::cos(3.028*AoA*M_PI/180) + 0.463;
-    double cd_y = -0.376*std::cos(5.675*AoA*M_PI/180) + 1.854;
+    double cd_x = -0.449*std::cos(3.028*AoA*M_PI/180) + 0.463; // AoA in degrees
+    double cd_y = -0.376*std::cos(5.675*AoA*M_PI/180) + 1.854; // AoA in degrees
 
     return std::sqrt(cd_x*cd_x + cd_y*cd_y); // sqrt of sum of squares
     // is this method right? Might cause problems later.

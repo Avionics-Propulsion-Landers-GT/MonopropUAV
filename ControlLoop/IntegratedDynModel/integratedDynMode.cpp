@@ -330,6 +330,7 @@ pair<Vector, Vector> get_drag_body(const RocketParams &P, const Quaternion &att,
     // Build a diagonal vector for drag coefficients.
     // is this really a diagonal "vector"??? - Justin
     Vector diagVals(3, 0.0);
+    // std::cout << "Cd_x: " << P.Cd_x << ", Cd_y: " << P.Cd_y << "\n";
     diagVals(0,0) = P.Cd_x * P.A_x;
     diagVals(1,0) = P.Cd_y * P.A_y;
     diagVals(2,0) = P.Cd_z * P.A_z;
@@ -656,17 +657,17 @@ void simulate(RocketParams &P) {
             double dot = -(velocity[0] * z_wf[0] + velocity[1] * z_wf[1] + velocity[2] * z_wf[2]);
             double cos_alpha = dot / (velocity_magnitude * z_norm);
             cos_alpha = std::max(-1.0, std::min(1.0, cos_alpha));
-            AoA = std::acos(cos_alpha)*(180/3.14159265358979323846);
+            AoA = std::acos(cos_alpha); // radians
             // AoA = std::acos(velocity_vector.dotProduct(z_direction) / (velocity_magnitude * z_direction.magnitude()))*(180/3.14159);
         } 
         // Update drag coefficients based on AoA and regression formulas. NOTE: ONLY ACCURATE FOR MONOPROP!
 
-        // P.Cd_x = -0.449*std::cos(3.028*AoA*M_PI/180) + 0.463;
-        // P.Cd_y = -0.376*std::cos(5.675*AoA*M_PI/180) + 1.854;
+        P.Cd_x = -0.449*std::cos(3.028*AoA*M_PI/180) + 0.463;
+        P.Cd_y = -0.376*std::cos(5.675*AoA*M_PI/180) + 1.854;
         // debug statement
         // current problem: these 2 are not changing.
-        // std::cout << AoA << "\n";
-        // std::cout << "Cd_x: " << P.Cd_x << ", Cd_y: " << P.Cd_y << "\n";
+        std::cout << AoA << "\n";
+        std::cout << "Cd_x: " << P.Cd_x << ", Cd_y: " << P.Cd_y << "\n";
 
         pair<Vector, Vector> drag = get_drag_body(P, att, vel, v_wind);
         Vector F_drag_body = drag.first;
@@ -742,7 +743,6 @@ void simulate(RocketParams &P) {
     file << "time,x,y,z,vx,vy,vz,thrust,a,b,xac,yac,zac,vxac,vyac,vzac\n";
     
     // Write data rows
-    // PROBLEM HERE WITH THE COMMAND HISTORY OUTPUTS. UNCOMMENT, COMPILE AND RUN FOR MORE INFO - Justin
     for (int i = 0; i < num_steps; i++) {
         file << time[i] << ","
              << pos_history[i](0,0) << "," << pos_history[i](1,0) << "," << pos_history[i](2,0) << ","
