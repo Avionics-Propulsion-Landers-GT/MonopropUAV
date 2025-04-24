@@ -621,7 +621,7 @@ void simulate(RocketParams &P) {
         
 
         // 5. Extract commands from the loop output
-        std::vector<double> command = loopOutput.command;
+        std::vector<double> command = loopOutput.filteredCommand;
         // std::vector<double> command = loopOutput.command;
         
         // 6. Convert commands to thrust and gimbal angles
@@ -666,8 +666,8 @@ void simulate(RocketParams &P) {
         P.Cd_y = -0.376*std::cos(5.675*AoA*M_PI/180) + 1.854;
         // debug statement
         // current problem: these 2 are not changing.
-        std::cout << AoA << "\n";
-        std::cout << "Cd_x: " << P.Cd_x << ", Cd_y: " << P.Cd_y << "\n";
+        // std::cout << AoA << "\n";
+        // std::cout << "Cd_x: " << P.Cd_x << ", Cd_y: " << P.Cd_y << "\n";
 
         pair<Vector, Vector> drag = get_drag_body(P, att, vel, v_wind);
         Vector F_drag_body = drag.first;

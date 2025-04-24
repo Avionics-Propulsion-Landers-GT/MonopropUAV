@@ -56,21 +56,21 @@ static Vector static_input = Vector(3, 0.0);
 const std::vector<double> Q_MATRIX = { // 12 x 12
     /* Starting values based of Bryson's Rule */
     // Position (x, y, z)
-    0.0, 0.00, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    0.00, 0.0, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    0.00, 0.00, 400.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+    1.0, 0.00, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+    0.00, 1.0, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+    0.00, 0.00, 1.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
     // Linear velocity (vx, vy, vz)
-    0.0, 0.0, 0.0,  0.0, 0.00, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    0.0, 0.0, 0.0,  0.00, 0.0, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    0.0, 0.0, 0.0,  0.00, 0.00, 100.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0,  1.0, 0.00, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0,  0.00, 1.0, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0,  0.00, 0.0, 1.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
     // Angular position (roll, pitch, yaw)
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  100.0, 0.00, 0.00,  0.0, 0.0, 0.0,
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 100.0, 0.00,  0.0, 0.0, 0.0,
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 0.00, 0.0,  0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  1.0, 0.00, 0.00,  0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 1.0, 0.00,  0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 0.00, 1.0,  0.0, 0.0, 0.0,
     // Angular velocity (wx, wy, wz)
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  2.5, 0.00, 0.00,
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 2.5, 0.00,
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 0.00, 0.0
+    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  1.0, 0.00, 0.00,
+    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 1.0, 0.00,
+    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 0.00, 1.0
 }; 
 const std::vector<double> R_MATRIX = { // 3 x 3
 /* Starting values based of Bryson's Rule */
@@ -180,8 +180,8 @@ std::vector<double> toStdVector(const Matrix& mat) {
 
 double cdRegression(double AoA) {
     // return ((2.5/90)*AoA+(1.5/10000)*(AoA*AoA)); //placeholder regression, accurate enough
-    double cd_x = -0.449*std::cos(3.028*AoA*M_PI/180) + 0.463; // AoA in degrees
-    double cd_y = -0.376*std::cos(5.675*AoA*M_PI/180) + 1.854; // AoA in degrees
+    double cd_x = -0.449*std::cos(3.028*AoA*M_PI/180) + 0.463;
+    double cd_y = -0.376*std::cos(5.675*AoA*M_PI/180) + 1.854;
 
     return std::sqrt(cd_x*cd_x + cd_y*cd_y); // sqrt of sum of squares
     // is this method right? Might cause problems later.
@@ -306,7 +306,9 @@ LoopOutput loop(LoopInput in) {
     EKF_Altitude& ekf_ox = system.ekf_ox;
     EKF_Altitude& ekf_oy = system.ekf_oy;
     EKF_Altitude& ekf_oz = system.ekf_oz;
-    EKF_Altitude& ekf_thrust = system.ekf_thrust;
+    EKF_Altitude& ekf_a = system.ekf_a;
+    EKF_Altitude& ekf_b = system.ekf_b;
+    EKF_Altitude& ekf_t = system.ekf_t;
     LQR& lqrController = system.lqrController;
 
     // Constants
@@ -465,8 +467,6 @@ LoopOutput loop(LoopInput in) {
 
     std::vector<double> angular_states = {omega_a, omega_b, alpha_a, alpha_b};
 
-
-
     // -------------------------- II. LQR --------------------------------------
 
     // ----------------------- i. set up key quantities ------------------------
@@ -522,8 +522,8 @@ LoopOutput loop(LoopInput in) {
     Matrix inertia_b = toMatrix(getInertiaB(command[2]));
     
     // 7. Calculate A and B Matrices << NOTE AERO HAS BEEN ZEROED
-    Matrix A = calculateA(m, f, 0, 0, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector({0,0,0,0}));
-    Matrix B = calculateB(m, f, 0, 0, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector({0,0,0,0}));
+    Matrix A = calculateA(m, f, 0, 0, toVector(desired_state), static_input, toVector({0,0,0}), rt, inertia, inertia_a, inertia_b, toVector({0,0,0,0}));
+    Matrix B = calculateB(m, f, 0, 0, toVector(desired_state), static_input, toVector({0,0,0}), rt, inertia, inertia_a, inertia_b, toVector({0,0,0,0}));
 
     // Matrix A = calculateABF(m, f, 0, 0, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector({0,0,0,0}));
     // Matrix B = calculateBBF(m, f, 0, 0, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector({0,0,0,0}));
@@ -660,21 +660,44 @@ LoopOutput loop(LoopInput in) {
     double pfnX = in.prevX;
     double fnX = pfnX;
 
+    Matrix K = lqrController.getK();
+
+
     if (iter % 5 == 0) {
         lqrController.calculateK(dt, pfnX);
+        K = lqrController.getK();
+        std::cout << "\nAfn: " << frobeniusNorm(A);
+        std::cout << "\nBfn: " << frobeniusNorm(B);
+        std::cout << "\nKfn: " << frobeniusNorm(K);
     }
 
-    Matrix K = lqrController.getK();
+    
+
+
+
     
 
     Matrix negative_K = K.multiply(-1.0);
     Vector control_command = u_d.add(negative_K.multiply(state_error)); 
     Vector filtered_command = control_command;
-    
 
     // Vector change_command = (negative_K.multiply(state_error));
 
-    
+    // Vector measurement_a(2, 0.0);
+    // measurement_a(0, 0) = control_command[1]; measurement_a(1, 0) = 0; 
+    // ekf_a.update(measurement_a); ekf_a.predict();
+    // Vector estimated_state_a = ekf_a.getState(); double a_actual = estimated_state_a(0, 0);
+
+    // Vector measurement_b(2, 0.0);
+    // measurement_b(0, 0) = control_command[2]; measurement_b(1, 0) = 0; 
+    // ekf_b.update(measurement_b); ekf_b.predict();
+    // Vector estimated_state_b = ekf_b.getState(); double b_actual = estimated_state_b(0, 0);
+
+    // Vector measurement_t(2, 0.0);
+    // measurement_t(0, 0) = control_command[0]; measurement_t(1, 0) = 0; 
+    // ekf_t.update(measurement_t); ekf_t.predict();
+    // Vector estimated_state_t = ekf_t.getState(); double t_actual = estimated_state_t(0, 0);
+
 
     // sanity checks on T for feedback command
     if (control_command[0] > 15) control_command[0] = 15;
@@ -684,8 +707,9 @@ LoopOutput loop(LoopInput in) {
     if (filtered_command[0] > 15) filtered_command[0] = 15; if (filtered_command[0] < 0) filtered_command[0] = 0;
     if (filtered_command[1] > 1) filtered_command[1] = 1; if (filtered_command[1] < -1) filtered_command[1] = -1;
     if (filtered_command[2] > 1) filtered_command[2] = 1; if (filtered_command[2] < -1) filtered_command[2] = -1;
-    
-    std::vector<double> filteredCommand = toStdVector(filtered_command);
+
+   
+    std::vector<double> filteredCommand = {filtered_command[0], filtered_command[2], filtered_command[1]};
     std::vector<double> newCommand = toStdVector(control_command);  
     std::vector<double> error = toStdVector(state_error);
     std::vector<bool> newStatus = {true, true};

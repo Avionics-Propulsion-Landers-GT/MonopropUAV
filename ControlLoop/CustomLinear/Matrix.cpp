@@ -6,6 +6,7 @@
 #include <cmath>
 #include <limits>
 #include <cassert>
+#include <vector>
 
 
 //Initialize data pointer to a double which allows for efficient array creation etc. and rows and cols
@@ -293,6 +294,30 @@ Matrix Matrix::fromArray(int rows, int cols, const double* data, bool colMajor) 
     }
     return result;
 }
+
+Matrix Matrix::reorderColumns(const std::vector<int>& indices) const {
+    if (indices.size() != getCols()) {
+        throw std::runtime_error("[Matrix::reorderColumns] Size mismatch: expected " +
+                                 std::to_string(getCols()) + " indices, got " +
+                                 std::to_string(indices.size()));
+    }
+
+    Matrix result(getRows(), getCols(), 0.0);
+
+    for (size_t newCol = 0; newCol < indices.size(); ++newCol) {
+        int srcCol = indices[newCol];
+        if (srcCol < 0 || srcCol >= getCols()) {
+            throw std::out_of_range("[Matrix::reorderColumns] Invalid column index: " + std::to_string(srcCol));
+        }
+
+        for (size_t row = 0; row < getRows(); ++row) {
+            result(row, newCol) = (*this)(row, srcCol);
+        }
+    }
+
+    return result;
+}
+
 
 void Matrix::toArray(double* out, bool colMajor) const {
     if (colMajor) {

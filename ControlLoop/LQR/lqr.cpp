@@ -100,7 +100,7 @@ void LQR::setState(Vector&& state) {
 
 double LQR::calculateK(double dt, double fnX) {
     unsigned int n_u = B.getCols();
-    double rankEps = 1e-15;
+    double rankEps = 1e-1;
     int maxIter = 100;
 
     Matrix C = A.controllabilityMatrix(B);
@@ -113,7 +113,7 @@ double LQR::calculateK(double dt, double fnX) {
     int rank = 0;
     Matrix activations(m, 1, 0);
     for (unsigned int i = 0; i < m; ++i) {
-        if (Sigma(i, i) > 1e-6) {
+        if (Sigma(i, i) > 1e-1) {
             ++rank;
             activations(i, 0) = 1;
         }
@@ -137,6 +137,8 @@ double LQR::calculateK(double dt, double fnX) {
             ++t_col;
         }
     }
+
+    std::cout << "\nRANK: " << rank << std::endl;
 
     Matrix Tt = T.transpose();
     Matrix A_kal = Tt.multiply(A.multiply(T));
@@ -170,26 +172,8 @@ double LQR::calculateK(double dt, double fnX) {
     Matrix Kd_r = results[0];
     Matrix newX = results[1];
 
-    // Stability check
-    double fro_new = frobeniusNorm(newX);
-    double fro_prev = fnX;
-    double relDiff = std::abs(fro_new - fro_prev) / std::max(fro_prev, 1e-8);
-
-    // if (fro_prev < 1e-6) {
-    //     std::cout << "[LQR] First Riccati update accepted by default (fro_prev = 0)\n";
-    // } else {
-    //     double relDiff = std::abs(fro_new - fro_prev) / fro_prev;
-    
-    //     if (relDiff > 0.2) {
-    //         std::cerr << "[LQR] REJECTED Riccati update. prev norm: " << fro_prev
-    //                   << " | new norm: " << fro_new
-    //                   << " | relDiff: " << relDiff << "\n";
-    //         return fnX; // Don't update K or X
-    //     }
-    // }
-
-    // Accept
     Matrix Kd = Kd_r.multiply(Tc.transpose());
+
     K = Kd;
     // std::cout << "\nNewX: "; newX.print();
     return frobeniusNorm(newX);

@@ -228,6 +228,11 @@ CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLin
  /usr/include/c++/11/tr1/poly_hermite.tcc
  /usr/include/c++/11/tr1/poly_laguerre.tcc
  /usr/include/c++/11/tr1/riemann_zeta.tcc
+ /usr/include/c++/11/vector
+ /usr/include/c++/11/bits/stl_uninitialized.h
+ /usr/include/c++/11/bits/stl_vector.h
+ /usr/include/c++/11/bits/stl_bvector.h
+ /usr/include/c++/11/bits/vector.tcc
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Vector.h
  /usr/include/c++/11/cassert
  /usr/include/assert.h
@@ -609,6 +614,11 @@ CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLin
  /usr/include/c++/11/tr1/poly_hermite.tcc
  /usr/include/c++/11/tr1/poly_laguerre.tcc
  /usr/include/c++/11/tr1/riemann_zeta.tcc
+ /usr/include/c++/11/vector
+ /usr/include/c++/11/bits/stl_uninitialized.h
+ /usr/include/c++/11/bits/stl_vector.h
+ /usr/include/c++/11/bits/stl_bvector.h
+ /usr/include/c++/11/bits/vector.tcc
  /usr/include/c++/11/iostream
  /usr/include/c++/11/ostream
  /usr/include/c++/11/ios
@@ -819,13 +829,13 @@ CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/E
  /usr/include/c++/11/tr1/poly_hermite.tcc
  /usr/include/c++/11/tr1/poly_laguerre.tcc
  /usr/include/c++/11/tr1/riemann_zeta.tcc
- /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Vector.h
- /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Matrix.h
  /usr/include/c++/11/vector
  /usr/include/c++/11/bits/stl_uninitialized.h
  /usr/include/c++/11/bits/stl_vector.h
  /usr/include/c++/11/bits/stl_bvector.h
  /usr/include/c++/11/bits/vector.tcc
+ /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Vector.h
+ /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Matrix.h
 
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_z.cpp.o
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_z.cpp
@@ -1013,13 +1023,13 @@ CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/E
  /usr/include/c++/11/tr1/poly_hermite.tcc
  /usr/include/c++/11/tr1/poly_laguerre.tcc
  /usr/include/c++/11/tr1/riemann_zeta.tcc
- /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Vector.h
- /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Matrix.h
  /usr/include/c++/11/vector
  /usr/include/c++/11/bits/stl_uninitialized.h
  /usr/include/c++/11/bits/stl_vector.h
  /usr/include/c++/11/bits/stl_bvector.h
  /usr/include/c++/11/bits/vector.tcc
+ /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Vector.h
+ /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Matrix.h
 
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/ExtendedKalmanFilterGeneral.cpp.o
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/ExtendedKalmanFilterGeneral.cpp
@@ -1206,13 +1216,13 @@ CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/E
  /usr/include/c++/11/tr1/poly_hermite.tcc
  /usr/include/c++/11/tr1/poly_laguerre.tcc
  /usr/include/c++/11/tr1/riemann_zeta.tcc
- /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Vector.h
- /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Matrix.h
  /usr/include/c++/11/vector
  /usr/include/c++/11/bits/stl_uninitialized.h
  /usr/include/c++/11/bits/stl_vector.h
  /usr/include/c++/11/bits/stl_bvector.h
  /usr/include/c++/11/bits/vector.tcc
+ /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Vector.h
+ /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Matrix.h
 
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/Madgwick/updatedMadgwick.cpp.o
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/Madgwick/updatedMadgwick.cpp
@@ -1513,13 +1523,13 @@ CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calcu
  /usr/include/c++/11/tr1/poly_hermite.tcc
  /usr/include/c++/11/tr1/poly_laguerre.tcc
  /usr/include/c++/11/tr1/riemann_zeta.tcc
- /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Vector.h
- /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Matrix.h
  /usr/include/c++/11/vector
  /usr/include/c++/11/bits/stl_uninitialized.h
  /usr/include/c++/11/bits/stl_vector.h
  /usr/include/c++/11/bits/stl_bvector.h
  /usr/include/c++/11/bits/vector.tcc
+ /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Vector.h
+ /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Matrix.h
 
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp.o
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.cpp
@@ -1705,13 +1715,13 @@ CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calcu
  /usr/include/c++/11/tr1/poly_hermite.tcc
  /usr/include/c++/11/tr1/poly_laguerre.tcc
  /usr/include/c++/11/tr1/riemann_zeta.tcc
- /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Vector.h
- /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Matrix.h
  /usr/include/c++/11/vector
  /usr/include/c++/11/bits/stl_uninitialized.h
  /usr/include/c++/11/bits/stl_vector.h
  /usr/include/c++/11/bits/stl_bvector.h
  /usr/include/c++/11/bits/vector.tcc
+ /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Vector.h
+ /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Matrix.h
 
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateB.cpp.o
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateB.cpp
@@ -1897,13 +1907,13 @@ CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calcu
  /usr/include/c++/11/tr1/poly_hermite.tcc
  /usr/include/c++/11/tr1/poly_laguerre.tcc
  /usr/include/c++/11/tr1/riemann_zeta.tcc
- /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Vector.h
- /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Matrix.h
  /usr/include/c++/11/vector
  /usr/include/c++/11/bits/stl_uninitialized.h
  /usr/include/c++/11/bits/stl_vector.h
  /usr/include/c++/11/bits/stl_bvector.h
  /usr/include/c++/11/bits/vector.tcc
+ /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Vector.h
+ /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Matrix.h
 
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp.o
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateBBF.cpp
@@ -2089,13 +2099,13 @@ CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calcu
  /usr/include/c++/11/tr1/poly_hermite.tcc
  /usr/include/c++/11/tr1/poly_laguerre.tcc
  /usr/include/c++/11/tr1/riemann_zeta.tcc
- /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Vector.h
- /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Matrix.h
  /usr/include/c++/11/vector
  /usr/include/c++/11/bits/stl_uninitialized.h
  /usr/include/c++/11/bits/stl_vector.h
  /usr/include/c++/11/bits/stl_bvector.h
  /usr/include/c++/11/bits/vector.tcc
+ /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Vector.h
+ /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Matrix.h
 
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/lqr.cpp.o
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/lqr.cpp
@@ -2283,6 +2293,11 @@ CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/lqr.c
  /usr/include/c++/11/tr1/poly_hermite.tcc
  /usr/include/c++/11/tr1/poly_laguerre.tcc
  /usr/include/c++/11/tr1/riemann_zeta.tcc
+ /usr/include/c++/11/vector
+ /usr/include/c++/11/bits/stl_uninitialized.h
+ /usr/include/c++/11/bits/stl_vector.h
+ /usr/include/c++/11/bits/stl_bvector.h
+ /usr/include/c++/11/bits/vector.tcc
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Matrix.h
  /usr/include/c++/11/iostream
  /usr/include/c++/11/ostream
@@ -2328,11 +2343,6 @@ CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/lqr.c
  /usr/include/c++/11/sstream
  /usr/include/c++/11/bits/sstream.tcc
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/solveCARE.h
- /usr/include/c++/11/vector
- /usr/include/c++/11/bits/stl_uninitialized.h
- /usr/include/c++/11/bits/stl_vector.h
- /usr/include/c++/11/bits/stl_bvector.h
- /usr/include/c++/11/bits/vector.tcc
 
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/solveCARE.cpp.o
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/solveCARE.cpp
@@ -2518,6 +2528,11 @@ CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/solve
  /usr/include/c++/11/tr1/poly_hermite.tcc
  /usr/include/c++/11/tr1/poly_laguerre.tcc
  /usr/include/c++/11/tr1/riemann_zeta.tcc
+ /usr/include/c++/11/vector
+ /usr/include/c++/11/bits/stl_uninitialized.h
+ /usr/include/c++/11/bits/stl_vector.h
+ /usr/include/c++/11/bits/stl_bvector.h
+ /usr/include/c++/11/bits/vector.tcc
  /usr/include/c++/11/iostream
  /usr/include/c++/11/ostream
  /usr/include/c++/11/ios
@@ -2541,11 +2556,35 @@ CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/solve
  /usr/include/c++/11/bits/ostream.tcc
  /usr/include/c++/11/istream
  /usr/include/c++/11/bits/istream.tcc
- /usr/include/c++/11/vector
- /usr/include/c++/11/bits/stl_uninitialized.h
- /usr/include/c++/11/bits/stl_vector.h
- /usr/include/c++/11/bits/stl_bvector.h
- /usr/include/c++/11/bits/vector.tcc
+ /usr/include/c++/11/numeric
+ /usr/include/c++/11/bits/stl_numeric.h
+ /usr/include/c++/11/bit
+ /usr/include/c++/11/pstl/glue_numeric_defs.h
+ /usr/include/c++/11/pstl/execution_defs.h
+ /usr/include/c++/11/algorithm
+ /usr/include/c++/11/utility
+ /usr/include/c++/11/bits/stl_relops.h
+ /usr/include/c++/11/bits/stl_algo.h
+ /usr/include/c++/11/bits/algorithmfwd.h
+ /usr/include/c++/11/bits/stl_heap.h
+ /usr/include/c++/11/bits/stl_tempbuf.h
+ /usr/include/c++/11/bits/uniform_int_dist.h
+ /usr/include/c++/11/pstl/glue_algorithm_defs.h
+ /usr/include/c++/11/functional
+ /usr/include/c++/11/tuple
+ /usr/include/c++/11/array
+ /usr/include/c++/11/bits/uses_allocator.h
+ /usr/include/c++/11/bits/invoke.h
+ /usr/include/c++/11/bits/refwrap.h
+ /usr/include/c++/11/bits/std_function.h
+ /usr/include/c++/11/unordered_map
+ /usr/include/c++/11/ext/aligned_buffer.h
+ /usr/include/c++/11/bits/hashtable.h
+ /usr/include/c++/11/bits/hashtable_policy.h
+ /usr/include/c++/11/bits/enable_special_members.h
+ /usr/include/c++/11/bits/node_handle.h
+ /usr/include/c++/11/bits/unordered_map.h
+ /usr/include/c++/11/bits/erase_if.h
 
 CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Loop/init.cpp.o
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Loop/init.cpp

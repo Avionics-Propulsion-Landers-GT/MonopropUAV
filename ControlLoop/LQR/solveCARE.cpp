@@ -3,14 +3,16 @@
 
 #include "../CustomLinear/Matrix.h"
 #include <iostream>
+#include <numeric>
 #include <vector>
+#include <algorithm>
 
 extern "C" {
     // Eigenvalue selector for Schur form
-    int select_neg_real(double* wr, double* wi) {
-        return (*wr < -1e-2); // Select eigenvalues with negative real part
+    extern "C" int select_neg_real(double* wr, double* wi) {
+        return (*wr < 0.0) ? 0xFFFFFFFF : 0x00000000;
     }
-
+    
     // Schur decomposition (real, double precision)
     void dgees_(
         char* jobvs, char* sort, int (*select)(double*, double*),
@@ -23,6 +25,37 @@ extern "C" {
         int* n, int* nrhs, double* a, int* lda,
         int* ipiv, double* b, int* ldb, int* info
     );
+}
+
+int chk() {
+    const int n = 2;
+    double A[n * n] = {0.0, 1.0, -2.0, -3.0};  // [ [0, 1], [-2, -3] ]
+    double wr[n], wi[n], vs[n * n];
+    double work_query;
+    int sdim = 0, info = 0, lwork = -1;
+    int bwork[n];
+
+    char jobvs = 'V';
+    char sort = 'S';
+
+    // Workspace query
+    dgees_(&jobvs, &sort, select_neg_real, (int*)&n, A, (int*)&n, &sdim,
+           wr, wi, vs, (int*)&n, &work_query, &lwork, bwork, &info);
+
+    lwork = (int)work_query;
+    double* work = new double[lwork]();
+
+    // Run the real thing
+    dgees_(&jobvs, &sort, select_neg_real, (int*)&n, A, (int*)&n, &sdim,
+           wr, wi, vs, (int*)&n, work, &lwork, bwork, &info);
+
+    std::cout << "\n[TEST] Info: " << info << ", sdim = " << sdim << "\n";
+
+    for (int i = 0; i < n; ++i)
+        std::cout << "Eigenvalue: " << wr[i] << " + " << wi[i] << "i\n";
+
+    delete[] work;
+    return 0;
 }
 
 double frobeniusNorm2(const Matrix& A) {
@@ -38,6 +71,8 @@ double frobeniusNorm2(const Matrix& A) {
 
 
 std::vector<Matrix> solveCARE(const Matrix& A, const Matrix& B, const Matrix& Q, const Matrix& R) {
+    // int rtv = chk();
+    // std::cout << "rtv: " << rtv << std::endl;
     const int n = A.getRows();
     const int m = B.getCols();
     int dim = 2 * n;
@@ -75,11 +110,31 @@ std::vector<Matrix> solveCARE(const Matrix& A, const Matrix& B, const Matrix& Q,
     dgees_(&jobvs, &sort, select_neg_real, &dim, H_data, &dim, &sdim,
            wr, wi, vs, &dim, &work_query, &lwork, bwork, &info);
 
+   // std::cout << "\n H:\n "; H.print();
+    
+
     lwork = static_cast<int>(work_query);
     double* work = new double[lwork]();
     int (*select_fn)(double*, double*) = select_neg_real;
+    H.toArray(H_data, true); 
+
     dgees_(&jobvs, &sort, select_fn, &dim, H_data, &dim, &sdim,
            wr, wi, vs, &dim, work, &lwork, bwork, &info);
+
+    // for (int i = 0; i < dim; ++i) {
+    //     std::cout << "[eig] real = " << wr[i] << ", imag = " << wi[i] << "\n";
+    // }
+
+    std::cout << "[CARE] Expected " << n << " stable eigenvalues, got " << sdim << std::endl;
+
+    // Build sorted indices based on real and imaginary parts
+    std::vector<int> indices(n);
+    std::iota(indices.begin(), indices.end(), 0);
+
+    std::sort(indices.begin(), indices.end(), [&](int a, int b) {
+        if (std::abs(wr[a] - wr[b]) > 1e-8) return wr[a] < wr[b];  // sort by real part
+        return wi[a] < wi[b];  // tiebreak: imag part
+    });
 
     Matrix Z(dim, n, 0.0);
     for (int col = 0; col < n; ++col)
@@ -92,6 +147,8 @@ std::vector<Matrix> solveCARE(const Matrix& A, const Matrix& B, const Matrix& Q,
             Z(row, col) = vs[flat_index];
         }
 
+    Z = Z.reorderColumns(indices);
+
     Matrix U11(n, n, 0), U21(n, n, 0);
     for (int i = 0; i < n; ++i)
         for (int j = 0; j < n; ++j) {
@@ -99,8 +156,8 @@ std::vector<Matrix> solveCARE(const Matrix& A, const Matrix& B, const Matrix& Q,
             U21(i, j) = Z(i + n, j);
         }
 
-    // std::cout << "\nU11: \n"; U11.print();
-    // std::cout << "\nU21: \n"; U21.print();
+    // std::cout << "\nU11fn:" << frobeniusNorm2(U11) << std::endl;
+    // std::cout << "\nU21fn:" << frobeniusNorm2(U21) << std::endl;
 
     // -- Regularization strength --
     double lambda = 1e-8;
@@ -141,6 +198,9 @@ std::vector<Matrix> solveCARE(const Matrix& A, const Matrix& B, const Matrix& Q,
 
     // -- Step 5: Wrap result in Matrix --
     Matrix X = Matrix::fromArray(n_reg, k_rhs, ATB_data, true);
+    // std::cout << "Xfn: " << frobeniusNorm2(X) << std::endl;
+
+    std::cout << "\nZ: \n"; Z.print();
 
     // -- Cleanup --
     delete[] ATA_data;
@@ -151,39 +211,34 @@ std::vector<Matrix> solveCARE(const Matrix& A, const Matrix& B, const Matrix& Q,
     Matrix BtPB = B.transpose().multiply(X.multiply(B));
     Matrix M = R.add(BtPB);
 
+
+
     // Dimensions
     int rdim = M.getRows();
     int nrhs = A.getCols(); // K will match columns of Ad_r
 
+    for (int i = 0; i < rdim; ++i) {
+        M(i, i) += 1e-2 * M(i, i);  // 0.0001% of diag entry
+    }
+
+    std::cout << "BPTBfn: " << frobeniusNorm2(BtPB) << std::endl;
+
+    std::cout << "Mfn: " << frobeniusNorm2(M) << std::endl;
+
+    
+
     // Form RHS: Bdᵗ * P * Ad
     Matrix BTPA = B.transpose().multiply(X).multiply(A);
 
-    // Prepare raw data
-    double* M_data = new double[rdim * rdim];
-    double* RHS_data = new double[rdim * nrhs];
 
-    M.toArray(M_data, true);      // column-major
-    BTPA.toArray(RHS_data, true); // column-major
 
-    int* ipiv_k = new int[rdim];
-    int info_k;
+    Matrix Kd_r = (M.pseudoInverseJacobi(1e-10, 100)).multiply(BTPA);
 
-    // Solve M * X = RHS using LAPACK
-    dgesv_(&rdim, &nrhs, M_data, &rdim, ipiv_k, RHS_data, &rdim, &info_k);
-    if (info_k != 0) {
-        delete[] M_data;
-        delete[] RHS_data;
-        delete[] ipiv_k;
-        throw std::runtime_error("[Kd] dgesv solve failed.");
-    }
 
-    // Convert result to Matrix
-    Matrix Kd_r = Matrix::fromArray(rdim, nrhs, RHS_data, true);
-
-    // Cleanup
-    delete[] M_data;
-    delete[] RHS_data;
-    delete[] ipiv_k;
+    // // Cleanup
+    // delete[] M_data;
+    // delete[] RHS_data;
+    // delete[] ipiv_k;
 
 
     // std::cout << "\nX: \n"; X.print();
