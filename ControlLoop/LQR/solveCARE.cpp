@@ -69,8 +69,23 @@ double frobeniusNorm2(const Matrix& A) {
     return std::sqrt(sum);
 }
 
+double riccatiResidual(const Matrix& A, const Matrix& B, const Matrix& Q, const Matrix& R, const Matrix& X) {
+    Matrix ATX = A.transpose().multiply(X);
+    Matrix XA = X.multiply(A);
+    Matrix BRinv = B.multiply(R.pseudoInverseJacobi(1e-15, 100));
+    Matrix BRBt = BRinv.multiply(B.transpose());
+    Matrix XBRBtX = X.multiply(BRBt).multiply(X);
+
+    Matrix residual = ATX.add(XA).subtract(XBRBtX).add(Q);
+
+    return frobeniusNorm2(residual);
+}
+
 
 std::vector<Matrix> solveCARE(const Matrix& A, const Matrix& B, const Matrix& Q, const Matrix& R) {
+    // std::cout << "\nA_r: \n"; A.print();
+    // std::cout << "\nB_r: \n"; B.print();
+
     // int rtv = chk();
     // std::cout << "rtv: " << rtv << std::endl;
     const int n = A.getRows();
@@ -156,62 +171,27 @@ std::vector<Matrix> solveCARE(const Matrix& A, const Matrix& B, const Matrix& Q,
             U21(i, j) = Z(i + n, j);
         }
 
-    // std::cout << "\nU11fn:" << frobeniusNorm2(U11) << std::endl;
-    // std::cout << "\nU21fn:" << frobeniusNorm2(U21) << std::endl;
+    Matrix X = U21.multiply(U11.pseudoInverseJacobi(1e-12, 100));
 
-    // -- Regularization strength --
-    double lambda = 1e-8;
+    Matrix ATX = A.transpose().multiply(X);
+    Matrix XA = X.multiply(A);
+    Matrix BRinv = B.multiply(R.pseudoInverseJacobi(1e-15, 100));
+    BRBt = BRinv.multiply(B.transpose());
+    Matrix XBRBtX = X.multiply(BRBt).multiply(X);
 
-    // -- Sizes --
-    int n_reg = U11.getRows();
-    int k_rhs = U21.getCols();
+    Matrix residual = ATX.add(XA).subtract(XBRBtX).add(Q);
+    
+    // 
+    // std::cout << "X:\n "; X.print();
 
-    // -- Step 1: Compute AᵗA = U11ᵗ * U11 --
-    Matrix U11T = U11.transpose();
-    Matrix ATA = U11T.multiply(U11);
-
-    // -- Step 2: Add λI --
-    for (int i = 0; i < n_reg; ++i) {
-        ATA(i, i) += lambda;
-    }
-
-    // -- Step 3: Compute U11ᵗ * U21 --
-    Matrix ATB = U11T.multiply(U21);
-
-    // -- Step 4: Solve (ATA) * X = ATB using dgesv_ --
-    double* ATA_data = new double[n_reg * n_reg];
-    double* ATB_data = new double[n_reg * k_rhs];
-
-    ATA.toArray(ATA_data, true); // column-major
-    ATB.toArray(ATB_data, true);
-
-    int* ipiv_reg = new int[n_reg];
-    int info_reg;
-
-    dgesv_(&n_reg, &k_rhs, ATA_data, &n_reg, ipiv_reg, ATB_data, &n_reg, &info_reg);
-    if (info_reg != 0) {
-        delete[] ATA_data;
-        delete[] ATB_data;
-        delete[] ipiv_reg;
-        throw std::runtime_error("[Tikhonov] Regularized solve failed.");
-    }
-
-    // -- Step 5: Wrap result in Matrix --
-    Matrix X = Matrix::fromArray(n_reg, k_rhs, ATB_data, true);
-    // std::cout << "Xfn: " << frobeniusNorm2(X) << std::endl;
-
-    std::cout << "\nZ: \n"; Z.print();
-
-    // -- Cleanup --
-    delete[] ATA_data;
-    delete[] ATB_data;
-    delete[] ipiv_reg;
+    // // -- Cleanup --
+    // delete[] ATA_data;
+    // delete[] ATB_data;
+    // delete[] ipiv_reg;
 
     // Compute M = R + Bdᵗ * P * Bd
     Matrix BtPB = B.transpose().multiply(X.multiply(B));
     Matrix M = R.add(BtPB);
-
-
 
     // Dimensions
     int rdim = M.getRows();
@@ -225,14 +205,13 @@ std::vector<Matrix> solveCARE(const Matrix& A, const Matrix& B, const Matrix& Q,
 
     std::cout << "Mfn: " << frobeniusNorm2(M) << std::endl;
 
-    
-
     // Form RHS: Bdᵗ * P * Ad
     Matrix BTPA = B.transpose().multiply(X).multiply(A);
 
 
-
     Matrix Kd_r = (M.pseudoInverseJacobi(1e-10, 100)).multiply(BTPA);
+
+    // std::cout << "Kdr:\n"; Kd_r.print();
 
 
     // // Cleanup

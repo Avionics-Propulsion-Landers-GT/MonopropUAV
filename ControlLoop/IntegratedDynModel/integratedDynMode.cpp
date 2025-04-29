@@ -501,8 +501,6 @@ void simulate(RocketParams &P) {
     std::vector<double> previous_previous_command;
 
     Matrix Kin = Matrix(3,12,0.0);
-    double prevX = 0;
-    loopOutput.newX = prevX;
 
     
     // Main simulation loop
@@ -594,7 +592,6 @@ void simulate(RocketParams &P) {
         previous_previous_command = previous_command;
         previous_command = prevCommand;
         prevCommand = loopOutput.command; 
-        prevX = loopOutput.newX;
 
         // std::cout << "\nPrevK: "; prevK.print();
 
@@ -611,8 +608,6 @@ void simulate(RocketParams &P) {
             loopOutput.command,
             previous_command,
             previous_previous_command,
-            iter,
-            prevX
         };
         
         // 4. Call the loop function to get control commands
@@ -774,9 +769,10 @@ int main() {
     P.gimbal_top_COM_offset = Vector(3, 0.0);
     P.gimbal_bottom_COM_offset = Vector(3, 0.0);
     P.COM_offset = Vector(3, 0.0);
-    // P.COM_offset(2,0) = 7*24*0.001;
+    P.COM_offset(2,0) = 7*24*0.001;
     P.COP = Vector(3, 0.0);          // Can be set as needed.
     P.COP_offset = Vector(3, 0.0);
+    // P.COP_offset(2, 0) = 0.005;
     P.gimbal_offset = Vector(3, 0.0);
     P.gimbal_offset(2,0) = 7*24*0.001;
     P.gimbal_x_distance = Vector(3, 0.0);

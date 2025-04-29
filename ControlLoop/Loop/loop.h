@@ -19,7 +19,6 @@ struct LoopOutput {
     std::vector<double> error;         // Error between state and setpoint
     std::vector<double> desired_command;
     std::vector<double> filteredCommand;
-    double newX;
 };
 
 struct LoopInput {
@@ -34,8 +33,6 @@ struct LoopInput {
     const std::vector<double>& command;
     const std::vector<double>& prevCommand; 
     const std::vector<double>& prevPrevCommand; 
-    unsigned int& iter;
-    double prevX;
 };
 
 void preciseLatLonToMeters(double lat, double deltaLat, double deltaLon, double &dY, double &dX);
