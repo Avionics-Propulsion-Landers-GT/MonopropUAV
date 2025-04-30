@@ -72,6 +72,8 @@ SystemComponents init(std::vector<double> gpsInit, std::vector<std::vector<doubl
 
     EKF_Altitude ekf_oz(initial_z_state, dt, q_scalar_z, r_scalar_z, initial_p_z);
 
+   
+
     double q_scalar_pos = 0.001;
     double r_scalar_pos = 1000;
     double initial_p_pos = 10;
@@ -90,6 +92,13 @@ SystemComponents init(std::vector<double> gpsInit, std::vector<std::vector<doubl
     EKF_Altitude ekf_b(initial_z_state, dt, q_scalar_Z, r_scalar_Z, initial_p_Z);
     EKF_Altitude ekf_t(initial_z_state, dt, q_scalar_Z, r_scalar_Z, initial_p_Z);
 
+    EKF_Altitude ekf_ax(initial_z_state, dt, q_scalar_pos, r_scalar_pos, initial_p_pos);
+
+    EKF_Altitude ekf_ay(initial_z_state, dt, q_scalar_pos, r_scalar_pos, initial_p_pos);
+
+    EKF_Altitude ekf_az(initial_z_state, dt, q_scalar_pos, r_scalar_pos, initial_p_pos);
+
+
     // The EKF parameters for q and z for EKF_Altitude are pretty general, they both provide a
     // smoothing of some sort. Therefore they have been repurposed to smooth out some functions
     // (notably velocities, angular velocities, and control states).
@@ -97,5 +106,5 @@ SystemComponents init(std::vector<double> gpsInit, std::vector<std::vector<doubl
     LQR lqrController;
 
     // Return struct of filters
-    return {madgwickFilter, ekf_xy, ekf_z, ekf_x, ekf_y, ekf_z2, ekf_vx, ekf_vy, ekf_vz, ekf_ox, ekf_oy, ekf_oz, ekf_a, ekf_b, ekf_t, lqrController};
+    return {madgwickFilter, ekf_xy, ekf_z, ekf_x, ekf_y, ekf_z2, ekf_vx, ekf_vy, ekf_vz, ekf_ox, ekf_oy, ekf_oz, ekf_a, ekf_b, ekf_t, ekf_ax, ekf_ay, ekf_az, lqrController};
 }

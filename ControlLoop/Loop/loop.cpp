@@ -321,6 +321,9 @@ LoopOutput loop(LoopInput in) {
     EKF_Altitude& ekf_a = system.ekf_a;
     EKF_Altitude& ekf_b = system.ekf_b;
     EKF_Altitude& ekf_t = system.ekf_t;
+    EKF_Altitude& ekf_ax = system.ekf_ax;
+    EKF_Altitude& ekf_ay = system.ekf_ay;
+    EKF_Altitude& ekf_az = system.ekf_az;
     LQR& lqrController = system.lqrController;
 
     // -------------------- I. SENSOR FUSION ALGORITHM ------------------------
@@ -344,12 +347,27 @@ LoopOutput loop(LoopInput in) {
 
     // Set up and update Madgwick filter
     std::vector<double> euler_attitude = state[2];
-
-    
-    
     std::vector<double> q = madgwickFilter.eulerToQuaternion(euler_attitude);
     std::vector<double> qnew = madgwickFilter.madgwickUpdate(q, gyro, accel, mag, dt);
-    std::vector<double> new_attitude = madgwickFilter.quaternionToEuler(qnew);
+    // std::vector<double> new_attitude = madgwickFilter.quaternionToEuler(qnew);
+
+
+    // New LPF on direct attitude measurements
+    double ax = prevState[2][0] + 2*gyro[0]*dt;
+    double ay = prevState[2][1] + 2*gyro[1]*dt;
+    double az = prevState[2][2] + 2*gyro[2]*dt;
+    Vector measurement_ax(2, 0.0); Vector measurement_ay(2, 0.0); Vector measurement_az(2, 0.0);
+    measurement_ax(0, 0) = ax; measurement_ax(1, 0) = 0;
+    measurement_ay(0, 0) = ay; measurement_ay(1, 0) = 0; 
+    measurement_az(0, 0) = az; measurement_az(1, 0) = 0;  
+    ekf_ax.update(measurement_ax); ekf_ax.predict();
+    ekf_ay.update(measurement_ay); ekf_ay.predict();
+    ekf_az.update(measurement_az); ekf_az.predict();
+    Vector estimated_state_ax = ekf_ax.getState(); double ax_actual = estimated_state_ax(0, 0);
+    Vector estimated_state_ay = ekf_ay.getState(); double ay_actual = estimated_state_ay(0, 0);
+    Vector estimated_state_az = ekf_az.getState(); double az_actual = estimated_state_az(0, 0);
+
+    std::vector<double> new_attitude = {ax_actual, ay_actual, az_actual};
 
   
 
