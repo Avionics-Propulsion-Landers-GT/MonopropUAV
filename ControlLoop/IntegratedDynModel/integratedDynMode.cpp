@@ -2,6 +2,7 @@
 #include <fstream>
 #include <cmath>
 #include <vector>
+#include <random>
 #include "../CustomLinear/Matrix.h"
 #include "../CustomLinear/Vector.h"
 #include "../CustomLinear/Quaternion.h"
@@ -15,6 +16,7 @@
 #include "../Filters/EKFs/EKF_z.h"
 #include "../Filters/Madgwick/Madgwick.h"
 #include "../LQR/solveCARE.h"
+
 
 using namespace std;
 
@@ -98,7 +100,25 @@ double stdVectorNorm(std::vector<double>& vector) {
     return sum;
 }
 
+// ------------------------ Sensor Noise Helper Function ---------------------------
+std::vector<double> addSensorNoise(const std::vector<double>& true_sensor_value, const double& dt, const double& sigma_white, 
+    const double& sigma_drift, std::vector<double>& bias) {
+    
+    std::mt19937 rng{std::random_device{}()};
+    std::normal_distribution<double> N01{0.0,1.0};
 
+    double s = sigma_drift * std::sqrt(dt);
+    
+    std::vector<double> noisy_sensor_value(true_sensor_value.size(), 0.0);
+    for (size_t i = 0; i < true_sensor_value.size(); i++) {
+        bias[i] += s * N01(rng); // bias random walk
+        double noise = sigma_white * N01(rng); // white noise
+        // noisy_sensor_value.push_back(specific_sensor_value[i] + noise + bias[i]);
+        noisy_sensor_value[i] = true_sensor_value[i] + noise + bias[i];
+    }
+
+    return noisy_sensor_value;
+}
 
 // --------------------------- Constants ------------------------------------
 
@@ -567,7 +587,7 @@ void simulate(RocketParams &P) {
         };
 
 
-        // 3. Set up the input structure for the LQR loop function
+        // 3. Set up the input structure for the LQR loop function. Noiseless data
         std::vector<std::vector<double>> sensor_values = {
             {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), 0, 0, -9.81, 0.005, 0, 0}, // Mock IMU data
             {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), 0, 0, -9.81}, // Mock 6-axis IMU
@@ -577,8 +597,69 @@ void simulate(RocketParams &P) {
                 (pos.subtract(anchor1)).magnitude(),
                 (pos.subtract(anchor2)).magnitude(),
                 (pos.subtract(anchor3)).magnitude()
-            } 
+            } // mock UWB
         };
+
+        // std::vector<std::vector<double>> noisy_sensor_values = sensor_values;
+
+        // 3.1 Add white gaussian noise + random-walk-bias (drift) to sensor values
+        // note: could use a loop to make this look nicer.
+
+        // 9-Axis Noisy
+        std::vector<double> imuNineAxis(sensor_values[0].end()-9, sensor_values[0].end());
+        std::vector<double> nineAxisBias(imuNineAxis.size(), 0.001);
+        // initializes to some small variable. Assumes all components have the same INITIAL bias
+        std::vector<double> imuNineAxisNoise = addSensorNoise(imuNineAxis, P.dt, 0.01, 0.01, nineAxisBias);
+        std::vector<double> imuNineAxisNoisy(1, 0);
+        imuNineAxisNoisy.insert(imuNineAxisNoisy.end(), imuNineAxisNoise.begin(), imuNineAxisNoise.end());
+
+        // 6-Axis Noisy
+        std::vector<double> imuSixAxis(sensor_values[1].end()-6, sensor_values[1].end());
+        std::vector<double> sixAxisBias(imuSixAxis.size(), 0.001);
+        // initializes to some small variable. Assumes all components have the same INITIAL bias
+        std::vector<double> imuSixAxisNoise = addSensorNoise(imuSixAxis, P.dt, 0.01, 0.01, sixAxisBias);
+        std::vector<double> imuSixAxisNoisy(1, 0);
+        imuSixAxisNoisy.insert(imuSixAxisNoisy.end(), imuSixAxisNoise.begin(), imuSixAxisNoise.end());
+        
+        // GPS Noisy
+        std::vector<double> gps(sensor_values[2].end()-2, sensor_values[2].end());
+        std::vector<double> gpsBias(gps.size(), 0.0001);
+        // initializes to some small variable. Assumes all components have the same INITIAL bias
+        std::vector<double> gpsNoise = addSensorNoise(gps, P.dt, 0.1, 0.1, gpsBias);
+        std::vector<double> gpsNoisy(1, 0);
+        gpsNoisy.insert(gpsNoisy.end(), gpsNoise.begin(), gpsNoise.end());
+        
+        // LIDAR Noisy
+        std::vector<double> lidar(sensor_values[3].end()-1, sensor_values[3].end());
+        std::vector<double> lidarBias(lidar.size(), 0.01);
+        // initializes to some small variable. Assumes all components have the same INITIAL bias
+        std::vector<double> lidarNoise = addSensorNoise(lidar, P.dt, 0.1, 0.001, lidarBias);
+        std::vector<double> lidarNoisy(1, 0);
+        lidarNoisy.insert(lidarNoisy.end(), lidarNoise.begin(), lidarNoise.end());
+        
+        // UWB Noisy
+        std::vector<double> uwb(sensor_values[4].end()-3, sensor_values[4].end());
+        std::vector<double> uwbBias(uwb.size(), 0.01);
+        // initializes to some small variable. Assumes all components have the same INITIAL bias
+        std::vector<double> uwbNoise = addSensorNoise(uwb, P.dt, 0.1, 0.1, uwbBias);
+        std::vector<double> uwbNoisy(1, 0);
+        uwbNoisy.insert(uwbNoisy.end(), uwbNoise.begin(), uwbNoise.end());
+
+        // combine all noisy components into noisy sensor values vector
+        std::vector<std::vector<double>> noisy_sensor_values = {
+            imuNineAxisNoisy,
+            imuSixAxisNoisy,
+            gpsNoisy,
+            lidarNoisy,
+            uwbNoisy
+        };
+        // if (step % 4000 == 0) {
+        //     std::cout << "Noisy M9IMU Data: "; printVector(noisy_sensor_values[0], "");
+        //     std::cout << "Noisy M6IMU Data: "; printVector(noisy_sensor_values[1], "");
+        //     std::cout << "Noisy MGPS Data: "; printVector(noisy_sensor_values[2], "");
+        //     std::cout << "Noisy MLIDAR Data: "; printVector(noisy_sensor_values[3], "");
+        //     std::cout << "Noisy MUWB Data: "; printVector(noisy_sensor_values[4], "");
+        // }
 
         // std::cout << "IMU Data: "; printVector(sensor_values[0], "");
         // std::cout << "M6IMU Data: "; printVector(sensor_values[1], "");
@@ -597,7 +678,7 @@ void simulate(RocketParams &P) {
 
         // Create loop input structure
         LoopInput loopInput = {
-            sensor_values,
+            noisy_sensor_values,
             loopOutput.state,
             previous_state,
             system,
@@ -660,7 +741,6 @@ void simulate(RocketParams &P) {
         P.Cd_x = -0.449*std::cos(3.028*AoA*M_PI/180) + 0.463;
         P.Cd_y = -0.376*std::cos(5.675*AoA*M_PI/180) + 1.854;
         // debug statement
-        // current problem: these 2 are not changing.
         // std::cout << AoA << "\n";
         // std::cout << "Cd_x: " << P.Cd_x << ", Cd_y: " << P.Cd_y << "\n";
 
