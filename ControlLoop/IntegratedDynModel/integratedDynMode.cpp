@@ -100,7 +100,7 @@ double stdVectorNorm(std::vector<double>& vector) {
     return sum;
 }
 
-// ------------------------ Sensor Noise Helper Function ---------------------------
+// Sensor Noise Helper Function 
 std::vector<double> addSensorNoise(const std::vector<double>& true_sensor_value, const double& dt, const double& sigma_white, 
     const double& sigma_drift, std::vector<double>& bias) {
     
@@ -118,6 +118,32 @@ std::vector<double> addSensorNoise(const std::vector<double>& true_sensor_value,
     }
 
     return noisy_sensor_value;
+}
+
+// Meters to Degrees for GPS Conversion
+
+void preciseMetersToLatLon(double  lat,
+    double  dY,
+    double  dX,
+    double &deltaLat,
+    double &deltaLon)
+{
+    constexpr double DEG2RAD = 3.14159265358979323846 / 180.0;
+    double latRad = lat * DEG2RAD;
+
+    /* metres per degree — same formula as in loop.cpp */
+    double metersPerDegLat = 111132.92
+        -   559.82 * std::cos(2 * latRad)
+        +     1.175 * std::cos(4 * latRad)
+        -     0.0023* std::cos(6 * latRad);
+
+    double metersPerDegLon = 111412.84 * std::cos(latRad)
+        -     93.5  * std::cos(3 * latRad)
+        +      0.118* std::cos(5 * latRad);
+
+    /* inverse conversion */
+    deltaLat = dY / metersPerDegLat;
+    deltaLon = dX / metersPerDegLon;
 }
 
 // --------------------------- Constants ------------------------------------
@@ -586,12 +612,18 @@ void simulate(RocketParams &P) {
             0, 0, 0   // desired angular acceleration (usually zero)
         };
 
+        // Convert sim position (m) to GPS coordinates (lat, lon).
+        double lat, lon;
+        double ref_lat = 33.0; // Reference latitude for conversion (degrees). Approx location of Atlanta.
+        double dY = pos(1,0);
+        double dX = pos(0,0);
+        preciseMetersToLatLon(ref_lat, dY, dX, lat, lon);
 
         // 3. Set up the input structure for the LQR loop function. Noiseless data
         std::vector<std::vector<double>> sensor_values = {
             {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), 0, 0, -9.81, 0.005, 0, 0}, // Mock IMU data
             {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), 0, 0, -9.81}, // Mock 6-axis IMU
-            {0, 0, pos(2,0)}, // Mock GPS
+            {lat, lon, pos(2,0)}, // Mock GPS
             {0, pos(2,0)}, // Mock LIDAR
             {0,
                 (pos.subtract(anchor1)).magnitude(),
@@ -623,7 +655,7 @@ void simulate(RocketParams &P) {
         
         // GPS Noisy
         std::vector<double> gps(sensor_values[2].end()-2, sensor_values[2].end());
-        std::vector<double> gpsBias(gps.size(), 0.0001);
+        std::vector<double> gpsBias(gps.size(), 0.1);
         // initializes to some small variable. Assumes all components have the same INITIAL bias
         std::vector<double> gpsNoise = addSensorNoise(gps, P.dt, 0.1, 0.1, gpsBias);
         std::vector<double> gpsNoisy(1, 0);
@@ -631,15 +663,15 @@ void simulate(RocketParams &P) {
         
         // LIDAR Noisy
         std::vector<double> lidar(sensor_values[3].end()-1, sensor_values[3].end());
-        std::vector<double> lidarBias(lidar.size(), 0.01);
+        std::vector<double> lidarBias(lidar.size(), 0.1);
         // initializes to some small variable. Assumes all components have the same INITIAL bias
-        std::vector<double> lidarNoise = addSensorNoise(lidar, P.dt, 0.1, 0.001, lidarBias);
+        std::vector<double> lidarNoise = addSensorNoise(lidar, P.dt, 0.1, 0.1, lidarBias);
         std::vector<double> lidarNoisy(1, 0);
         lidarNoisy.insert(lidarNoisy.end(), lidarNoise.begin(), lidarNoise.end());
         
         // UWB Noisy
         std::vector<double> uwb(sensor_values[4].end()-3, sensor_values[4].end());
-        std::vector<double> uwbBias(uwb.size(), 0.01);
+        std::vector<double> uwbBias(uwb.size(), 0.1);
         // initializes to some small variable. Assumes all components have the same INITIAL bias
         std::vector<double> uwbNoise = addSensorNoise(uwb, P.dt, 0.1, 0.1, uwbBias);
         std::vector<double> uwbNoisy(1, 0);
