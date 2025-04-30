@@ -349,12 +349,9 @@ LoopOutput loop(LoopInput in) {
     
     std::vector<double> q = madgwickFilter.eulerToQuaternion(euler_attitude);
     std::vector<double> qnew = madgwickFilter.madgwickUpdate(q, gyro, accel, mag, dt);
-    // std::vector<double> new_attitude = madgwickFilter.quaternionToEuler(qnew);
+    std::vector<double> new_attitude = madgwickFilter.quaternionToEuler(qnew);
 
-    std::vector<double> new_attitude = {state[2][0] + gyro[0]*dt, state[2][1] + gyro[1]*dt, state[2][2] + gyro[2]*dt};
-
-
-    
+  
 
     // ---------------------- ii. EKF for Position ----------------------------
 
@@ -416,8 +413,8 @@ LoopOutput loop(LoopInput in) {
     ekf_x.update(measurement_x); ekf_x.predict();
     ekf_y.update(measurement_y); ekf_y.predict();
     ekf_z2.update(measurement_z2); ekf_z2.predict(); 
-    // Vector estimated_state_x = ekf_x.getState(); x_actual = estimated_state_x(0, 0);
-    // Vector estimated_state_y = ekf_y.getState(); y_actual = estimated_state_y(0, 0);
+    Vector estimated_state_x = ekf_x.getState(); x_actual = estimated_state_x(0, 0);
+    Vector estimated_state_y = ekf_y.getState(); y_actual = estimated_state_y(0, 0);
     Vector estimated_state_z2 = ekf_z2.getState(); z_actual = estimated_state_z2(0, 0);
 
     // Slap a low pass filter onto velocity
@@ -465,7 +462,7 @@ LoopOutput loop(LoopInput in) {
 
     std::vector<double> angular_states = {omega_a, omega_b, alpha_a, alpha_b};
 
-    // -------------------------- II. LQR --------------------------------------
+    // -------------------------- II. PID --------------------------------------
 
     // ----------------------- i. set up key quantities ------------------------
 
@@ -509,8 +506,6 @@ LoopOutput loop(LoopInput in) {
     previous_state(6, 0) = prevState[2][0]; previous_state(7, 0) = prevState[2][1]; previous_state(8, 0) = prevState[2][2];
     previous_state(9, 0) = prevState[3][0]; previous_state(10, 0) = prevState[3][1]; previous_state(11, 0) = prevState[3][2];
 
-
-
     // 5. Construct input Vector
     Vector current_input = toVector(command);
 
@@ -523,14 +518,10 @@ LoopOutput loop(LoopInput in) {
     Matrix A = calculateA(m, f, 0, 0, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector(angular_states));
     Matrix B = calculateB(m, f, 0, 0, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector({angular_states}));
 
-    // Matrix A = calculateABF(m, f, 0, 0, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector({0,0,0,0}));
-    // Matrix B = calculateBBF(m, f, 0, 0, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector({0,0,0,0}));
 
-
-    // 8. Sanitize NaNs that pop up from numerical errors close to zero.
+    // // 8. Sanitize NaNs that pop up from numerical errors close to zero.
     A.sanitizeNaNs();
     B.sanitizeNaNs();
-
 
     // std::cout << "\nA:" << std::endl;
     // A.print();
@@ -554,15 +545,6 @@ LoopOutput loop(LoopInput in) {
     std::vector<double> desired_command = {u_d[0], 0, 0};
 
     static_input = u_d;
-
-
-    // Recalc A and B at local pos
-    // A = calculateA(m, f, 0, 0, current_state, current_input, toVector({0,0,0}), rt, inertia, inertia_a, inertia_b, toVector({0,0,0,0}));
-    // B = calculateB(m, f, 0, 0, current_state, current_input, toVector({0,0,0}), rt, inertia, inertia_a, inertia_b, toVector({0,0,0,0}));
-
-
-    // std::cout << "xact:\n"; current_state.print();
-    // std::cout << "uact:\n"; current_input.print();
 
     std::vector<double> K_MATRIX = {
         0,0,4,         0,0,1,           0,0,0,          0,0,0,
@@ -637,70 +619,7 @@ LoopOutput loop(LoopInput in) {
     // Compute control commands
     Vector control_command = u_d.subtract(((K.multiply(state_error)).add(I.multiply(IE))).add(D.multiply(DE)));  // result is 3x1 Matrix
 
-
-    // // Read in Q, R matrices
-    // Matrix Q = toRectMatrix(Q_MATRIX, 12, 12);
-    // Matrix R = toRectMatrix(R_MATRIX, 3, 3);
-
-    // // std::cout << "\nAfn: " << frobeniusNorm(A);
-    // // std::cout << "\nBfn: " << frobeniusNorm(B);
-
-    // // Set state and setpoint in LQR controller
-    // lqrController.setA(A);
-    // lqrController.setB(B);
-    // lqrController.setQ(Q);
-    // lqrController.setR(R);
-
-    // // Read in current + desired states
-    // lqrController.setState(current_state);
-    // lqrController.setPoint = toVector(desired_state); // Assuming setPoint is a std::vector
-
-    // // Compute error between current state and desired state
-    // Matrix neg_setpoint = lqrController.setPoint.multiply(-1.0);
-    // Vector state_error = lqrController.getState().add(Vector(neg_setpoint));
-   
-    // Matrix prevK = lqrController.getK();
-
-    // Matrix K = lqrController.getK();
-
-    // // K = absMatrix(K);
-
-
-
-    // if (iter % 5 == 0) {
-    //     lqrController.calculateK(dt, pfnX);
-    //     K = lqrController.getK();
-    //     // std::cout << "\nAfn: " << frobeniusNorm(A);
-    //     // std::cout << "\nBfn: " << frobeniusNorm(B);
-    //     K = absMatrix(K);
-    //     std::cout << "\nKfn: " << frobeniusNorm(K);
-    //     std::cout << "\nK:\n"; K.print();
-    // }
-
-
-
-    // Matrix negative_K = K.multiply(-1.0);
-    // Vector control_command = u_d.add(negative_K.multiply(state_error)); 
     Vector filtered_command = control_command;
-
-    // Vector change_command = (negative_K.multiply(state_error));
-
-    // Vector measurement_a(2, 0.0);
-    // measurement_a(0, 0) = control_command[1]; measurement_a(1, 0) = 0; 
-    // ekf_a.update(measurement_a); ekf_a.predict();
-    // Vector estimated_state_a = ekf_a.getState(); double a_actual = estimated_state_a(0, 0);
-
-    // Vector measurement_b(2, 0.0);
-    // measurement_b(0, 0) = control_command[2]; measurement_b(1, 0) = 0; 
-    // ekf_b.update(measurement_b); ekf_b.predict();
-    // Vector estimated_state_b = ekf_b.getState(); double b_actual = estimated_state_b(0, 0);
-
-    // Vector measurement_t(2, 0.0);
-    // measurement_t(0, 0) = control_command[0]; measurement_t(1, 0) = 0; 
-    // ekf_t.update(measurement_t); ekf_t.predict();
-    // Vector estimated_state_t = ekf_t.getState(); double t_actual = estimated_state_t(0, 0);
-    
-
 
     // sanity checks on T for feedback command
     if (control_command[0] > 15) control_command[0] = 15;
@@ -716,9 +635,6 @@ LoopOutput loop(LoopInput in) {
     std::vector<double> newCommand = toStdVector(control_command);  
     std::vector<double> error = toStdVector(state_error);
     std::vector<bool> newStatus = {true, true};
-
-
-    // std::cout << "U:\n"; filtered_command.print();
 
     // Return pertinent values to data_mocker
     LoopOutput out = {
