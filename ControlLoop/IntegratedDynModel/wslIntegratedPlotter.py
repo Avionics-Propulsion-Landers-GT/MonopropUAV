@@ -59,14 +59,13 @@ trace_phi = go.Scatter(x=data['time'], y=data['phi'], mode='lines', name='About 
 trace_theta = go.Scatter(x=data['time'], y=data['theta'], mode='lines', name='About y [rad]')
 trace_psi = go.Scatter(x=data['time'], y=data['psi'], mode='lines', name='Roll (about z) [rad]')
 
-layout_cmd = go.Layout(
+layout_att = go.Layout(
     title='Attitude (euler) vs. Time',
     xaxis=dict(title='Time'),
-    yaxis=dict(title='Angles'),
-    legend_title='Attitude Angles'
+    yaxis=dict(title='Angles')
 )
 
-fig_cmd = go.Figure(data=[trace_phi, trace_theta, trace_psi], layout=layout_cmd)
+fig_att = go.Figure(data=[trace_phi, trace_theta, trace_psi], layout=layout_att)
 
 # --- Desired Position Plot ---
 trace_xac = go.Scatter(x=data['time'], y=data['xac'], mode='lines', name='x_desired')
@@ -105,7 +104,7 @@ vel_des_path  = os.path.join(BASE_DIR, "desired_velocity_plot.html")
 fig_pos.write_html(position_path)
 fig_vel.write_html(velocity_path)
 fig_cmd.write_html(command_path)
-fig_cmd.write_html(attitude_path)
+fig_att.write_html(attitude_path)
 fig_pos_des.write_html(pos_des_path)
 fig_vel_des.write_html(vel_des_path)
 

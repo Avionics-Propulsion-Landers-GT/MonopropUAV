@@ -641,7 +641,7 @@ void simulate(RocketParams &P) {
 
         // 9-Axis Noisy
         std::vector<double> imuNineAxis(sensor_values[0].end()-9, sensor_values[0].end());
-        std::vector<double> nineAxisBias(imuNineAxis.size(), 0.001);
+        std::vector<double> nineAxisBias(imuNineAxis.size(), 0.01);
         // initializes to some small variable. Assumes all components have the same INITIAL bias
         std::vector<double> imuNineAxisNoise = addSensorNoise(imuNineAxis, P.dt, 0.01, 0.01, nineAxisBias);
         std::vector<double> imuNineAxisNoisy(1, 0);
@@ -649,7 +649,7 @@ void simulate(RocketParams &P) {
 
         // 6-Axis Noisy
         std::vector<double> imuSixAxis(sensor_values[1].end()-6, sensor_values[1].end());
-        std::vector<double> sixAxisBias(imuSixAxis.size(), 0.001);
+        std::vector<double> sixAxisBias(imuSixAxis.size(), 0.01);
         // initializes to some small variable. Assumes all components have the same INITIAL bias
         std::vector<double> imuSixAxisNoise = addSensorNoise(imuSixAxis, P.dt, 0.01, 0.01, sixAxisBias);
         std::vector<double> imuSixAxisNoisy(1, 0);
@@ -659,7 +659,7 @@ void simulate(RocketParams &P) {
         std::vector<double> gps(sensor_values[2].end()-2, sensor_values[2].end());
         std::vector<double> gpsBias(gps.size(), 0.1);
         // initializes to some small variable. Assumes all components have the same INITIAL bias
-        std::vector<double> gpsNoise = addSensorNoise(gps, P.dt, 0.1, 0.1, gpsBias);
+        std::vector<double> gpsNoise = addSensorNoise(gps, P.dt, 0.001, 0.001, gpsBias);
         std::vector<double> gpsNoisy(1, 0);
         gpsNoisy.insert(gpsNoisy.end(), gpsNoise.begin(), gpsNoise.end());
         
