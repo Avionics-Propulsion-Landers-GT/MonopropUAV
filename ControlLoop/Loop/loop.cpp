@@ -394,9 +394,9 @@ LoopOutput loop(LoopInput in) {
     preciseLatLonToMeters(lat, deltaLat, deltaLon, x_pos2, y_pos2); // Convert lat + lon to m (for gps)
 
     Vector measurement_xy(4, 0.0);  // Create 4x1 vector
-    measurement_xy(0, 0) = x_pos1;
-    measurement_xy(1, 0) = y_pos1;
-    measurement_xy(2, 0) = x_pos2; // can change to use only uwb
+    measurement_xy(0, 0) = x_pos2;
+    measurement_xy(1, 0) = y_pos2;
+    measurement_xy(2, 0) = x_pos2; // <--- changed to use only gps (pos2)
     measurement_xy(3, 0) = y_pos2;
     ekf_xy.update(measurement_xy);      // Update EKF with measurement 
     ekf_xy.predict();                   // Predict next state

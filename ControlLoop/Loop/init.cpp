@@ -92,11 +92,11 @@ SystemComponents init(std::vector<double> gpsInit, std::vector<std::vector<doubl
     EKF_Altitude ekf_b(initial_z_state, dt, q_scalar_Z, r_scalar_Z, initial_p_Z);
     EKF_Altitude ekf_t(initial_z_state, dt, q_scalar_Z, r_scalar_Z, initial_p_Z);
 
-    EKF_Altitude ekf_ax(initial_z_state, dt, q_scalar_pos, r_scalar_pos, initial_p_pos);
+    EKF_Altitude ekf_ax(initial_z_state, dt, q_scalar_pos, r_scalar_pos, 0);
 
-    EKF_Altitude ekf_ay(initial_z_state, dt, q_scalar_pos, r_scalar_pos, initial_p_pos);
+    EKF_Altitude ekf_ay(initial_z_state, dt, q_scalar_pos, r_scalar_pos, 0);
 
-    EKF_Altitude ekf_az(initial_z_state, dt, q_scalar_pos, r_scalar_pos, initial_p_pos);
+    EKF_Altitude ekf_az(initial_z_state, dt, q_scalar_pos, r_scalar_pos, 0);
 
 
     // The EKF parameters for q and z for EKF_Altitude are pretty general, they both provide a
