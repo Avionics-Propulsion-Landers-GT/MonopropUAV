@@ -131,7 +131,7 @@ void preciseMetersToLatLon(double  lat,
     constexpr double DEG2RAD = 3.14159265358979323846 / 180.0;
     double latRad = lat * DEG2RAD;
 
-    /* metres per degree — same formula as in loop.cpp */
+    /* metres per degree — same formula as in loop.cpp (WGS84) */
     double metersPerDegLat = 111132.92
         -   559.82 * std::cos(2 * latRad)
         +     1.175 * std::cos(4 * latRad)
@@ -432,7 +432,7 @@ void simulate(RocketParams &P) {
     Vector vel(3, 0.0);            // 3x1 zero velocity
     std::vector<double> vel_std = {vel(0,0), vel(1,0), vel(2,0)};
 
-    std::vector<double> init_att = {0.1, -0.1, 0};
+    std::vector<double> init_att = {0, 0, 0};
 
     Quaternion att = eulerToQuaternion(init_att); // Initial attitude: identity quaternion
     std::vector<double> att_euler_std = quaternionToEuler(att);
@@ -455,11 +455,13 @@ void simulate(RocketParams &P) {
     vector<Vector> pos_history;
     vector<Vector> vel_history;
     vector<Vector> command_history;
+    vector<Vector> attitude_history;
     vector<Vector> pos_v_history;
     vector<Vector> vel_v_history;
     pos_history.reserve(num_steps);
     vel_history.reserve(num_steps);
     command_history.reserve(num_steps);
+    attitude_history.reserve(num_steps);
     pos_v_history.reserve(num_steps);
     vel_v_history.reserve(num_steps);
     
@@ -614,7 +616,7 @@ void simulate(RocketParams &P) {
 
         // Convert sim position (m) to GPS coordinates (lat, lon).
         double lat, lon;
-        double ref_lat = 33.0; // Reference latitude for conversion (degrees). Approx location of Atlanta.
+        double ref_lat = 33; // Reference latitude for conversion (degrees). Approx location of Atlanta.
         double dY = pos(1,0);
         double dX = pos(0,0);
         preciseMetersToLatLon(ref_lat, dY, dX, lat, lon);
@@ -821,6 +823,12 @@ void simulate(RocketParams &P) {
         // vel_Vec(2,0) = ang_vel(2,0);
         // vel_v_history.push_back(vel_Vec);
 
+        Vector attitude_vec = Vector(3, 0.0);
+        attitude_vec(0,0) = quaternionToEuler(att)[0];
+        attitude_vec(1,0) = quaternionToEuler(att)[1];
+        attitude_vec(2,0) = quaternionToEuler(att)[2];
+        attitude_history.push_back(attitude_vec);
+
         Vector pos_Vec = Vector(3, 0.0);
         pos_Vec(0,0) = loopOutput.state[2][0];
         pos_Vec(1,0) = loopOutput.state[2][1];
@@ -847,7 +855,7 @@ void simulate(RocketParams &P) {
     }
     
     // Write header
-    file << "time,x,y,z,vx,vy,vz,thrust,a,b,xac,yac,zac,vxac,vyac,vzac\n";
+    file << "time,x,y,z,vx,vy,vz,thrust,a,b,phi,theta,psi,xac,yac,zac,vxac,vyac,vzac\n";
     
     // Write data rows
     for (int i = 0; i < num_steps; i++) {
@@ -855,6 +863,7 @@ void simulate(RocketParams &P) {
              << pos_history[i](0,0) << "," << pos_history[i](1,0) << "," << pos_history[i](2,0) << ","
              << vel_history[i](0,0) << "," << vel_history[i](1,0) << "," << vel_history[i](2,0) << ","
              << command_history[i](0,0) << "," << command_history[i](1,0) << "," << command_history[i](2,0) << ","
+             << attitude_history[i](0,0) << "," << attitude_history[i](1,0) << "," << attitude_history[i](2,0) << ","
              << pos_v_history[i](0,0) << "," << pos_v_history[i](1,0) << "," << pos_v_history[i](2,0) << ","
              << vel_v_history[i](0,0) << "," << vel_v_history[i](1,0) << "," << vel_v_history[i](2,0)
              << "\n";
