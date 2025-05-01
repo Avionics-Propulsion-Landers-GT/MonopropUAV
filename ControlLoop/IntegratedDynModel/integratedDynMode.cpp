@@ -659,7 +659,7 @@ void simulate(RocketParams &P) {
         std::vector<double> gps(sensor_values[2].end()-2, sensor_values[2].end());
         std::vector<double> gpsBias(gps.size(), 0.1);
         // initializes to some small variable. Assumes all components have the same INITIAL bias
-        std::vector<double> gpsNoise = addSensorNoise(gps, P.dt, 0.001, 0.001, gpsBias);
+        std::vector<double> gpsNoise = addSensorNoise(gps, P.dt, 0.1, 0.1, gpsBias);
         std::vector<double> gpsNoisy(1, 0);
         gpsNoisy.insert(gpsNoisy.end(), gpsNoise.begin(), gpsNoise.end());
         
@@ -773,7 +773,8 @@ void simulate(RocketParams &P) {
         // Update drag coefficients based on AoA and regression formulas. NOTE: ONLY ACCURATE FOR MONOPROP!
 
         P.Cd_x = -0.449*std::cos(3.028*AoA*M_PI/180) + 0.463;
-        P.Cd_y = -0.376*std::cos(5.675*AoA*M_PI/180) + 1.854;
+        P.Cd_y = -0.449*std::cos(3.028*AoA*M_PI/180) + 0.463;
+        P.Cd_z = -0.376*std::cos(5.675*AoA*M_PI/180) + 1.854;
         // debug statement
         // std::cout << AoA << "\n";
         // std::cout << "Cd_x: " << P.Cd_x << ", Cd_y: " << P.Cd_y << "\n";
