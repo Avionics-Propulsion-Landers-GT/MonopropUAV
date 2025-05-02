@@ -345,6 +345,10 @@ LoopOutput loop(LoopInput in) {
     std::vector<double> accel = weightedAverage(accel1, accel2, 3, 1);
     std::vector<double> gyro = weightedAverage(gyro1, gyro2, 3, 1);
 
+    // debias
+    std::vector<double> gyro_bias = {0.01,0.01,0.01};
+    gyro = {gyro[0] - gyro_bias[0], gyro[1] - gyro_bias[1], gyro[2] - gyro_bias[2]};
+
     // Set up and update Madgwick filter
     std::vector<double> euler_attitude = state[2];
     std::vector<double> q = madgwickFilter.eulerToQuaternion(euler_attitude);
@@ -400,7 +404,7 @@ LoopOutput loop(LoopInput in) {
     measurement_xy(3, 0) = y_pos2;
     ekf_xy.update(measurement_xy);      // Update EKF with measurement 
     ekf_xy.predict();                   // Predict next state
-    Vector estimated_state_xy = ekf_xy.getState();  // [X, Y, VX, VY]
+    Vector estimated_state_xy = ekf_xy.getState(); 
     double x_actual = estimated_state_xy(0, 0);
     double y_actual = estimated_state_xy(1, 0);
 
@@ -533,8 +537,8 @@ LoopOutput loop(LoopInput in) {
     Matrix inertia_b = toMatrix(getInertiaB(command[2]));
     
     // 7. Calculate A and B Matrices << NOTE AERO HAS BEEN ZEROED
-    Matrix A = calculateA(m, f, 0, 0, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector(angular_states));
-    Matrix B = calculateB(m, f, 0, 0, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector({angular_states}));
+    Matrix A = calculateA(m, f, area, Cd, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector(angular_states));
+    Matrix B = calculateB(m, f, area, Cd, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector({angular_states}));
 
 
     // // 8. Sanitize NaNs that pop up from numerical errors close to zero.

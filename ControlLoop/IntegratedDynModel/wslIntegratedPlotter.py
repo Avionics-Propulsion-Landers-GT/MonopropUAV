@@ -129,4 +129,4 @@ win_paths = [to_windows_path(p) for p in abs_paths]
 print("Plots saved and opening in Chrome:")
 for path in win_paths:
     print(f"  {path}")
-    subprocess.run(["wslview", path])
+    subprocess.run(["chrome.exe", path])
