@@ -93,6 +93,16 @@ layout_vel_des = go.Layout(
 
 fig_vel_des = go.Figure(data=[trace_vxac, trace_vyac, trace_vzac], layout=layout_vel_des)
 
+# aoa history plot
+trace_aoa = go.Scatter(x=data['time'], y=data['aoa'], mode='lines', name='Angle of Attack [deg]')
+layout_aoa = go.Layout(
+    title='Angle of Attack vs. Time',
+    xaxis=dict(title='Time'),
+    yaxis=dict(title='Angle of Attack [deg]')
+)
+
+fig_aoa = go.Figure(data=[trace_aoa], layout=layout_aoa)
+
 # --- Save HTML files (double write with abspath) ---
 position_path = os.path.join(BASE_DIR, "position_plot.html")
 velocity_path = os.path.join(BASE_DIR, "velocity_plot.html")
@@ -100,6 +110,7 @@ command_path  = os.path.join(BASE_DIR, "command_plot.html")
 attitude_path = os.path.join(BASE_DIR, "attitude_plot.html")
 pos_des_path  = os.path.join(BASE_DIR, "desired_position_plot.html")
 vel_des_path  = os.path.join(BASE_DIR, "desired_velocity_plot.html")
+aoa_path = os.path.join(BASE_DIR, "aoa_plot.html")
 
 fig_pos.write_html(position_path)
 fig_vel.write_html(velocity_path)
@@ -107,10 +118,11 @@ fig_cmd.write_html(command_path)
 fig_att.write_html(attitude_path)
 fig_pos_des.write_html(pos_des_path)
 fig_vel_des.write_html(vel_des_path)
+fig_aoa.write_html(aoa_path)
 
 # Absolute paths
 abs_paths = [os.path.abspath(p) for p in [
-    position_path, velocity_path, command_path, attitude_path, pos_des_path, vel_des_path
+    position_path, velocity_path, command_path, attitude_path, pos_des_path, vel_des_path, aoa_path
 ]]
 win_paths = [to_windows_path(p) for p in abs_paths]
 

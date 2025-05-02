@@ -446,7 +446,7 @@ void simulate(RocketParams &P) {
     double F_thrust_mag = 0.0;
     
     // Initialize LQR components
-    std::vector<std::vector<double>> initState = {{gpsInit}, {vel_std}, {att_euler_std}, {ang_vel_std}};
+    std::vector<std::vector<double>> initState = {{gpsInit}, {vel_std}, {init_att}, {ang_vel_std}};
     SystemComponents system = init(gpsInit, initState, dt); 
     unsigned int iter = 0;
     std::vector<bool> status = {true, true};
@@ -458,12 +458,14 @@ void simulate(RocketParams &P) {
     vector<Vector> attitude_history;
     vector<Vector> pos_v_history;
     vector<Vector> vel_v_history;
+    vector<double> aoa_history;
     pos_history.reserve(num_steps);
     vel_history.reserve(num_steps);
     command_history.reserve(num_steps);
     attitude_history.reserve(num_steps);
     pos_v_history.reserve(num_steps);
     vel_v_history.reserve(num_steps);
+    aoa_history.reserve(num_steps);
     
     // Build desired trajectory: pure vertical motion
     vector<Vector> delta_pos_desired;
@@ -682,7 +684,9 @@ void simulate(RocketParams &P) {
         // combine all noisy components into noisy sensor values vector
         std::vector<std::vector<double>> noisy_sensor_values = {
             imuNineAxisNoisy,
+            // sensor_values[0],
             imuSixAxisNoisy,
+            // sensor_values[1],
             gpsNoisy,
             lidarNoisy,
             uwbNoisy
@@ -732,6 +736,9 @@ void simulate(RocketParams &P) {
 
         // 5. Extract commands from the loop output
         std::vector<double> command = loopOutput.filteredCommand;
+        // command[0] = 0;
+        // command[1] = 0;
+        // command[2] = 0;
         // std::vector<double> command = loopOutput.command;
         
         // 6. Convert commands to thrust and gimbal angles
@@ -758,26 +765,34 @@ void simulate(RocketParams &P) {
         Vector T_thrust_body = thrust.second;
         
         // Compute drag force and torque.
-        // Compute Cd_x and Cd_y based on AoA. AoA is dot product of velocity and z-axis in the WORLD FRAME.
+        // Compute Cd_x and Cd_y based on AoA. 
+
         double AoA = 0;
         double velocity_magnitude = stdMagnitude(velocity);
-        std::vector<double> z_wf = {0, 0, 1};
-        double z_norm = stdMagnitude(z_wf);
+        std::vector<double> z_wf = {0, 0, 1}; 
+        // double z_norm = stdMagnitude(z_wf);
         if (velocity_magnitude > 0) {
-            double dot = -(velocity[0] * z_wf[0] + velocity[1] * z_wf[1] + velocity[2] * z_wf[2]);
-            double cos_alpha = dot / (velocity_magnitude * z_norm);
+            // AOA calc from dot product
+            if (velocity[2] < 0) {
+                z_wf[2] = -1;
+            }
+            double dot = (velocity[0] * z_wf[0] + velocity[1] * z_wf[1] + velocity[2] * z_wf[2]);
+            double cos_alpha = dot / (velocity_magnitude * 1); // z norm is always 1
             cos_alpha = std::max(-1.0, std::min(1.0, cos_alpha));
+
             AoA = std::acos(cos_alpha); // radians
             // AoA = std::acos(velocity_vector.dotProduct(z_direction) / (velocity_magnitude * z_direction.magnitude()))*(180/3.14159);
         } 
         // Update drag coefficients based on AoA and regression formulas. NOTE: ONLY ACCURATE FOR MONOPROP!
 
-        P.Cd_x = -0.449*std::cos(3.028*AoA*M_PI/180) + 0.463;
-        P.Cd_y = -0.449*std::cos(3.028*AoA*M_PI/180) + 0.463;
-        P.Cd_z = -0.376*std::cos(5.675*AoA*M_PI/180) + 1.854;
+        P.Cd_x = -0.449*std::cos(3.028*AoA*180/M_PI) + 0.463;
+        P.Cd_y = -0.449*std::cos(3.028*AoA*180/M_PI) + 0.463;
+        P.Cd_z = -0.376*std::cos(5.675*AoA*180/M_PI) + 1.854;
         // debug statement
-        // std::cout << AoA << "\n";
-        // std::cout << "Cd_x: " << P.Cd_x << ", Cd_y: " << P.Cd_y << "\n";
+        // if (step % 4000 == 0) {
+        //     std::cout << "AoA: " << AoA << "\n";
+        //     std::cout << "Cd_x: " << P.Cd_x << ", Cd_y: " << P.Cd_y << ", Cd_z: " << P.Cd_z << "\n";
+        // }
 
         pair<Vector, Vector> drag = get_drag_body(P, att, vel, v_wind);
         Vector F_drag_body = drag.first;
@@ -791,6 +806,17 @@ void simulate(RocketParams &P) {
         Vector F_thrust_world = R_att.multiply(F_thrust_body);
         Vector F_drag_world = R_att.multiply(F_drag_body);
         Vector F_net = vectorAdd(F_gravity, vectorAdd(F_thrust_world, F_drag_world));
+        // debug statement for thrust
+
+        if (step % 4000 == 0) {
+            // std::cout << "F_thrust_world: "; F_thrust_world.print();
+            std::cout << step << endl;
+            std::cout << "F_drag_body: "; F_drag_body.print();
+            std::cout << "F_drag_world: "; F_drag_world.print();
+            std::cout << "F_net: "; F_net.print();
+            // std::cout << "F_thrust_world: "; F_thrust_world.print();
+            // std::cout << "F_net: "; F_net.print();
+        }
         
         // Total torque
         Vector T_net = R_att.multiply(T_thrust_body.add(T_drag_body));
@@ -842,6 +868,14 @@ void simulate(RocketParams &P) {
         vel_Vec(1,0) = loopOutput.state[3][1];
         vel_Vec(2,0) = loopOutput.state[3][2];
         vel_v_history.push_back(vel_Vec);
+        aoa_history.push_back(AoA*180/M_PI);
+
+        if (step > 100 && pos(2,0) <= 0.0) {
+            std::cout << "Vehicle has hit the ground at time: " << step*dt << ".\n";
+            std::cout << "Impact speed: " << velocity_magnitude << " m/s.\n";
+            std::cout << "Impact angle: " << AoA*180/M_PI << " degrees.\n";
+            // break;
+        }
         
         // Increment iteration counter
         iter++;
@@ -856,7 +890,7 @@ void simulate(RocketParams &P) {
     }
     
     // Write header
-    file << "time,x,y,z,vx,vy,vz,thrust,a,b,phi,theta,psi,xac,yac,zac,vxac,vyac,vzac\n";
+    file << "time,x,y,z,vx,vy,vz,thrust,a,b,phi,theta,psi,xac,yac,zac,vxac,vyac,vzac,aoa\n";
     
     // Write data rows
     for (int i = 0; i < num_steps; i++) {
@@ -866,7 +900,8 @@ void simulate(RocketParams &P) {
              << command_history[i](0,0) << "," << command_history[i](1,0) << "," << command_history[i](2,0) << ","
              << attitude_history[i](0,0) << "," << attitude_history[i](1,0) << "," << attitude_history[i](2,0) << ","
              << pos_v_history[i](0,0) << "," << pos_v_history[i](1,0) << "," << pos_v_history[i](2,0) << ","
-             << vel_v_history[i](0,0) << "," << vel_v_history[i](1,0) << "," << vel_v_history[i](2,0)
+             << vel_v_history[i](0,0) << "," << vel_v_history[i](1,0) << "," << vel_v_history[i](2,0) << ","
+             << aoa_history[i] 
              << "\n";
     }
     
