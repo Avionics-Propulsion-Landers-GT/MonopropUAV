@@ -744,6 +744,12 @@ void simulate(RocketParams &P) {
 
         // 5. Extract commands from the loop output
         std::vector<double> command = loopOutput.filteredCommand;
+
+        // TESTING FOR WIND
+        if (step > 2000 && step < 2500) {
+            command[1] = 0.01;
+            command[2] = 0.01;
+        }
         // command[0] = 0;
         // command[1] = 0;
         // command[2] = 0;
