@@ -552,7 +552,10 @@ void simulate(RocketParams &P) {
 
     Matrix Kin = Matrix(3,12,0.0);
 
-    
+    Vector accel = Vector(3, 0.0);
+    accel(2,0) = -9.81;
+    bool grounded = false;
+
     // Main simulation loop
     for (int step = 0; step < num_steps; step++) {
         // -------------------- LQR CONTROL CALCULATION --------------------
@@ -623,10 +626,15 @@ void simulate(RocketParams &P) {
         double dX = pos(0,0);
         preciseMetersToLatLon(ref_lat, dY, dX, lat, lon);
 
+        // debug statement for accel
+        if (step % 4000 == 0) {
+            std::cout << "Accel: " << accel(0,0) << ", " << accel(1,0) << ", " << accel(2,0) << "\n";
+        }
+
         // 3. Set up the input structure for the LQR loop function. Noiseless data
         std::vector<std::vector<double>> sensor_values = {
-            {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), 0, 0, -9.81, 0.005, 0, 0}, // Mock IMU data
-            {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), 0, 0, -9.81}, // Mock 6-axis IMU
+            {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), accel(0,0), accel(1,0), accel(2,0), 0.005, 0, 0}, // Mock 9-axis IMU 
+            {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), accel(0,0), accel(1,0), accel(2,0)}, // Mock 6-axis IMU
             {lat, lon, pos(2,0)}, // Mock GPS
             {0, pos(2,0)}, // Mock LIDAR
             {0,
@@ -827,6 +835,7 @@ void simulate(RocketParams &P) {
         vel = st.vel;
         att = st.att;
         ang_vel = st.ang_vel;
+        accel = st.accel;
         
         // Record history
         pos_history.push_back(pos);
@@ -870,7 +879,8 @@ void simulate(RocketParams &P) {
         vel_v_history.push_back(vel_Vec);
         aoa_history.push_back(AoA*180/M_PI);
 
-        if (step > 100 && pos(2,0) <= 0.0) {
+        if (grounded && step > 100 && pos(2,0) <= 0.0) {
+            grounded = true;
             std::cout << "Vehicle has hit the ground at time: " << step*dt << ".\n";
             std::cout << "Impact speed: " << velocity_magnitude << " m/s.\n";
             std::cout << "Impact angle: " << AoA*180/M_PI << " degrees.\n";

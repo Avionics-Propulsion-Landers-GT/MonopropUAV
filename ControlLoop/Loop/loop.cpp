@@ -440,9 +440,12 @@ LoopOutput loop(LoopInput in) {
     Vector estimated_state_z2 = ekf_z2.getState(); z_actual = estimated_state_z2(0, 0);
 
     // Slap a low pass filter onto velocity
-    double vx = (x_actual - prevState[0][0])/(2*dt); 
-    double vy = (y_actual - prevState[0][1])/(2*dt);
-    double vz = (z_actual - prevState[0][2])/(2*dt);
+    // double vx = (x_actual - prevState[0][0])/(2*dt); 
+    // double vy = (y_actual - prevState[0][1])/(2*dt);
+    // double vz = (z_actual - prevState[0][2])/(2*dt);
+    double vx = prevState[1][0] + 2*accel[0]*dt;
+    double vy = prevState[1][1] + 2*accel[1]*dt;
+    double vz = prevState[1][2] + 2*accel[2]*dt;  
     Vector measurement_vx(2, 0.0); Vector measurement_vy(2, 0.0); Vector measurement_vz(2, 0.0);
     measurement_vx(0, 0) = vx; measurement_vx(1, 0) = 0;
     measurement_vy(0, 0) = vy; measurement_vy(1, 0) = 0; 
