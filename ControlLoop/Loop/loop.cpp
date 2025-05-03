@@ -353,13 +353,12 @@ LoopOutput loop(LoopInput in) {
     std::vector<double> euler_attitude = state[2];
     std::vector<double> q = madgwickFilter.eulerToQuaternion(euler_attitude);
     std::vector<double> qnew = madgwickFilter.madgwickUpdate(q, gyro, accel, mag, dt);
-    // std::vector<double> new_attitude = madgwickFilter.quaternionToEuler(qnew);
-
+    std::vector<double> new_attitude = madgwickFilter.quaternionToEuler(qnew);
 
     // New LPF on direct attitude measurements
-    double ax = prevState[2][0] + 2*gyro[0]*dt;
-    double ay = prevState[2][1] + 2*gyro[1]*dt;
-    double az = prevState[2][2] + 2*gyro[2]*dt;
+    double ax = new_attitude[0];
+    double ay = new_attitude[1];
+    double az = new_attitude[2];
     Vector measurement_ax(2, 0.0); Vector measurement_ay(2, 0.0); Vector measurement_az(2, 0.0);
     measurement_ax(0, 0) = ax; measurement_ax(1, 0) = 0;
     measurement_ay(0, 0) = ay; measurement_ay(1, 0) = 0; 
@@ -371,10 +370,8 @@ LoopOutput loop(LoopInput in) {
     Vector estimated_state_ay = ekf_ay.getState(); double ay_actual = estimated_state_ay(0, 0);
     Vector estimated_state_az = ekf_az.getState(); double az_actual = estimated_state_az(0, 0);
 
-    std::vector<double> new_attitude = {ax_actual, ay_actual, az_actual};
-
+    new_attitude = {ax_actual, ay_actual, az_actual};
   
-
     // ---------------------- ii. EKF for Position ----------------------------
 
     // STRATEGY: We need to split up the altitude from the XY position. Therefore we will do:
@@ -458,9 +455,9 @@ LoopOutput loop(LoopInput in) {
     Vector estimated_state_vz = ekf_vz.getState(); double vz_actual = estimated_state_vz(0, 0);
 
     // Slap a low pass filter onto angular velocity
-    double ox = gyro[0];
-    double oy = gyro[1];
-    double oz = gyro[2];
+    double ox = (new_attitude[0] - prevState[2][0])/(2*dt); // gyro[0];
+    double oy = (new_attitude[1] - prevState[2][1])/(2*dt); // gyro[1];
+    double oz = (new_attitude[2] - prevState[2][2])/(2*dt); // gyro[2];
 
     Vector measurement_ox(2, 0.0); Vector measurement_oy(2, 0.0); Vector measurement_oz(2, 0.0);
     measurement_ox(0, 0) = ox; measurement_ox(1, 0) = 0;
@@ -538,6 +535,8 @@ LoopOutput loop(LoopInput in) {
     Matrix inertia = toMatrix(INERTIA);
     Matrix inertia_a = toMatrix(getInertiaA(command[1]));
     Matrix inertia_b = toMatrix(getInertiaB(command[2]));
+
+    angular_states = {0,0,0,0};
     
     // 7. Calculate A and B Matrices << NOTE AERO HAS BEEN ZEROED
     Matrix A = calculateA(m, f, area, Cd, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector(angular_states));
@@ -548,10 +547,12 @@ LoopOutput loop(LoopInput in) {
     A.sanitizeNaNs();
     B.sanitizeNaNs();
 
-    // std::cout << "\nA:" << std::endl;
-    // A.print();
-    // std::cout << "\nB:" << std::endl;
-    // B.print();
+    
+
+    // std::cout << "\nA: " << frobeniusNorm(A) << std::endl;
+    // // A.print()
+    // std::cout << "\nB: " << frobeniusNorm(B) << std::endl;
+    // // B.print();
     // std::cout << "" << std::endl;
 
     // ---------- ii. Use state matrices to compute optimal controls -----------
@@ -572,7 +573,7 @@ LoopOutput loop(LoopInput in) {
     static_input = u_d;
 
     std::vector<double> K_MATRIX = {
-        0,0,4,         0,0,1,           0,0,0,          0,0,0,
+        0,0,1,         0,0,1,           0,0,0,          0,0,0,
         0,0,0,         0,0,0,           1,0,0,          0,0,0,
         0,0,0,         0,0,0,           0,1,0,          0,0,0,
     };
@@ -584,7 +585,7 @@ LoopOutput loop(LoopInput in) {
     };
 
     std::vector<double> D_MATRIX = {
-        0,0,1,  0,0,0.5,     0,0,0,  0,0,0, 
+        0,0,1,  0,0,1,     0,0,0,  0,0,0, 
         0,0,0,  0,0,0,     0,0,0,  0.025,0,0,
         0,0,0,  0,0,0,     0,0,0,  0,0.025,0,
     };

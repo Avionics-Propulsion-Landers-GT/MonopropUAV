@@ -25,8 +25,8 @@ SystemComponents init(std::vector<double> gpsInit, std::vector<std::vector<doubl
     // std::cout << "Initializing system components..." << std::endl;
 
     // Initialize Madgwick gains + parameters
-    double madgwickGain = 0.1; 
-    double madgwickBeta = 0.001;
+    double madgwickGain = 1; 
+    double madgwickBeta = 0.002;
     double startTime = 0.0;
     std::vector<double> initialOrientation = {1,0,0,0};
     Madgwick madgwickFilter(madgwickGain, madgwickBeta, startTime, initialOrientation);// <-- the error is here
@@ -78,6 +78,12 @@ SystemComponents init(std::vector<double> gpsInit, std::vector<std::vector<doubl
 
     EKF_Altitude ekf_z2(initial_z_state, dt, q_scalar_Z, r_scalar_Z, initial_p_Z);
 
+    EKF_Altitude ekf_ax(initial_z_state, dt, q_scalar_pos, r_scalar_pos, 0);
+
+    EKF_Altitude ekf_ay(initial_z_state, dt, q_scalar_pos, r_scalar_pos, 0);
+
+    EKF_Altitude ekf_az(initial_z_state, dt, q_scalar_pos, r_scalar_pos, 0);
+
     q_scalar_pos = 0.00001;
     r_scalar_pos = 100000;
     initial_p_pos = 10;
@@ -86,11 +92,7 @@ SystemComponents init(std::vector<double> gpsInit, std::vector<std::vector<doubl
     EKF_Altitude ekf_b(initial_z_state, dt, q_scalar_Z, r_scalar_Z, initial_p_Z);
     EKF_Altitude ekf_t(initial_z_state, dt, q_scalar_Z, r_scalar_Z, initial_p_Z);
 
-    EKF_Altitude ekf_ax(initial_z_state, dt, q_scalar_pos, r_scalar_pos, 0);
-
-    EKF_Altitude ekf_ay(initial_z_state, dt, q_scalar_pos, r_scalar_pos, 0);
-
-    EKF_Altitude ekf_az(initial_z_state, dt, q_scalar_pos, r_scalar_pos, 0);
+   
 
     EKF_Altitude ekf_ox(initial_z_state, dt, q_scalar_pos, r_scalar_pos, initial_p_pos);
 

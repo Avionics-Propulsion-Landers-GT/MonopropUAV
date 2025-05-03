@@ -476,11 +476,11 @@ void simulate(RocketParams &P) {
         double dz_dt = 0.0;
 
         if (t_val >= 0.0 && t_val < 10.0) {
-            dz_dt = 50.0 * 0.5 * (M_PI / 10.0) * sin(M_PI * t_val / 10.0);
+            dz_dt = 10.0 * 0.5 * (M_PI / 10.0) * sin(M_PI * t_val / 10.0);
         } else if (t_val >= 10.0 && t_val < 20.0) {
             dz_dt = 0.0;
         } else if (t_val >= 20.0 && t_val < 30.0) {
-            dz_dt = -49.0 * 0.5 * (M_PI / 10.0) * sin(M_PI * (t_val - 20.0) / 10.0);
+            dz_dt = -10 * 0.5 * (M_PI / 10.0) * sin(M_PI * (t_val - 20.0) / 10.0);
         } else if (t_val >= 30.0 && t_val <= 40.0) {
             dz_dt = 0.0;
         }
@@ -497,7 +497,7 @@ void simulate(RocketParams &P) {
         double t_val = time[i];
         double d2z_dt2 = 0.0;
         double pi_over_10 = M_PI / 10.0;
-        double factor = 50.0 * 0.5 * pi_over_10 * pi_over_10;
+        double factor = 10.0 * 0.5 * pi_over_10 * pi_over_10;
 
         if (t_val >= 0.0 && t_val < 10.0) {
             d2z_dt2 = factor * cos(pi_over_10 * t_val);
@@ -554,6 +554,8 @@ void simulate(RocketParams &P) {
 
     Vector accel = Vector(3, 0.0);
     accel(2,0) = -9.81;
+
+    
     bool grounded = false;
 
     // Main simulation loop
@@ -631,10 +633,18 @@ void simulate(RocketParams &P) {
             std::cout << "Accel: " << accel(0,0) << ", " << accel(1,0) << ", " << accel(2,0) << "\n";
         }
 
+        Matrix R_bw = att.toRotationMatrix();
+        Matrix WF2BF = R_bw.transpose();
+
+        Vector mag_wf = Vector(3,0); mag_wf[0] = 0.005; mag_wf[1] = 0; mag_wf[2] = 0;
+        Vector mag_bf = WF2BF.multiply(mag_wf);
+        Vector accel_bf = WF2BF.multiply(accel);
+
+
         // 3. Set up the input structure for the LQR loop function. Noiseless data
         std::vector<std::vector<double>> sensor_values = {
-            {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), accel(0,0), accel(1,0), accel(2,0), 0.005, 0, 0}, // Mock 9-axis IMU 
-            {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), accel(0,0), accel(1,0), accel(2,0)}, // Mock 6-axis IMU
+            {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), accel_bf(0,0), accel_bf(1,0), accel_bf(2,0), mag_bf(0,0), mag_bf(1,0), mag_bf(2,0)}, // Mock 9-axis IMU 
+            {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), accel_bf(0,0), accel_bf(1,0), accel_bf(2,0)}, // Mock 6-axis IMU
             {lat, lon, pos(2,0)}, // Mock GPS
             {0, pos(2,0)}, // Mock LIDAR
             {0,
@@ -746,10 +756,10 @@ void simulate(RocketParams &P) {
         std::vector<double> command = loopOutput.filteredCommand;
 
         // TESTING FOR WIND
-        if (step > 2000 && step < 2500) {
-            command[1] = 0.01;
-            command[2] = 0.01;
-        }
+        // if (step > 2000 && step < 2500) {
+        //     command[1] = 0.01;
+        //     command[2] = 0.01;
+        // }
         // command[0] = 0;
         // command[1] = 0;
         // command[2] = 0;
