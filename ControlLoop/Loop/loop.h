@@ -4,6 +4,7 @@
 #include "init.h"
 #include "../Filters/Madgwick/Madgwick.h"
 #include "../LQR/lqr.h"
+#include "../CustomLinear/Matrix.h"
 
 /*
 
@@ -32,7 +33,6 @@ struct LoopInput {
     const std::vector<double>& command;
     const std::vector<double>& prevCommand; 
     const std::vector<double>& prevPrevCommand; 
-    unsigned int& iter;
 };
 
 void preciseLatLonToMeters(double lat, double deltaLat, double deltaLon, double &dY, double &dX);

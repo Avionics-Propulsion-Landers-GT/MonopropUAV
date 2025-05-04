@@ -329,9 +329,9 @@ LoopOutput loop(LoopInput in) {
     std::vector<double> accel2 = {sixAxisIMU[4], sixAxisIMU[5], sixAxisIMU[6]};
     std::vector<double> mag = {nineAxisIMU[7], nineAxisIMU[8], nineAxisIMU[9]};
 
-    // Weight the 9ax IMU data on a 3:1 ratio with 6ax
-    std::vector<double> accel = weightedAverage(accel1, accel2, 3, 1);
-    std::vector<double> gyro = weightedAverage(gyro1, gyro2, 3, 1);
+    // Weight the 9ax IMU data on a 0:1 ratio with 6ax (we're not using 9ax anymore)
+    std::vector<double> accel = weightedAverage(accel1, accel2, 0, 1);
+    std::vector<double> gyro = weightedAverage(gyro1, gyro2, 0, 1);
 
     // std::cout << "before: \n";
     // toVector(gyro).print();
@@ -364,7 +364,27 @@ LoopOutput loop(LoopInput in) {
     // std::vector<double> qnew = madgwickFilter.madgwickUpdate(q, gyro, accel, mag, dt);
     // std::vector<double> new_attitude = madgwickFilter.quaternionToEuler(qnew);
 
-    std::vector<double> new_attitude = {state[2][0] + gyro[0]*dt, state[2][1] + gyro[1]*dt, state[2][2] + gyro[2]*dt};
+    std::vector<double> euler_attitude = state[2];
+    std::vector<double> q = madgwickFilter.eulerToQuaternion(euler_attitude);
+    std::vector<double> ang_vel_q = {0, gyro[0], gyro[1], gyro[2]};
+    std::vector<double> qnew = madgwickFilter.quaternionMultiply(ang_vel_q, q);
+    for (double& val : qnew) val *= dt * 0.5;
+    // std::vector<double> new_attitude = {state[2][0] + gyro[0]*dt, state[2][1] + gyro[1]*dt, state[2][2] + gyro[2]*dt};
+    std::vector<double> new_attitude = madgwickFilter.quaternionToEuler(qnew);
+
+    double accel_sum = 0.0;
+    for (double val : accel) {
+        accel_sum += val * val;
+    }
+    std::vector<double> accel_norm = {accel[0] / std::sqrt(accel_sum), accel[1] / std::sqrt(accel_sum), accel[2] / std::sqrt(accel_sum)};
+    double accel_roll = std::atan2(accel_norm[1], accel_norm[2]);
+    double accel_pitch = std::atan2(-accel_norm[0], std::sqrt(accel_norm[1] * accel_norm[1] + accel_norm[2] * accel_norm[2]));
+
+
+    //TODO: tune this complementary factor:
+    double accel_factor = 0.5;
+    new_attitude[0] = new_attitude[0] * (1 - accel_factor) + accel_roll * accel_factor;
+    new_attitude[1] = new_attitude[1] * (1 - accel_factor) + accel_pitch * accel_factor;
 
 
     
