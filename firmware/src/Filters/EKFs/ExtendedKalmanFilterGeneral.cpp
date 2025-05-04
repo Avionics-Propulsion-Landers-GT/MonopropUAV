@@ -26,7 +26,8 @@ void ExtendedKalmanFilterGeneral::predict() {
     error_covariance = F.multiply(error_covariance).multiply(Ft).add(process_noise_covariance);
 }
 
-void ExtendedKalmanFilterGeneral::update(const Vector& measurement) {
+void ExtendedKalmanFilterGeneral::update(const Vector& measurement, const double dt) {
+    delta_time = dt;
     Vector prediction = measurementPredictionFunction();
     Vector residual = measurement.add(Vector(prediction.multiply(-1.0)));  // z - h(x)
 

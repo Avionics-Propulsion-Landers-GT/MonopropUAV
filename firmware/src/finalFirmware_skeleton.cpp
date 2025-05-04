@@ -6,12 +6,16 @@
 #include "mpu9250.h"  // from bolderflight Mpu9250
 #include <TinyGPSPlus.h>
 #include <Servo.h>
+#include <Loop/loop.h>
 
 #define DEBUG_NO_SENSORS 1
 #define SD_CS_PIN     10
 #define ESC_PIN        5
 #define SERVO1_PIN     6
 #define SERVO2_PIN     7
+
+LoopOutput loopOutput;
+LoopInput loopInput;
 
 HardwareSerial &gpsSerial = Serial1;
 TinyGPSPlus gps;
@@ -35,6 +39,8 @@ const unsigned long SENSOR_TIMEOUT_MS = 100;
 unsigned long dt              = 0;
 unsigned long last_loop_time = 0;
 const unsigned long LOOP_TIMEOUT_MS = 50;
+unsigned int num_steps        = 40000;
+;
 
 // Watchdog placeholder — Teensy 4.1 uses WDOG1 or Systick (implement later)
 #define resetWatchdog()
@@ -88,14 +94,6 @@ void setup() {
     esc.attach(ESC_PIN, 1000, 2000);
     servo1.attach(SERVO1_PIN);
     servo2.attach(SERVO2_PIN);
-
-    Serial.println("Setup complete.");
-
-    if (terminal_error) {
-        Serial.println("Terminal error detected during setup. System will halt.");
-        delay(1000);  // Allow USB Serial to flush before halting
-        haltSystem();
-    }
 }
 
 void loop() {

@@ -317,7 +317,7 @@ LoopOutput loop(LoopInput in) {
     measurement_xy(1, 0) = y_pos2;
     measurement_xy(2, 0) = x_pos2; // can change to use ony uwb
     measurement_xy(3, 0) = y_pos2;
-    ekf_xy.update(measurement_xy);      // Update EKF with measurement 
+    ekf_xy.update(measurement_xy, in.dt);      // Update EKF with measurement 
     ekf_xy.predict();                   // Predict next state
     Vector estimated_state_xy = ekf_xy.getState();  // [X, Y, VX, VY]
     double x_actual = estimated_state_xy(0, 0);
@@ -337,7 +337,7 @@ LoopOutput loop(LoopInput in) {
     Vector measurement_z(2, 0.0);
     measurement_z(0, 0) = z_pos; measurement_z(1, 0) = 0;  // Initial vertical velocity assumption
 
-    ekf_z.update(measurement_z); ekf_z.predict();
+    ekf_z.update(measurement_z, in.dt); ekf_z.predict();
     Vector estimated_state_z = ekf_z.getState(); double z_actual = estimated_state_z(0, 0);
 
     // ----------------- iii. Low pass EKFs and postprocessing -----------------------
@@ -347,9 +347,9 @@ LoopOutput loop(LoopInput in) {
     measurement_x(0, 0) = x_actual; measurement_x(1, 0) = 0;
     measurement_y(0, 0) = y_actual; measurement_y(1, 0) = 0;
     measurement_z2(0, 0) = z_actual; measurement_z2(1, 0) = 0;
-    ekf_x.update(measurement_x); ekf_x.predict();
-    ekf_y.update(measurement_y); ekf_y.predict();
-    ekf_z2.update(measurement_z2); ekf_z2.predict(); 
+    ekf_x.update(measurement_x, in.dt); ekf_x.predict();
+    ekf_y.update(measurement_y, in.dt); ekf_y.predict();
+    ekf_z2.update(measurement_z2, in.dt); ekf_z2.predict(); 
     // Vector estimated_state_x = ekf_x.getState(); x_actual = estimated_state_x(0, 0);
     // Vector estimated_state_y = ekf_y.getState(); y_actual = estimated_state_y(0, 0);
     Vector estimated_state_z2 = ekf_z2.getState(); z_actual = estimated_state_z2(0, 0);
@@ -362,9 +362,9 @@ LoopOutput loop(LoopInput in) {
     measurement_vx(0, 0) = vx; measurement_vx(1, 0) = 0;
     measurement_vy(0, 0) = vy; measurement_vy(1, 0) = 0; 
     measurement_vz(0, 0) = vz; measurement_vz(1, 0) = 0;  
-    ekf_vx.update(measurement_vx); ekf_vx.predict();
-    ekf_vy.update(measurement_vy); ekf_vy.predict();
-    ekf_vz.update(measurement_vz); ekf_vz.predict();
+    ekf_vx.update(measurement_vx, in.dt); ekf_vx.predict();
+    ekf_vy.update(measurement_vy, in.dt); ekf_vy.predict();
+    ekf_vz.update(measurement_vz, in.dt); ekf_vz.predict();
     Vector estimated_state_vx = ekf_vx.getState(); double vx_actual = estimated_state_vx(0, 0);
     Vector estimated_state_vy = ekf_vy.getState(); double vy_actual = estimated_state_vy(0, 0);
     Vector estimated_state_vz = ekf_vz.getState(); double vz_actual = estimated_state_vz(0, 0);
@@ -378,9 +378,9 @@ LoopOutput loop(LoopInput in) {
     measurement_ox(0, 0) = ox; measurement_ox(1, 0) = 0;
     measurement_oy(0, 0) = oy; measurement_oy(1, 0) = 0; 
     measurement_oz(0, 0) = oz; measurement_oz(1, 0) = 0;  
-    ekf_ox.update(measurement_ox); ekf_ox.predict();
-    ekf_oy.update(measurement_oy); ekf_oy.predict();
-    ekf_oz.update(measurement_oz); ekf_oz.predict();
+    ekf_ox.update(measurement_ox, in.dt); ekf_ox.predict();
+    ekf_oy.update(measurement_oy, in.dt); ekf_oy.predict();
+    ekf_oz.update(measurement_oz, in.dt); ekf_oz.predict();
     Vector estimated_state_ox = ekf_ox.getState(); double ox_actual = estimated_state_ox(0, 0);
     Vector estimated_state_oy = ekf_oy.getState(); double oy_actual = estimated_state_oy(0, 0);
     Vector estimated_state_oz = ekf_oz.getState(); double oz_actual = estimated_state_oz(0, 0);
