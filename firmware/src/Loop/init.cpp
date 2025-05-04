@@ -1,7 +1,6 @@
 #include "init.h"
 #include "../Filters/EKFs/EKF_xy.h"
 #include "../Filters/EKFs/EKF_z.h"
-#include "../LQR/lqr.h"
 
 /*
 
@@ -89,9 +88,7 @@ SystemComponents init(std::vector<double> gpsInit, std::vector<std::vector<doubl
     // smoothing of some sort. Therefore they have been repurposed to smooth out some functions
     // (notably velocities, angular velocities, and control states).
 
-    
-    LQR lqrController;
 
     // Return struct of filters
-    return {madgwickFilter, ekf_xy, ekf_z, ekf_x, ekf_y, ekf_z2, ekf_vx, ekf_vy, ekf_vz, ekf_ox, ekf_oy, ekf_oz, ekf_ax, ekf_ay, ekf_az, lqrController};
+    return {madgwickFilter, ekf_xy, ekf_z, ekf_x, ekf_y, ekf_z2, ekf_vx, ekf_vy, ekf_vz, ekf_ox, ekf_oy, ekf_oz, ekf_ax, ekf_ay, ekf_az};
 }

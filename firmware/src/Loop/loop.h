@@ -3,7 +3,6 @@
 
 #include "init.h"
 #include "../Filters/Madgwick/Madgwick.h"
-#include "../LQR/lqr.h"
 #include "../CustomLinear/Matrix.h"
 
 /*
