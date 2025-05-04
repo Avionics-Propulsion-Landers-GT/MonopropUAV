@@ -51,7 +51,8 @@ Matrix::Matrix(unsigned int r, unsigned int c, const double* d, FromArrayTag)
 }
 
 // GetRows, GetCols
-Matrix::Matrix(const Matrix& other) : rows(other.getRows()), cols(other.getCols(), data(nullptr)) {
+Matrix::Matrix(const Matrix& other)
+    : rows(other.getRows()), cols(other.getCols()), data(nullptr) {
     if (other.data && rows*cols) {
         data = new double[rows * cols];
         

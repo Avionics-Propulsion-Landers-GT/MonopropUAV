@@ -1,10 +1,7 @@
 #include "loop.h"
 #include "init.h"
-#include "../LQR/lqr.h"
 #include "../LQR/calculateA.h"
 #include "../LQR/calculateB.h"
-#include "../LQR/calculateABF.h"
-#include "../LQR/calculateBBF.h"
 #include <iostream>
 
 
@@ -276,7 +273,6 @@ LoopOutput loop(LoopInput in) {
     EKF_Altitude& ekf_ax = system.ekf_ax;
     EKF_Altitude& ekf_ay = system.ekf_ay;
     EKF_Altitude& ekf_az = system.ekf_az;
-    // EKF_Altitude& ekf_thrust = system.ekf_thrust;
 
     // Constants
     double m = M;

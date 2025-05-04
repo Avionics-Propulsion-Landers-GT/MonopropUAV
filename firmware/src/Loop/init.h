@@ -4,7 +4,6 @@
 #include "../Filters/Madgwick/Madgwick.h"
 #include "../Filters/EKFs/EKF_xy.h"
 #include "../Filters/EKFs/EKF_z.h"
-#include "../LQR/lqr.h"
 
 /*
 
@@ -29,7 +28,6 @@ struct SystemComponents {
     EKF_Altitude ekf_ax;
     EKF_Altitude ekf_ay;
     EKF_Altitude ekf_az;
-    LQR lqrController;
 };
 
 
