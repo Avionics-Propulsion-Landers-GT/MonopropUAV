@@ -1,0 +1,3 @@
+[submodule "firmware/lib/MPU9250"]
+	path = firmware/lib/MPU9250
+	url = https://github.com/kriswiner/MPU9250.git
