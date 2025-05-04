@@ -170,6 +170,7 @@ CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Loop/loop
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Loop/../LQR/lqr.h \
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Loop/../LQR/../CustomLinear/Vector.h \
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Loop/../LQR/../CustomLinear/Matrix.h \
+ /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Loop/../CustomLinear/Matrix.h \
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Loop/../LQR/calculateA.h \
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Loop/../LQR/calculateB.h \
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Loop/../LQR/calculateABF.h \

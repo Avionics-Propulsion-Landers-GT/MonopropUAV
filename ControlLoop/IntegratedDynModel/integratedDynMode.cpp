@@ -759,9 +759,9 @@ int main() {
     P.gimbal_top_COM_offset = Vector(3, 0.0);
     P.gimbal_bottom_COM_offset = Vector(3, 0.0);
     P.COM_offset = Vector(3, 0.0);
-    // P.COM_offset(2,0) = 7*24*0.001;
     P.COP = Vector(3, 0.0);          // Can be set as needed.
     P.COP_offset = Vector(3, 0.0);
+    // P.COP_offset(2, 0) = 0.01;
     P.gimbal_offset = Vector(3, 0.0);
     P.gimbal_offset(2,0) = 7*24*0.001;
     P.gimbal_x_distance = Vector(3, 0.0);

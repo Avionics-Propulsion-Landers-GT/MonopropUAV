@@ -93,5 +93,5 @@ SystemComponents init(std::vector<double> gpsInit, std::vector<std::vector<doubl
     LQR lqrController;
 
     // Return struct of filters
-    return {madgwickFilter, ekf_xy, ekf_z, ekf_x, ekf_y, ekf_z2, ekf_vx, ekf_vy, ekf_vz, ekf_ox, ekf_oy, ekf_oz, ekf_thrust, ekf_ax, ekf_ay, ekf_az, lqrController};
+    return {madgwickFilter, ekf_xy, ekf_z, ekf_x, ekf_y, ekf_z2, ekf_vx, ekf_vy, ekf_vz, ekf_ox, ekf_oy, ekf_oz, ekf_ax, ekf_ay, ekf_az, lqrController};
 }

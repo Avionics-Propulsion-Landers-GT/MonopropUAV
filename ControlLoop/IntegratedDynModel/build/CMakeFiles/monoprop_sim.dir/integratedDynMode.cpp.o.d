@@ -192,6 +192,7 @@ CMakeFiles/monoprop_sim.dir/integratedDynMode.cpp.o: \
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/IntegratedDynModel/../Loop/../LQR/lqr.h \
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/IntegratedDynModel/../Loop/../LQR/../CustomLinear/Vector.h \
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/IntegratedDynModel/../Loop/../LQR/../CustomLinear/Matrix.h \
+ /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/IntegratedDynModel/../Loop/../CustomLinear/Matrix.h \
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/IntegratedDynModel/../Loop/init.h \
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/IntegratedDynModel/../LQR/lqr.h \
  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/IntegratedDynModel/../LQR/calculateA.h \

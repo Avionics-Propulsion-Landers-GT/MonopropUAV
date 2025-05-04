@@ -2731,6 +2731,7 @@ CMakeFiles/monoprop_sim.dir/home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Loop/loop
   /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/lqr.h \
   /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Vector.h \
   /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Matrix.h \
+  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Matrix.h \
   /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateA.h \
   /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateB.h \
   /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/calculateABF.h \
@@ -2989,6 +2990,7 @@ CMakeFiles/monoprop_sim.dir/integratedDynMode.cpp.o: ../integratedDynMode.cpp \
   /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Filters/EKFs/EKF_z.h \
   /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/lqr.h \
   /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Vector.h \
+  /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Matrix.h \
   /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/CustomLinear/Matrix.h \
   /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/Loop/init.h \
   /home/sdatnmdt/gtpl/MonopropUAV/ControlLoop/LQR/lqr.h \
