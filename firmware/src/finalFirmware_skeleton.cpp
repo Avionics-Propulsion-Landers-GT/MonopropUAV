@@ -1,21 +1,22 @@
+#include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
 #include <SD.h>
-#include "Adafruit_VL53L0X.h"
-#include "MPU9250.h"
+#include <Adafruit_VL53L0X.h>
+#include "mpu9250.h"  // from bolderflight Mpu9250
 #include <TinyGPSPlus.h>
 #include <Servo.h>
-#include <imxrt.h> // Teensy 4.1 watchdog
 
-#define SD_CS_PIN 10
-#define ESC_PIN 5
-#define SERVO1_PIN 6
-#define SERVO2_PIN 7
+#define SD_CS_PIN     10
+#define ESC_PIN        5
+#define SERVO1_PIN     6
+#define SERVO2_PIN     7
 
 HardwareSerial &gpsSerial = Serial1;
 TinyGPSPlus gps;
 Adafruit_VL53L0X lox;
-MPU9250 imu(Wire, 0x68);
+bfs::Mpu9250 imu;
+
 File logFile;
 
 Servo esc;
@@ -24,22 +25,37 @@ Servo servo2;
 
 bool gps_ok = false, lidar_ok = false, imu_ok = false;
 bool terminal_error = false;
-unsigned long last_gps_time = 0, last_lidar_time = 0, last_imu_time = 0;
+
+unsigned long last_gps_time   = 0;
+unsigned long last_lidar_time = 0;
+unsigned long last_imu_time   = 0;
 const unsigned long SENSOR_TIMEOUT_MS = 100;
-unsigned long dt = 0;
+
+unsigned long dt              = 0;
 unsigned long last_loop_time = 0;
 const unsigned long LOOP_TIMEOUT_MS = 50;
+
+// Watchdog placeholder — Teensy 4.1 uses WDOG1 or Systick (implement later)
+#define resetWatchdog()
+#define setupWatchdog()
+
+void logError(const char* msg);
+void haltSystem();
+void readGPS();
+void readLiDAR();
+void readIMU();
+void checkSafety();
+void runControlLoop();
+float computeESCCommand();
+float computeServo1Command();
+float computeServo2Command();
 
 void setup() {
     Serial.begin(115200);
     gpsSerial.begin(9600);
     Wire.begin();
 
-    // Start watchdog: 1 second timeout
-    const uint32_t watchdogTimeout = 1000;
-    IWDG_SR = 0; // Clear status flags
-    IWDG_RLR = watchdogTimeout;
-    IWDG_KR = 0xCCCC; // Start watchdog
+    setupWatchdog();
 
     if (!SD.begin(SD_CS_PIN)) {
         Serial.println("ERROR: SD card init failed");
@@ -59,12 +75,15 @@ void setup() {
         lidar_ok = true;
     }
 
-    if (imu.begin() != 0) {
+    imu.Config(&Wire, bfs::Mpu9250::I2C_ADDR_PRIM);
+
+    if (!imu.Begin()) {
         logError("MPU9250 init failed");
         imu_ok = false;
     } else {
-        imu.setAccelRange(MPU9250::ACCEL_RANGE_4G);
-        imu.setGyroRange(MPU9250::GYRO_RANGE_500DPS);
+        imu.SetAccelRange(bfs::Mpu9250::ACCEL_RANGE_4G);
+        imu.SetGyroRange(bfs::Mpu9250::GYRO_RANGE_500DPS);
+        imu.SetDlpfBandwidth(bfs::Mpu9250::DLPF_BANDWIDTH_20HZ);
         imu_ok = true;
     }
 
@@ -75,11 +94,12 @@ void setup() {
 
 void loop() {
     unsigned long now = millis();
-
     dt = now - last_loop_time;
+
     if (dt > LOOP_TIMEOUT_MS) {
         logError("Loop timeout detected");
     }
+
     last_loop_time = now;
 
     readGPS();
@@ -93,16 +113,15 @@ void loop() {
 
     runControlLoop();
 
-    // Reset watchdog
-    IWDG_KR = 0xAAAA;
-
-    delay(0.1);
+    resetWatchdog();
+    delay(1);
 }
 
 void readGPS() {
     while (gpsSerial.available() > 0) {
         gps.encode(gpsSerial.read());
     }
+
     if (gps.location.isUpdated()) {
         last_gps_time = millis();
         gps_ok = true;
@@ -126,7 +145,7 @@ void readLiDAR() {
 }
 
 void readIMU() {
-    if (imu.readSensor() == 0) {
+    if (imu.Read()) {
         last_imu_time = millis();
         imu_ok = true;
     } else if (millis() - last_imu_time > SENSOR_TIMEOUT_MS) {
@@ -147,20 +166,20 @@ void runControlLoop() {
     // code here
     
 
-    // Compute control commands here
-    float esc_command = computeESCCommand();        // 0.0–1.0
-    float servo1_command = computeServo1Command();  // 0.0–1.0
-    float servo2_command = computeServo2Command();  // 0.0–1.0
+    float esc_command     = computeESCCommand();       // 0.0–1.0
+    float servo1_command  = computeServo1Command();    // 0.0–1.0
+    float servo2_command  = computeServo2Command();    // 0.0–1.0
 
-    esc_command = constrain(esc_command, 0.0, 1.0);
-    servo1_command = constrain(servo1_command, 0.0, 1.0);
-    servo2_command = constrain(servo2_command, 0.0, 1.0);
+    esc_command     = constrain(esc_command, 0.0, 1.0);
+    servo1_command  = constrain(servo1_command, 0.0, 1.0);
+    servo2_command  = constrain(servo2_command, 0.0, 1.0);
 
     int esc_pwm = map(esc_command * 1000, 0, 1000, 1000, 2000);
     esc.writeMicroseconds(esc_pwm);
 
     int servo1_angle = map(servo1_command * 1000, 0, 1000, 0, 180);
     int servo2_angle = map(servo2_command * 1000, 0, 1000, 0, 180);
+
     servo1.write(servo1_angle);
     servo2.write(servo2_angle);
 }
@@ -187,8 +206,7 @@ void logError(const char* msg) {
 }
 
 void haltSystem() {
-     esc.writeMicroseconds(1000);
-
+    esc.writeMicroseconds(1000);
     if (logFile) {
         logFile.println("System halted due to terminal error.");
         logFile.flush();
