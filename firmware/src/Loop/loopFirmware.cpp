@@ -52,34 +52,6 @@ static Vector IE = Vector(12,0);
 static Vector static_input = Vector(3, 0.0);
 
 
-// Q & R Matrices
-const std::vector<double> Q_MATRIX = { // 12 x 12
-    /* Starting values based of Bryson's Rule */
-    // Position (x, y, z)
-    0.0, 0.00, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    0.00, 0.0, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    0.00, 0.00, 400.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    // Linear velocity (vx, vy, vz)
-    0.0, 0.0, 0.0,  0.0, 0.00, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    0.0, 0.0, 0.0,  0.00, 0.0, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    0.0, 0.0, 0.0,  0.00, 0.00, 100.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    // Angular position (roll, pitch, yaw)
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  100.0, 0.00, 0.00,  0.0, 0.0, 0.0,
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 100.0, 0.00,  0.0, 0.0, 0.0,
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 0.00, 0.0,  0.0, 0.0, 0.0,
-    // Angular velocity (wx, wy, wz)
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  2.5, 0.00, 0.00,
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 2.5, 0.00,
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 0.00, 0.0
-}; 
-const std::vector<double> R_MATRIX = { // 3 x 3
-/* Starting values based of Bryson's Rule */
-    1.0, 0.0, 0.0, 
-    0.0, 1.0, 0.0, 
-    0.0, 0.0, 1.0, 
-};
-
-
 /*
                      -=-  HELPER FUNCTIONS -=-
 */
@@ -284,11 +256,9 @@ LoopOutput loop(LoopInput in) {
     const std::vector<double>& prevPrevCommand = in.prevPrevCommand; 
    
     // Read in values
-    std::vector<double> nineAxisIMU = values[0]; // Time, Gyro<[rad/s]>, Accel<[m/s2]>, Mag<[]>
-    std::vector<double> sixAxisIMU = values[1]; // Time, Gyro<[rad/s]>, Accel<[m/s2]>
-    std::vector<double> gps = values[2]; // latitude [deg], longitude[deg], altitude[m above MSL]
-    std::vector<double> lidar = values[3]; // Time, altitude [m above ground]
-    std::vector<double> uwb = values[4]; // Time, Distance1 [m] Distance2 [m] Distance3 [m] 
+    std::vector<double> sixAxisIMU = values[0]; // Time, Gyro<[rad/s]>, Accel<[m/s2]>
+    std::vector<double> gps = values[1]; // latitude [deg], longitude[deg], altitude[m above MSL]
+    std::vector<double> lidar = values[2]; // Time, altitude [m above ground]
 
     // Read in filters
     Madgwick& madgwickFilter = system.madgwickFilter;
@@ -307,7 +277,6 @@ LoopOutput loop(LoopInput in) {
     EKF_Altitude& ekf_ay = system.ekf_ay;
     EKF_Altitude& ekf_az = system.ekf_az;
     // EKF_Altitude& ekf_thrust = system.ekf_thrust;
-    LQR& lqrController = system.lqrController;
 
     // Constants
     double m = M;
@@ -315,58 +284,12 @@ LoopOutput loop(LoopInput in) {
 
     // -------------------- I. SENSOR FUSION ALGORITHM ------------------------
 
-    // Preprocessing: Triangulation Algorithm
-    Vector uwb_xy = trilaterateXY(ANCHORS, uwb[1], uwb[2], uwb[3]);
-
 
     // --------------- i. Madgwick Filter for Attitude ------------------------
 
-    // STRATEGY: Run Madgwick on weighted average of 9ax IMU data and 6ax IMU data
-    std::vector<double> gyro1 = {nineAxisIMU[1], nineAxisIMU[2], nineAxisIMU[3]};
-    std::vector<double> gyro2 = {sixAxisIMU[1], sixAxisIMU[2], sixAxisIMU[3]};
-    std::vector<double> accel1 = {nineAxisIMU[4], nineAxisIMU[5], nineAxisIMU[6]};
-    std::vector<double> accel2 = {sixAxisIMU[4], sixAxisIMU[5], sixAxisIMU[6]};
-    std::vector<double> mag = {nineAxisIMU[7], nineAxisIMU[8], nineAxisIMU[9]};
-
     // Weight the 9ax IMU data on a 0:1 ratio with 6ax (we're not using 9ax anymore)
-    std::vector<double> accel = weightedAverage(accel1, accel2, 0, 1);
-    std::vector<double> gyro = weightedAverage(gyro1, gyro2, 0, 1);
-
-    // std::cout << "before: \n";
-    // toVector(gyro).print();
-
-    // std::cout << "after: \n";
-    // toVector(gyro).print();
-
-
-    // Set up and update Madgwick filter
-    // std::vector<double> euler_attitude = state[2];
-    
-    // std::vector<double> q = madgwickFilter.eulerToQuaternion(euler_attitude);
-    // std::vector<double> qnew = madgwickFilter.madgwickUpdate(q, gyro, accel, mag, dt);
-    // std::vector<double> new_attitude = madgwickFilter.quaternionToEuler(qnew);
-
-    // std::vector<double> euler_attitude = state[2];
-    // std::vector<double> q = madgwickFilter.eulerToQuaternion(euler_attitude);
-    // std::vector<double> ang_vel_q = {0, gyro[0], gyro[1], gyro[2]};
-    // std::vector<double> qnew = madgwickFilter.quaternionMultiply(ang_vel_q, q);
-    // for (double& val : qnew) val *= dt * 0.5;
-    // // std::vector<double> new_attitude = {state[2][0] + gyro[0]*dt, state[2][1] + gyro[1]*dt, state[2][2] + gyro[2]*dt};
-    // std::vector<double> new_attitude = madgwickFilter.quaternionToEuler(qnew);
-
-    // double accel_sum = 0.0;
-    // for (double val : accel) {
-    //     accel_sum += val * val;
-    // }
-    // std::vector<double> accel_norm = {accel[0] / std::sqrt(accel_sum), accel[1] / std::sqrt(accel_sum), accel[2] / std::sqrt(accel_sum)};
-    // double accel_roll = std::atan2(accel_norm[1], accel_norm[2]);
-    // double accel_pitch = std::atan2(-accel_norm[0], std::sqrt(accel_norm[1] * accel_norm[1] + accel_norm[2] * accel_norm[2]));
-
-
-    // //TODO: tune this complementary factor:
-    // double accel_factor = 0.5;
-    // new_attitude[0] = new_attitude[0] * (1 - accel_factor) + accel_roll * accel_factor;
-    // new_attitude[1] = new_attitude[1] * (1 - accel_factor) + accel_pitch * accel_factor;
+    std::vector<double> accel = {sixAxisIMU[4], sixAxisIMU[5], sixAxisIMU[6]};
+    std::vector<double> gyro = {sixAxisIMU[1], sixAxisIMU[2], sixAxisIMU[3]};
 
     std::vector<double> new_attitude = {prevState[2][0] + 2*gyro[0]*dt, prevState[2][1] + 2*gyro[1]*dt, prevState[2][2] + 2*gyro[2]*dt};
 
@@ -382,8 +305,6 @@ LoopOutput loop(LoopInput in) {
     // -------------------------------- (a) ----------------------------
     std::vector<double> position = state[0];
     std::vector<double> attitude = state[2];
-    double x_pos1 = uwb_xy[0];
-    double y_pos1 = uwb_xy[1];
     double lat = gps[0];
     double lon = gps[1];
 
@@ -396,10 +317,10 @@ LoopOutput loop(LoopInput in) {
     preciseLatLonToMeters(lat, deltaLat, deltaLon, x_pos2, y_pos2); // Convert lat + lon to m (for gps)
 
     Vector measurement_xy(4, 0.0);  // Create 4x1 vector
-    measurement_xy(0, 0) = x_pos1;
-    measurement_xy(1, 0) = y_pos1;
-    measurement_xy(2, 0) = x_pos1; // can change to use ony uwb
-    measurement_xy(3, 0) = y_pos1;
+    measurement_xy(0, 0) = x_pos2;
+    measurement_xy(1, 0) = y_pos2;
+    measurement_xy(2, 0) = x_pos2; // can change to use ony uwb
+    measurement_xy(3, 0) = y_pos2;
     ekf_xy.update(measurement_xy);      // Update EKF with measurement 
     ekf_xy.predict();                   // Predict next state
     Vector estimated_state_xy = ekf_xy.getState();  // [X, Y, VX, VY]
@@ -467,16 +388,6 @@ LoopOutput loop(LoopInput in) {
     Vector estimated_state_ox = ekf_ox.getState(); double ox_actual = estimated_state_ox(0, 0);
     Vector estimated_state_oy = ekf_oy.getState(); double oy_actual = estimated_state_oy(0, 0);
     Vector estimated_state_oz = ekf_oz.getState(); double oz_actual = estimated_state_oz(0, 0);
-
-
-    // Check for timestamp problems
-    double time1 = nineAxisIMU[0];
-    double time2 = sixAxisIMU[0];
-    double time3 = uwb[0];
-
-    if ((time1 - time2 >= TIMESTAMP_THRESHOLD) || (time2 - time3 >= TIMESTAMP_THRESHOLD)) {
-        // std::cout << "IMU or UWB timestamps don't match. Continuing, but you have been warned." << std::endl;
-    }
 
     // Calculate new state vector based on measurements
     std::vector<double> angular_velocity = {ox_actual, oy_actual, oz_actual};
@@ -658,37 +569,6 @@ LoopOutput loop(LoopInput in) {
     Vector control_command = u_d.subtract(((K.multiply(state_error)).add(I.multiply(IE))).add(D.multiply(DE)));  // result is 3x1 Matrix
 
 
-    //  // Read in Q, R matrices
-    //  Matrix Q = toRectMatrix(Q_MATRIX, 12, 12);
-    //  Matrix R = toRectMatrix(R_MATRIX, 3, 3);
-
-    //  std::cout << "\nAfn: " << frobeniusNorm(A);
-    //  std::cout << "\nBfn: " << frobeniusNorm(B);
-
- 
-    //  // Set state and setpoint in LQR controller
-    //  lqrController.setA(A);
-    //  lqrController.setB(B);
-    //  lqrController.setQ(Q);
-    //  lqrController.setR(R);
- 
-    //  // Read in current + desired states
-    //  lqrController.setState(current_state);
-    //  lqrController.setPoint = toVector(desired_state); // Assuming setPoint is a std::vector
- 
-    //  // Compute error between current state and desired state
-    //  Matrix neg_setpoint = lqrController.setPoint.multiply(-1.0);
-    //  Vector state_error = lqrController.getState().add(Vector(neg_setpoint));
- 
-    //  // Recalculate K if needed (e.g., time-varying system)
-    //  if ( iter % 5 == 0) {
-    //     lqrController.calculateK(dt);
-    //  }
- 
-    //  // // // // Compute control command: u = -K * state_error
-
-    // Matrix negative_K = lqrController.getK().multiply(-1.0);
-    // Vector control_command = u_d.add(negative_K.multiply(state_error)); 
     Vector filtered_command = control_command;
     // Vector change_command = (negative_K.multiply(state_error));
 
