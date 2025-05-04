@@ -6,6 +6,7 @@
 #include <cmath>
 #include <limits>
 #include <cassert>
+#include <cstring>
 
 
 //Initialize data pointer to a double which allows for efficient array creation etc. and rows and cols
@@ -50,12 +51,11 @@ Matrix::Matrix(unsigned int r, unsigned int c, const double* d, FromArrayTag)
 }
 
 // GetRows, GetCols
-Matrix::Matrix(const Matrix& other) : rows(other.getRows()), cols(other.getCols()) {
-    if (other.data) {
+Matrix::Matrix(const Matrix& other) : rows(other.getRows()), cols(other.getCols(), data(nullptr)) {
+    if (other.data && rows*cols) {
         data = new double[rows * cols];
-        for (unsigned int i = 0; i < rows * cols; ++ i) {
-            data[i] = other.data[i];
-        }
+        
+        std::memcpy(data, other.data, rows * cols * sizeof(double));
     }
 }
 
@@ -241,18 +241,6 @@ Matrix Matrix::getSubMatrix(unsigned int row, unsigned int col) const {
         subRow++;
     }
     return subMatrix;
-}
-
-void Matrix::swapRows(unsigned int r1, unsigned int r2) {
-    if (r1 >= rows || r2 >= rows) {
-        throw std::out_of_range("Row index out of bounds in swapRows");
-    }
-
-    for (unsigned int col = 0; col < cols; ++col) {
-        double temp = (*this)(r1, col);
-        (*this)(r1, col) = (*this)(r2, col);
-        (*this)(r2, col) = temp;
-    }
 }
 
 void Matrix::print() const {
