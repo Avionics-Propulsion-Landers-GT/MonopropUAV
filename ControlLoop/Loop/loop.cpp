@@ -304,6 +304,9 @@ LoopOutput loop(LoopInput in) {
     EKF_Altitude& ekf_ox = system.ekf_ox;
     EKF_Altitude& ekf_oy = system.ekf_oy;
     EKF_Altitude& ekf_oz = system.ekf_oz;
+    EKF_Altitude& ekf_ax = system.ekf_ax;
+    EKF_Altitude& ekf_ay = system.ekf_ay;
+    EKF_Altitude& ekf_az = system.ekf_az;
     EKF_Altitude& ekf_thrust = system.ekf_thrust;
     LQR& lqrController = system.lqrController;
 
@@ -330,13 +333,35 @@ LoopOutput loop(LoopInput in) {
     std::vector<double> accel = weightedAverage(accel1, accel2, 3, 1);
     std::vector<double> gyro = weightedAverage(gyro1, gyro2, 3, 1);
 
-    // Set up and update Madgwick filter
-    std::vector<double> euler_attitude = state[2];
+    // std::cout << "before: \n";
+    // toVector(gyro).print();
 
+    // // New LPF on direct attitude measurements
+    // double ax = gyro[0];
+    // double ay = gyro[1];
+    // double az = gyro[2];
+    // Vector measurement_ax(2, 0.0); Vector measurement_ay(2, 0.0); Vector measurement_az(2, 0.0);
+    // measurement_ax(0, 0) = ax; measurement_ax(1, 0) = 0;
+    // measurement_ay(0, 0) = ay; measurement_ay(1, 0) = 0; 
+    // measurement_az(0, 0) = az; measurement_az(1, 0) = 0;  
+    // ekf_ax.update(measurement_ax); ekf_ax.predict();
+    // ekf_ay.update(measurement_ay); ekf_ay.predict();
+    // ekf_az.update(measurement_az); ekf_az.predict();
+    // Vector estimated_state_ax = ekf_ax.getState(); double gx_actual = estimated_state_ax(0, 0);
+    // Vector estimated_state_ay = ekf_ay.getState(); double gy_actual = estimated_state_ay(0, 0);
+    // Vector estimated_state_az = ekf_az.getState(); double gz_actual = estimated_state_az(0, 0);
+
+    // gyro = {gx_actual, gy_actual, gz_actual};
+
+    // std::cout << "after: \n";
+    // toVector(gyro).print();
+
+
+    // Set up and update Madgwick filter
+    // std::vector<double> euler_attitude = state[2];
     
-    
-    std::vector<double> q = madgwickFilter.eulerToQuaternion(euler_attitude);
-    std::vector<double> qnew = madgwickFilter.madgwickUpdate(q, gyro, accel, mag, dt);
+    // std::vector<double> q = madgwickFilter.eulerToQuaternion(euler_attitude);
+    // std::vector<double> qnew = madgwickFilter.madgwickUpdate(q, gyro, accel, mag, dt);
     // std::vector<double> new_attitude = madgwickFilter.quaternionToEuler(qnew);
 
     std::vector<double> new_attitude = {state[2][0] + gyro[0]*dt, state[2][1] + gyro[1]*dt, state[2][2] + gyro[2]*dt};
@@ -424,9 +449,9 @@ LoopOutput loop(LoopInput in) {
     Vector estimated_state_vz = ekf_vz.getState(); double vz_actual = estimated_state_vz(0, 0);
 
     // Slap a low pass filter onto angular velocity
-    double ox = gyro[0];
-    double oy = gyro[1];
-    double oz = gyro[2];
+    double ox = (new_attitude[0] - prevState[2][0])/(2*dt); // gyro[0];
+    double oy = (new_attitude[1] - prevState[2][1])/(2*dt); // gyro[1];
+    double oz = (new_attitude[2] - prevState[2][2])/(2*dt); // gyro[2];
 
     Vector measurement_ox(2, 0.0); Vector measurement_oy(2, 0.0); Vector measurement_oz(2, 0.0);
     measurement_ox(0, 0) = ox; measurement_ox(1, 0) = 0;
@@ -567,7 +592,7 @@ LoopOutput loop(LoopInput in) {
     };
 
     std::vector<double> D_MATRIX = {
-        0,0,1,  0,0,0.5,     0,0,0,  0,0,0, 
+        0,0,1,  0,0,1,     0,0,0,  0,0,0, 
         0,0,0,  0,0,0,     0,0,0,  0.025,0,0,
         0,0,0,  0,0,0,     0,0,0,  0,0.025,0,
     };

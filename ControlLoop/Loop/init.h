@@ -27,6 +27,9 @@ struct SystemComponents {
     EKF_Altitude ekf_oy;
     EKF_Altitude ekf_oz;
     EKF_Altitude ekf_thrust;
+    EKF_Altitude ekf_ax;
+    EKF_Altitude ekf_ay;
+    EKF_Altitude ekf_az;
     LQR lqrController;
 };
 

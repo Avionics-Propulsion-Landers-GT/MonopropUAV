@@ -15,6 +15,8 @@
 #include "../Filters/EKFs/EKF_z.h"
 #include "../Filters/Madgwick/Madgwick.h"
 #include "../LQR/solveCARE.h"
+#include <random>
+
 
 using namespace std;
 
@@ -481,6 +483,7 @@ void simulate(RocketParams &P) {
     
     // Main simulation loop
     for (int step = 0; step < num_steps; step++) {
+
         // -------------------- LQR CONTROL CALCULATION --------------------
         // std::cout << "Step: " << step << "\n";
         // 1. Convert current state to the format expected by the LQR
@@ -542,11 +545,22 @@ void simulate(RocketParams &P) {
             0, 0, 0   // desired angular acceleration (usually zero)
         };
 
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_real_distribution<> dis(-0.00, 0.00);
+
+        Vector accel = Vector(3,0); accel[0]=0; accel[1]=0; accel[2]=-9.81;
+        Matrix WF2BF = att.toRotationMatrix();
+        Vector accel_bf = WF2BF.multiply(accel);
+
+
+
+        std::vector<double> noise = {dis(gen), dis(gen), dis(gen)};
 
         // 3. Set up the input structure for the LQR loop function
         std::vector<std::vector<double>> sensor_values = {
-            {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), 0, 0, -9.81, 0.005, 0, 0}, // Mock IMU data
-            {0, ang_vel(0,0), ang_vel(1,0), ang_vel(2,0), 0, 0, -9.81}, // Mock 6-axis IMU
+            {0, ang_vel(0,0) + noise[0], ang_vel(1,0) + noise[1], ang_vel(2,0) + noise[2], accel_bf[0], accel_bf[1], accel_bf[2], 0, 0, 0}, // Mock IMU data
+            {0, ang_vel(0,0) + noise[0], ang_vel(1,0) + noise[1], ang_vel(2,0) + noise[2], accel_bf[0], accel_bf[1], accel_bf[2],}, // Mock 6-axis IMU
             {0, 0, pos(2,0)}, // Mock GPS
             {0, pos(2,0)}, // Mock LIDAR
             {0,
@@ -562,13 +576,12 @@ void simulate(RocketParams &P) {
         // std::cout << "MLIDAR Data: "; printVector(sensor_values[3], "");
         // std::cout << "MUWB Data: "; printVector(sensor_values[4], "");
 
-
         // Set prevCommands
         previous_state = prevState;
         prevState = loopOutput.state; 
         previous_previous_command = previous_command;
         previous_command = prevCommand;
-        prevCommand = loopOutput.command; 
+        prevCommand = loopOutput.filteredCommand; 
 
         // Create loop input structure
         LoopInput loopInput = {
@@ -590,9 +603,8 @@ void simulate(RocketParams &P) {
         loopOutput = loop(loopInput);
 
         // 5. Extract commands from the loop output
-        std::vector<double> command = loopOutput.command;
-        // std::vector<double> command = loopOutput.command;
-        
+        std::vector<double> command = loopOutput.filteredCommand;
+       
         // 6. Convert commands to thrust and gimbal angles
         F_thrust_mag = command[0];  // Thrust magnitude
         thrust_gimbal(0,0) = command[1];  // X-axis gimbal angle
@@ -649,31 +661,31 @@ void simulate(RocketParams &P) {
         cmd_vec(2, 0) = thrust_gimbal(1, 0);
         command_history.push_back(cmd_vec);
 
-        // Vector pos_Vec = Vector(3, 0.0);
-        // pos_Vec(0,0) = quaternionToEuler(att)[0];
-        // pos_Vec(1,0) = quaternionToEuler(att)[1];
-        // pos_Vec(2,0) = quaternionToEuler(att)[2];
-        // pos_v_history.push_back(pos_Vec);
-        
-        
-        // Vector vel_Vec = Vector(3, 0.0);
-        // vel_Vec(0,0) = ang_vel(0,0);
-        // vel_Vec(1,0) = ang_vel(1,0);
-        // vel_Vec(2,0) = ang_vel(2,0);
-        // vel_v_history.push_back(vel_Vec);
-
         Vector pos_Vec = Vector(3, 0.0);
-        pos_Vec(0,0) = loopOutput.state[2][0];
-        pos_Vec(1,0) = loopOutput.state[2][1];
-        pos_Vec(2,0) = loopOutput.state[2][2];
+        pos_Vec(0,0) = quaternionToEuler(att)[0];
+        pos_Vec(1,0) = quaternionToEuler(att)[1];
+        pos_Vec(2,0) = quaternionToEuler(att)[2];
         pos_v_history.push_back(pos_Vec);
         
         
         Vector vel_Vec = Vector(3, 0.0);
-        vel_Vec(0,0) = loopOutput.state[3][0];
-        vel_Vec(1,0) = loopOutput.state[3][1];
-        vel_Vec(2,0) = loopOutput.state[3][2];
+        vel_Vec(0,0) = ang_vel(0,0);
+        vel_Vec(1,0) = ang_vel(1,0);
+        vel_Vec(2,0) = ang_vel(2,0);
         vel_v_history.push_back(vel_Vec);
+
+        // Vector pos_Vec = Vector(3, 0.0);
+        // pos_Vec(0,0) = loopOutput.state[2][0];
+        // pos_Vec(1,0) = loopOutput.state[2][1];
+        // pos_Vec(2,0) = loopOutput.state[2][2];
+        // pos_v_history.push_back(pos_Vec);
+        
+        
+        // Vector vel_Vec = Vector(3, 0.0);
+        // vel_Vec(0,0) = loopOutput.state[3][0];
+        // vel_Vec(1,0) = loopOutput.state[3][1];
+        // vel_Vec(2,0) = loopOutput.state[3][2];
+        // vel_v_history.push_back(vel_Vec);
         
         // Increment iteration counter
         iter++;
