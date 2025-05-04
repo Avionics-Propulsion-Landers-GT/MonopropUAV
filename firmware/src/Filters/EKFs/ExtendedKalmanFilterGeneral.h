@@ -41,7 +41,7 @@ public:
 
     // Core EKF functions
     void predict();
-    void update(const Vector& measurement);
+    void update(const Vector& measurement, const double delta_time);
 
     // Abstract methods to be implemented by subclasses
     virtual Vector parseData(const std::vector<double>& data) = 0;
