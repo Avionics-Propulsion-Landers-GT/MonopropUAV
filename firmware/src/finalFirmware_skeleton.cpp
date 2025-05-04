@@ -117,7 +117,6 @@ void loop() {
     runControlLoop();
 
     resetWatchdog();
-    delay(1);
 }
 
 void readGPS() {
