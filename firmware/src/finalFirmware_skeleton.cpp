@@ -26,6 +26,7 @@ bool gps_ok = false, lidar_ok = false, imu_ok = false;
 bool terminal_error = false;
 unsigned long last_gps_time = 0, last_lidar_time = 0, last_imu_time = 0;
 const unsigned long SENSOR_TIMEOUT_MS = 100;
+unsigned long dt = 0;
 unsigned long last_loop_time = 0;
 const unsigned long LOOP_TIMEOUT_MS = 50;
 
@@ -75,7 +76,7 @@ void setup() {
 void loop() {
     unsigned long now = millis();
 
-    unsigned long dt = now - last_loop_time;
+    dt = now - last_loop_time;
     if (dt > LOOP_TIMEOUT_MS) {
         logError("Loop timeout detected");
     }
