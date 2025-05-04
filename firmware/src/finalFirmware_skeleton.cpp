@@ -7,6 +7,7 @@
 #include <TinyGPSPlus.h>
 #include <Servo.h>
 
+#define DEBUG_NO_SENSORS 1
 #define SD_CS_PIN     10
 #define ESC_PIN        5
 #define SERVO1_PIN     6
@@ -87,6 +88,14 @@ void setup() {
     esc.attach(ESC_PIN, 1000, 2000);
     servo1.attach(SERVO1_PIN);
     servo2.attach(SERVO2_PIN);
+
+    Serial.println("Setup complete.");
+
+    if (terminal_error) {
+        Serial.println("Terminal error detected during setup. System will halt.");
+        delay(1000);  // Allow USB Serial to flush before halting
+        haltSystem();
+    }
 }
 
 void loop() {
@@ -203,9 +212,15 @@ void logError(const char* msg) {
 
 void haltSystem() {
     esc.writeMicroseconds(1000);
+
+    Serial.println("System halted.");
     if (logFile) {
         logFile.println("System halted due to terminal error.");
         logFile.flush();
     }
-    while (true);
+
+    delay(500);  // Give Serial a moment to flush output
+    while (true) {
+        delay(1000);  // Idle, but not spinlock
+    }
 }
