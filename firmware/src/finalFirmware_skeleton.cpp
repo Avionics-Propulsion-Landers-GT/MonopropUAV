@@ -75,7 +75,8 @@ void setup() {
 void loop() {
     unsigned long now = millis();
 
-    if (now - last_loop_time > LOOP_TIMEOUT_MS) {
+    unsigned long dt = now - last_loop_time;
+    if (dt > LOOP_TIMEOUT_MS) {
         logError("Loop timeout detected");
     }
     last_loop_time = now;
