@@ -81,14 +81,6 @@ void setup() {
         logError("MPU9250 init failed");
         imu_ok = false;
     } else {
-        // imu.SetAccelRange(bfs::Mpu9250::ACCEL_RANGE_4G);
-        // imu.SetGyroRange(bfs::Mpu9250::GYRO_RANGE_500DPS);
-        // imu.SetDlpfBandwidth(bfs::Mpu9250::DLPF_BANDWIDTH_20HZ);
-        
-        imu.ConfigAccelRange(bfs::Mpu9250::ACCEL_RANGE_4G);
-        imu.ConfigGyroRange(bfs::Mpu9250::GYRO_RANGE_500DPS);
-        imu.ConfigDlpfBandwidth(bfs::Mpu9250::DLPF_BANDWIDTH_20HZ);
-
         imu_ok = true;
     }
 
@@ -119,7 +111,6 @@ void loop() {
     runControlLoop();
 
     resetWatchdog();
-    delay(1);
 }
 
 void readGPS() {
