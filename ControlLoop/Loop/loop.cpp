@@ -336,23 +336,6 @@ LoopOutput loop(LoopInput in) {
     // std::cout << "before: \n";
     // toVector(gyro).print();
 
-    // // New LPF on direct attitude measurements
-    // double ax = gyro[0];
-    // double ay = gyro[1];
-    // double az = gyro[2];
-    // Vector measurement_ax(2, 0.0); Vector measurement_ay(2, 0.0); Vector measurement_az(2, 0.0);
-    // measurement_ax(0, 0) = ax; measurement_ax(1, 0) = 0;
-    // measurement_ay(0, 0) = ay; measurement_ay(1, 0) = 0; 
-    // measurement_az(0, 0) = az; measurement_az(1, 0) = 0;  
-    // ekf_ax.update(measurement_ax); ekf_ax.predict();
-    // ekf_ay.update(measurement_ay); ekf_ay.predict();
-    // ekf_az.update(measurement_az); ekf_az.predict();
-    // Vector estimated_state_ax = ekf_ax.getState(); double gx_actual = estimated_state_ax(0, 0);
-    // Vector estimated_state_ay = ekf_ay.getState(); double gy_actual = estimated_state_ay(0, 0);
-    // Vector estimated_state_az = ekf_az.getState(); double gz_actual = estimated_state_az(0, 0);
-
-    // gyro = {gx_actual, gy_actual, gz_actual};
-
     // std::cout << "after: \n";
     // toVector(gyro).print();
 
@@ -545,8 +528,8 @@ LoopOutput loop(LoopInput in) {
     Matrix inertia_b = toMatrix(getInertiaB(command[2]));
     
     // 7. Calculate A and B Matrices << NOTE AERO HAS BEEN ZEROED
-    Matrix A = calculateA(m, f, 0, 0, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector({0,0,0,0}));
-    Matrix B = calculateB(m, f, 0, 0, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector({0,0,0,0}));
+    Matrix A = calculateA(m, f, area, Cd, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector({0,0,0,0}));
+    Matrix B = calculateB(m, f, area, Cd, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector({0,0,0,0}));
 
     // 8. Sanitize NaNs that pop up from numerical errors close to zero.
     A.sanitizeNaNs();

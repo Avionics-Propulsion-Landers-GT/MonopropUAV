@@ -50,6 +50,15 @@ void printVector(const std::vector<double>& vec, const std::string& label) {
     std::cout << "]" << std::endl;
 }
 
+double stdMagnitude(std::vector<double>& vector) {
+    // Calculate the magnitude of a std::vector which is different from Vector
+    double sum = 0.0;
+    for (unsigned int i = 0; i < vector.size(); ++i) {
+        sum += (vector[i] * vector[i]);
+    }
+    return std::sqrt(sum);
+}
+
 std::vector<double> quaternionToEuler(Quaternion quaternion) {
 
     return {
@@ -619,9 +628,27 @@ void simulate(RocketParams &P) {
         // Gravity force (world frame)
         Vector F_gravity(3, 0.0);
         F_gravity(2,0) = -P.m * P.g;
+
+        double AoA = 0;
+        double velocity_magnitude = stdMagnitude(velocity);
+        std::vector<double> z_wf = {0, 0, 1}; 
+        // double z_norm = stdMagnitude(z_wf);
+        if (velocity_magnitude > 0) {
+            // AOA calc from dot product
+            if (velocity[2] < 0) {
+                z_wf[2] = -1;
+            }
+            double dot = (velocity[0] * z_wf[0] + velocity[1] * z_wf[1] + velocity[2] * z_wf[2]);
+            double cos_alpha = dot / (velocity_magnitude * 1); // z norm is always 1
+            cos_alpha = std::max(-1.0, std::min(1.0, cos_alpha));
+
+            AoA = std::acos(cos_alpha); // radians
+            // AoA = std::acos(velocity_vector.dotProduct(z_direction) / (velocity_magnitude * z_direction.magnitude()))*(180/3.14159);
+        } 
         
-        // Update COM and COP offsets
-        calculate_COM_and_COP_offset(P, thrust_gimbal);
+        P.Cd_x = -0.449*std::cos(3.028*AoA*180/M_PI) + 0.463;
+        P.Cd_y = -0.449*std::cos(3.028*AoA*180/M_PI) + 0.463;
+        P.Cd_z = -0.376*std::cos(5.675*AoA*180/M_PI) + 1.854;
         
         // Compute thrust force and torque (body frame)
         pair<Vector, Vector> thrust = get_thrust_body(P, F_thrust_mag, thrust_gimbal);
@@ -629,13 +656,10 @@ void simulate(RocketParams &P) {
         Vector T_thrust_body = thrust.second;
         
         // Compute drag force and torque
-        // pair<Vector, Vector> drag = get_drag_body(P, att, vel, v_wind);
-        // Vector F_drag_body = drag.first;
-        // Vector T_drag_body = drag.second;
+        pair<Vector, Vector> drag = get_drag_body(P, att, vel, v_wind);
+        Vector F_drag_body = drag.first;
+        Vector T_drag_body = drag.second;
        
-        Vector F_drag_body = Vector(3,0);
-        Vector T_drag_body = Vector(3,0);
-        
         // Transform body-frame forces to world frame
         Matrix R_att = att.toRotationMatrix();
         Vector F_thrust_world = R_att.multiply(F_thrust_body);
