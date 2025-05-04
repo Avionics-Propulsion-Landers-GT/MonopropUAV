@@ -95,8 +95,6 @@ void loop() {
 
     // Reset watchdog
     IWDG_KR = 0xAAAA;
-
-    delay(0.1);
 }
 
 void readGPS() {
