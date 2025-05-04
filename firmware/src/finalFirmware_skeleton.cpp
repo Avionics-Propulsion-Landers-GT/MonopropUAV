@@ -75,7 +75,13 @@ void setup() {
         lidar_ok = true;
     }
 
-    imu.Config(&Wire, bfs::Mpu9250::I2C_ADDR_PRIM);
+    bfs::MpuConfig config;
+    config.accel_fs = bfs::Mpu9250::ACCEL_RANGE_4G;
+    config.gyro_fs = bfs::Mpu9250::GYRO_RANGE_500DPS;
+    config.dlpf_cfg = bfs::Mpu9250::DLPF_BANDWIDTH_20HZ;
+    config.i2c_addr = bfs::Mpu9250::I2C_ADDR_PRIM;
+
+    imu.Config(&Wire, config);
 
     if (!imu.Begin()) {
         logError("MPU9250 init failed");
@@ -115,7 +121,6 @@ void loop() {
     runControlLoop();
 
     resetWatchdog();
-    delay(1);
 }
 
 void readGPS() {
