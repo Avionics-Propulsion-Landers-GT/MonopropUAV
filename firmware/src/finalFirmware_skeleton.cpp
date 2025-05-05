@@ -88,9 +88,8 @@ void readLiDAR();
 void readIMU();
 void checkSafety();
 void runControlLoop();
-float computeESCCommand();
-float computeServo1Command();
-float computeServo2Command();
+float computeESCCommand(double thrust, double min, double max);
+float computeServoCommand(double rad, float zero);
 
 void setup() {
     Serial.begin(9600);
@@ -401,13 +400,13 @@ void runControlLoop() {
     thrust_gimbal(0,0) = command[1];  // X-axis gimbal angle in rad
     thrust_gimbal(1,0) = command[2];  // Y-axis gimbal angle in rad
 
+    // TODO: find thrust max in Newtons
+    // TODO: find servo zeros with structures,
+    //       and maybe rewrite the computeServoCommand to take into account potential nonlinearities
 
-
-    // TODO: convert thrust to voltage
-
-    float esc_command     = computeESCCommand();       // 0.0–1.0
-    float servo1_command  = computeServo1Command();    // 0.0–1.0
-    float servo2_command  = computeServo2Command();    // 0.0–1.0
+    float esc_command     = computeESCCommand(F_thrust_mag, 0, 10);       // 0.0–1.0
+    float servo1_command  = computeServoCommand(thrust_gimbal(0,0), 0.5);    // 0.0–1.0
+    float servo2_command  = computeServoCommand(thrust_gimbal(1,0), 0.5);    // 0.0–1.0
 
     esc_command     = constrain(esc_command, 0.0, 1.0);
     servo1_command  = constrain(servo1_command, 0.0, 1.0);
@@ -423,16 +422,17 @@ void runControlLoop() {
     servo2.write(servo2_angle);
 }
 
-float computeESCCommand() {
-    return 0.5; // Placeholder
+float computeESCCommand(double thrust, double min, double max) {
+    // min and max are in thrust units (Newtons)
+    thrust = constrain(thrust, min, max);
+    float return_var = thrust / (max - min);
+    return return_var;
 }
 
-float computeServo1Command() {
-    return 0.5; // Placeholder
-}
-
-float computeServo2Command() {
-    return 0.5; // Placeholder
+float computeServoCommand(double rad, float zero) {
+    double rad_to_servo = 0.7957728546;
+    float return_var = rad_to_servo * rad + zero;
+    return return_var;
 }
 
 void logError(const char* msg) {
