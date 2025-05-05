@@ -7,6 +7,8 @@
 #include <TinyGPSPlus.h>
 #include <Servo.h>
 #include <Loop/loop.h>
+#include "Loop/loop.h"
+#include "Loop/init.h"
 
 #define DEBUG_NO_SENSORS 1
 #define SD_CS_PIN     10
@@ -14,8 +16,8 @@
 #define SERVO1_PIN     6
 #define SERVO2_PIN     7
 
-LoopOutput loopOutput;
-LoopInput loopInput;
+// LoopOutput loopOutput;
+// LoopInput loopInput;
 
 HardwareSerial &gpsSerial = Serial1;
 TinyGPSPlus gps;
@@ -58,7 +60,9 @@ float computeServo1Command();
 float computeServo2Command();
 
 void setup() {
-    Serial.begin(115200);
+    Serial.begin(9600);
+    while (!Serial && millis() < 3000);
+    Serial.println("Firmware starting up...");
     gpsSerial.begin(9600);
     Wire.begin();
 
@@ -97,6 +101,8 @@ void setup() {
 }
 
 void loop() {
+    Serial.println("Loop tick");
+    delay(1000); // just to reduce spam
     unsigned long now = millis();
     dt = now - last_loop_time;
 
