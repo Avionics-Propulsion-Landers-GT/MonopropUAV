@@ -16,7 +16,7 @@
 #define SERVO1_PIN     6
 #define SERVO2_PIN     7
 
-// LoopOutput loopOutput;
+LoopOutput loopOutput;
 // LoopInput loopInput;
 
 HardwareSerial &gpsSerial = Serial1;
@@ -74,6 +74,9 @@ std::vector<double> command;
 SystemComponents system;
 std::vector<bool> status;
 
+Vector thrust_gimbal(3, 0.0);
+double F_thrust_mag = 0.0;
+
 // Watchdog placeholder — Teensy 4.1 uses WDOG1 or Systick (implement later)
 #define resetWatchdog()
 #define setupWatchdog()
@@ -128,6 +131,102 @@ void setup() {
     esc.attach(ESC_PIN, 1000, 2000);
     servo1.attach(SERVO1_PIN);
     servo2.attach(SERVO2_PIN);
+
+     // build time vector
+     std::vector<double> time(num_steps);
+     for (int i = 0; i < num_steps; i++) {
+         time[i] = i * 0.001; // 1 ms time step
+     }
+ 
+     readGPS();
+     double latInit = gps.location.rawLat().deg;
+     double lngInit = gps.location.rawLng().deg;
+     double altInit = gps.altitude.meters();
+     // declare initial conditions for loop
+     std::vector<double> gpsInit = {latInit, lngInit, altInit};
+     std::vector<double> velInit = {0,0,0};
+     std::vector<double> initAtt = {0,0,0};
+     std::vector<double> omegaInit = {0,0,0};
+     
+     std::vector<std::vector<double>> initState = {gpsInit, velInit, initAtt, omegaInit};
+     SystemComponents system = init(gpsInit, initState, dt);
+ 
+     // Build desired trajectory: pure vertical motion
+     std::vector<Vector> delta_pos_desired;
+     delta_pos_desired.reserve(num_steps);
+ 
+     for (int i = 0; i < num_steps; i++) {
+         double t_val = time[i];
+         double dz_dt = 0.0;
+ 
+         if (t_val >= 0.0 && t_val < 10.0) {
+             dz_dt = 50.0 * 0.5 * (M_PI / 10.0) * sin(M_PI * t_val / 10.0);
+         } else if (t_val >= 10.0 && t_val < 20.0) {
+             dz_dt = 0.0;
+         } else if (t_val >= 20.0 && t_val < 30.0) {
+             dz_dt = -49.0 * 0.5 * (M_PI / 10.0) * sin(M_PI * (t_val - 20.0) / 10.0);
+         } else if (t_val >= 30.0 && t_val <= 40.0) {
+             dz_dt = 0.0;
+         }
+ 
+         Vector vel_des(3, 0.0);
+         vel_des(2,0) = dz_dt;
+         delta_pos_desired.push_back(vel_des);
+     }
+ 
+     std::vector<Vector> accel_desired;
+     accel_desired.reserve(num_steps);
+ 
+     for (int i = 0; i < num_steps; i++) {
+         double t_val = time[i];
+         double d2z_dt2 = 0.0;
+         double pi_over_10 = M_PI / 10.0;
+         double factor = 50.0 * 0.5 * pi_over_10 * pi_over_10;
+ 
+         if (t_val >= 0.0 && t_val < 10.0) {
+             d2z_dt2 = factor * cos(pi_over_10 * t_val);
+         } else if (t_val >= 10.0 && t_val < 20.0) {
+             d2z_dt2 = 0.0;
+         } else if (t_val >= 20.0 && t_val < 30.0) {
+             d2z_dt2 = -factor * cos(pi_over_10 * (t_val - 20.0));
+         } else if (t_val >= 30.0 && t_val <= 40.0) {
+             d2z_dt2 = 0.0;
+         }
+ 
+         Vector acc_des(3, 0.0);
+         acc_des(2,0) = d2z_dt2;
+         accel_desired.push_back(acc_des);
+     }
+ 
+     std::vector<Vector> pos_desired;
+     pos_desired.reserve(num_steps);
+ 
+     // Initial position z = 0
+     double z = 0.0;
+     pos_desired.push_back(Vector(3, 0.0));
+ 
+     for (int i = 1; i < num_steps; i++) {
+         double dt = time[i] - time[i - 1];
+         double v_prev = delta_pos_desired[i - 1](2,0);
+         double v_curr = delta_pos_desired[i](2,0);
+ 
+         // Trapezoidal integration
+         z += 0.5 * (v_prev + v_curr) * dt;
+ 
+         Vector pos(3, 0.0);
+         pos(2,0) = z;
+         pos_desired.push_back(pos);
+     }
+ 
+     // Set up command and state feedback loops
+     loopOutput.state = {gpsInit, velInit, initAtt, omegaInit};
+     std::vector<std::vector<double>> prevState = loopOutput.state;
+     std::vector<std::vector<double>> previous_state;
+ 
+     loopOutput.command = {0,0.5,0.5};
+     std::vector<double> prevCommand = loopOutput.command;
+     std::vector<double> previous_command = prevCommand;
+     std::vector<double> previous_previous_command;
 }
 
 void loop() {
@@ -295,6 +394,16 @@ void runControlLoop() {
     loopOutput = loop(loopInput);
 
     // TODO: write up commands once we get more info from structures and avionics
+    std::vector<double> command = loopOutput.filteredCommand;
+    
+    // 6. Convert commands to thrust and gimbal angles
+    F_thrust_mag = command[0];  // Thrust magnitude
+    thrust_gimbal(0,0) = command[1];  // X-axis gimbal angle in rad
+    thrust_gimbal(1,0) = command[2];  // Y-axis gimbal angle in rad
+
+
+
+    // TODO: convert thrust to voltage
 
     float esc_command     = computeESCCommand();       // 0.0–1.0
     float servo1_command  = computeServo1Command();    // 0.0–1.0
