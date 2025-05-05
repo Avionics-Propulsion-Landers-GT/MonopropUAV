@@ -7,6 +7,7 @@
 #include <TinyGPSPlus.h>
 #include <Servo.h>
 #include <Loop/loop.h>
+// #include <CustomLinear/Quaternion.h>
 
 #define SD_CS_PIN     10
 #define ESC_PIN        5
@@ -39,7 +40,37 @@ unsigned long dt              = 0;
 unsigned long last_loop_time = 0;
 const unsigned long LOOP_TIMEOUT_MS = 50;
 unsigned int num_steps        = 40000;
-;
+unsigned long init_setup_time;
+unsigned long path_time = 0;
+
+std::vector<double> time;
+std::vector<Vector> delta_pos_desired;
+std::vector<Vector> accel_desired;
+std::vector<Vector> pos_desired;
+
+std::vector<double> command;
+std::vector<double> prevCommand;
+std::vector<double> previous_command;
+std::vector<double> previous_previous_command;
+
+std::vector<std::vector<double>> previous_state;
+std::vector<std::vector<double>> prevState;
+
+std::vector<double> gps_data;
+double lidar_data;
+// lidar data goes here
+std::vector<double> vel_data;
+std::vector<double> acc_data;
+std::vector<double> att_data;
+// Quaternion att_quat;
+std::vector<double> omega_data;
+std::vector<double> alpha_data;
+
+std::vector<std::vector<double>> current_state = {gps_data, vel_data, att_data, omega_data};
+std::vector<double> command;
+
+SystemComponents system;
+std::vector<bool> status;
 
 // Watchdog placeholder — Teensy 4.1 uses WDOG1 or Systick (implement later)
 #define resetWatchdog()
@@ -109,12 +140,18 @@ void setup() {
     std::vector<double> velInit = {0,0,0};
     std::vector<double> initAtt = {0,0,0};
     std::vector<double> omegaInit = {0,0,0};
+
+    gps_data = gpsInit;
+    vel_data = velInit;
+    att_data = initAtt;
+    omega_data = omegaInit;
     
     std::vector<std::vector<double>> initState = {gpsInit, velInit, initAtt, omegaInit};
-    SystemComponents system = init(gpsInit, initState, dt);
+    system = init(gpsInit, initState, dt);
+    status = {true, true};
+
 
     // Build desired trajectory: pure vertical motion
-    std::vector<Vector> delta_pos_desired;
     delta_pos_desired.reserve(num_steps);
 
     for (int i = 0; i < num_steps; i++) {
@@ -135,8 +172,6 @@ void setup() {
         vel_des(2,0) = dz_dt;
         delta_pos_desired.push_back(vel_des);
     }
-
-    std::vector<Vector> accel_desired;
     accel_desired.reserve(num_steps);
 
     for (int i = 0; i < num_steps; i++) {
@@ -159,8 +194,6 @@ void setup() {
         acc_des(2,0) = d2z_dt2;
         accel_desired.push_back(acc_des);
     }
-
-    std::vector<Vector> pos_desired;
     pos_desired.reserve(num_steps);
 
     // Initial position z = 0
@@ -183,18 +216,29 @@ void setup() {
     // Set up command and state feedback loops
     loopOutput.state = {gpsInit, velInit, initAtt, omegaInit};
     std::vector<std::vector<double>> prevState = loopOutput.state;
-    std::vector<std::vector<double>> previous_state;
 
     loopOutput.command = {0,0,0};
     std::vector<double> prevCommand = loopOutput.command;
-    std::vector<double> previous_command = prevCommand;
-    std::vector<double> previous_previous_command;
+    previous_command = prevCommand;
+    previous_previous_command;
+
+    // Set prevCommands
+    previous_state = prevState;
+    prevState = loopOutput.state; 
+    previous_previous_command = previous_command;
+    previous_command = prevCommand;
+    prevCommand = loopOutput.filteredCommand; 
+
+    // take finishing time for loop.
+    init_setup_time = millis();
+    last_loop_time = init_setup_time;
 }
 
 void loop() {
     unsigned long now = millis();
     dt = now - last_loop_time;
 
+    path_time = now - init_setup_time;
     if (dt > LOOP_TIMEOUT_MS) {
         logError("Loop timeout detected");
     }
@@ -263,6 +307,96 @@ void runControlLoop() {
 
     // code here
     
+    // path_time is current timestep for numsteps because both are ms
+    // double lat = gps.location.rawLat().deg;
+    // double lng = gps.location.rawLng().deg;
+    // double altitude = gps.altitude.meters();
+
+    // gps_data = {lat, lng, altitude};
+    // get current desired state from trajectory creation
+    int step = path_time;
+    std::vector<double> desired_position = {
+        pos_desired[step](0,0), 
+        pos_desired[step](1,0), 
+        pos_desired[step](2,0)
+    };
+
+    std::vector<double> delta_desired_position = {
+        delta_pos_desired[step](0,0),
+        delta_pos_desired[step](1,0),
+        delta_pos_desired[step](2,0)
+    };
+
+    std::vector<double> acc_desired_position = {
+        accel_desired[step](0,0),
+        accel_desired[step](1,0),
+        accel_desired[step](2,0)
+    };
+    
+    // Calculate velocity setpoint based on trajectory (simple difference if needed)
+    std::vector<double> desired_velocity = {0, 0, 0};
+    if (step < num_steps - 1) {
+        desired_velocity[0] = (pos_desired[step+1](0,0) - pos_desired[step](0,0)) / dt;
+        desired_velocity[1] = (pos_desired[step+1](1,0) - pos_desired[step](1,0)) / dt;
+        desired_velocity[2] = (pos_desired[step+1](2,0) - pos_desired[step](2,0)) / dt;
+    }
+
+    // Full desired state vector
+    std::vector<double> desired_state = {
+        desired_position[0], desired_position[1], desired_position[2],
+        delta_desired_position[0], delta_desired_position[1], delta_desired_position[2],
+        0, 0, 0,  // desired attitude (usually zero for hover)
+        0, 0, 0   // desired angular velocity (usually zero)
+    };
+    
+    // Delta desired state for LQR
+    std::vector<double> delta_desired_state = {
+        delta_desired_position[0], delta_desired_position[1], delta_desired_position[2],
+        acc_desired_position[0], acc_desired_position[1], acc_desired_position[2],
+        0, 0, 0,  // desired angular velocity (usually zero for hover)
+        0, 0, 0   // desired angular acceleration (usually zero)
+    };
+
+    // accel, then gyro for 6ax
+    // find out what is outputted by 6ax imu from docs
+    acc_data = {imu.accel_x_mps2(), imu.accel_y_mps2(), imu.accel_z_mps2()};
+    omega_data = {imu.gyro_x_radps(), imu.gyro_y_radps(), imu.gyro_z_radps()};
+
+    lidar_data = lox.readRange();
+    lidar_data /= 1000;
+
+    std::vector<std::vector<double>> sensor_values = {
+        {0, omega_data[0], omega_data[1], omega_data[2], acc_data[0], acc_data[1], acc_data[2]},
+        {gps_data[0], gps_data[1], gps_data[2]},
+        {0 , lidar_data}
+    };
+
+    // Set prevCommands
+    previous_state = prevState;
+    prevState = loopOutput.state; 
+    previous_previous_command = previous_command;
+    previous_command = prevCommand;
+    prevCommand = loopOutput.filteredCommand; 
+
+    // Create loop input structure
+    LoopInput loopInput = {
+        sensor_values,
+        loopOutput.state,
+        previous_state,
+        system,
+        status,
+        dt,
+        desired_state,
+        delta_desired_state,
+        loopOutput.command,
+        previous_command,
+        previous_previous_command,
+        step
+    };
+
+    loopOutput = loop(loopInput);
+
+    // TODO: write up commands once we get more info from structures and avionics
 
     float esc_command     = computeESCCommand();       // 0.0–1.0
     float servo1_command  = computeServo1Command();    // 0.0–1.0
