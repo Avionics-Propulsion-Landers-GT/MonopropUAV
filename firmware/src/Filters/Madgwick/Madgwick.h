@@ -18,6 +18,7 @@ private:
     std::vector<double> orientation;
 
 public:
+    Madgwick();
     Madgwick(double setGain, double setBeta, double startTime, std::vector<double>& initialOrientation);
 
     std::vector<double> update(std::vector<double>& updateArr);

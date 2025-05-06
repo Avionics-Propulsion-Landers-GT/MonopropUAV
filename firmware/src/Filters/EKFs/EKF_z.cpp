@@ -7,6 +7,7 @@
     appropriately.
 
 */
+EKF_Altitude::EKF_Altitude() : ExtendedKalmanFilterGeneral() {}
 
 EKF_Altitude::EKF_Altitude(const Vector& initial_state, double delta_time, double q_scalar, double r_scalar, double initial_p)
     : ExtendedKalmanFilterGeneral(initial_state, delta_time, q_scalar, r_scalar, initial_p) {}

@@ -1,6 +1,8 @@
 #include "Madgwick.h"
 #include <cmath>
 
+Madgwick::Madgwick(){}
+
 Madgwick::Madgwick(double setGain, double setBeta, double startTime, std::vector<double>& initialOrientation) {
     gain = setGain;
     beta = setBeta;

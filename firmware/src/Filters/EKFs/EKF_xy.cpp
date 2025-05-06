@@ -7,6 +7,8 @@
 
 */
 
+EKF_Position::EKF_Position() : ExtendedKalmanFilterGeneral() {}
+
 EKF_Position::EKF_Position(const Vector& initial_state, double delta_time, double q_scalar, double r_scalar, double initial_p)
     : ExtendedKalmanFilterGeneral(initial_state, delta_time, q_scalar, r_scalar, initial_p) {}
 

@@ -25,6 +25,9 @@ protected:
     Vector previous_state;
 
 public:
+    // Allows for default constructor to make shit work lol
+    ExtendedKalmanFilterGeneral();
+
     // Constructor
     ExtendedKalmanFilterGeneral(
         const Vector& initial_state,

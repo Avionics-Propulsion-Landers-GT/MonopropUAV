@@ -1,5 +1,7 @@
 #include "ExtendedKalmanFilterGeneral.h"
 
+ExtendedKalmanFilterGeneral::ExtendedKalmanFilterGeneral(){}
+
 ExtendedKalmanFilterGeneral::ExtendedKalmanFilterGeneral(
     const Vector& initial_state,
     double delta_time,
