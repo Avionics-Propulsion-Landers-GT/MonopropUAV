@@ -45,12 +45,12 @@ unsigned int num_steps        = 40000;
 unsigned long init_setup_time;
 unsigned long path_time = 0;
 
-std::vector<double> time;
+std::vector<double> time_vector;
 std::vector<Vector> delta_pos_desired;
 std::vector<Vector> accel_desired;
 std::vector<Vector> pos_desired;
 
-std::vector<double> command;
+std::vector<double> output_command;
 std::vector<double> prevCommand;
 std::vector<double> previous_command;
 std::vector<double> previous_previous_command;
@@ -69,9 +69,8 @@ std::vector<double> omega_data;
 std::vector<double> alpha_data;
 
 std::vector<std::vector<double>> current_state = {gps_data, vel_data, att_data, omega_data};
-std::vector<double> command;
 
-SystemComponents system;
+SystemComponents system_components;
 std::vector<bool> status;
 
 Vector thrust_gimbal(3, 0.0);
@@ -134,7 +133,7 @@ void setup() {
      // build time vector
      std::vector<double> time(num_steps);
      for (int i = 0; i < num_steps; i++) {
-         time[i] = i * 0.001; // 1 ms time step
+        time_vector[i] = i * 0.001; // 1 ms time step
      }
  
      readGPS();
@@ -148,14 +147,14 @@ void setup() {
      std::vector<double> omegaInit = {0,0,0};
      
      std::vector<std::vector<double>> initState = {gpsInit, velInit, initAtt, omegaInit};
-     system = init(gpsInit, initState, dt);
+     system_components = init(gpsInit, initState, dt);
  
      // Build desired trajectory: pure vertical motion
      std::vector<Vector> delta_pos_desired;
      delta_pos_desired.reserve(num_steps);
  
      for (int i = 0; i < num_steps; i++) {
-         double t_val = time[i];
+         double t_val = time_vector[i];
          double dz_dt = 0.0;
  
          if (t_val >= 0.0 && t_val < 10.0) {
@@ -177,7 +176,7 @@ void setup() {
      accel_desired.reserve(num_steps);
  
      for (int i = 0; i < num_steps; i++) {
-         double t_val = time[i];
+         double t_val = time_vector[i];
          double d2z_dt2 = 0.0;
          double pi_over_10 = M_PI / 10.0;
          double factor = 50.0 * 0.5 * pi_over_10 * pi_over_10;
@@ -205,7 +204,7 @@ void setup() {
      pos_desired.push_back(Vector(3, 0.0));
  
      for (int i = 1; i < num_steps; i++) {
-         double dt = time[i] - time[i - 1];
+         double dt = time_vector[i] - time_vector[i - 1];
          double v_prev = delta_pos_desired[i - 1](2,0);
          double v_curr = delta_pos_desired[i](2,0);
  
@@ -379,7 +378,7 @@ void runControlLoop() {
         sensor_values,
         loopOutput.state,
         previous_state,
-        system,
+        system_components,
         status,
         dt,
         desired_state,
@@ -392,13 +391,12 @@ void runControlLoop() {
 
     loopOutput = loop(loopInput);
 
-    // TODO: write up commands once we get more info from structures and avionics
-    std::vector<double> command = loopOutput.filteredCommand;
+    output_command = loopOutput.filteredCommand;
     
     // 6. Convert commands to thrust and gimbal angles
-    F_thrust_mag = command[0];  // Thrust magnitude
-    thrust_gimbal(0,0) = command[1];  // X-axis gimbal angle in rad
-    thrust_gimbal(1,0) = command[2];  // Y-axis gimbal angle in rad
+    F_thrust_mag = output_command[0];  // Thrust magnitude
+    thrust_gimbal(0,0) = output_command[1];  // X-axis gimbal angle in rad
+    thrust_gimbal(1,0) = output_command[2];  // Y-axis gimbal angle in rad
 
     // TODO: find thrust max in Newtons
     // TODO: find servo zeros with structures,
