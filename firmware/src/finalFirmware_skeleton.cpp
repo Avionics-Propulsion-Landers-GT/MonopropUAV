@@ -148,7 +148,7 @@ void setup() {
      std::vector<double> omegaInit = {0,0,0};
      
      std::vector<std::vector<double>> initState = {gpsInit, velInit, initAtt, omegaInit};
-     SystemComponents system = init(gpsInit, initState, dt);
+     system = init(gpsInit, initState, dt);
  
      // Build desired trajectory: pure vertical motion
      std::vector<Vector> delta_pos_desired;
