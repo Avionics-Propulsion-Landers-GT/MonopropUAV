@@ -89,7 +89,7 @@ void readIMU();
 void checkSafety();
 void runControlLoop();
 float computeESCCommand(double thrust, double min, double max);
-float computeServoCommand(double rad, float zero);
+float computeServoCommand(double rad, float zero, float direction);
 
 void setup() {
     Serial.begin(9600);
@@ -222,7 +222,7 @@ void setup() {
      std::vector<std::vector<double>> prevState = loopOutput.state;
      std::vector<std::vector<double>> previous_state;
  
-     loopOutput.command = {0,0.5,0.5};
+     loopOutput.command = {0,0,0};
      std::vector<double> prevCommand = loopOutput.command;
      std::vector<double> previous_command = prevCommand;
      std::vector<double> previous_previous_command;
@@ -404,34 +404,27 @@ void runControlLoop() {
     // TODO: find servo zeros with structures,
     //       and maybe rewrite the computeServoCommand to take into account potential nonlinearities
 
-    float esc_command     = computeESCCommand(F_thrust_mag, 0, 10);       // 0.0–1.0
-    float servo1_command  = computeServoCommand(thrust_gimbal(0,0), 0.5);    // 0.0–1.0
-    float servo2_command  = computeServoCommand(thrust_gimbal(1,0), 0.5);    // 0.0–1.0
+    float esc_command     = computeESCCommand(F_thrust_mag, 0, 15);       // 1000-2000
+    float servo1_command  = computeServoCommand(thrust_gimbal(0,0), 90, 1);    // 0-180
+    float servo2_command  = computeServoCommand(thrust_gimbal(1,0), 90, -1);    // 0-180
 
-    esc_command     = constrain(esc_command, 0.0, 1.0);
-    servo1_command  = constrain(servo1_command, 0.0, 1.0);
-    servo2_command  = constrain(servo2_command, 0.0, 1.0);
-
-    int esc_pwm = map(esc_command * 1000, 0, 1000, 1000, 2000);
-    esc.writeMicroseconds(esc_pwm);
-
-    int servo1_angle = map(servo1_command * 1000, 0, 1000, 0, 180);
-    int servo2_angle = map(servo2_command * 1000, 0, 1000, 0, 180);
-
-    servo1.write(servo1_angle);
-    servo2.write(servo2_angle);
+    esc.writeMicroseconds(esc_command);
+    servo1.write(servo1_command);
+    servo2.write(servo2_command);
 }
 
 float computeESCCommand(double thrust, double min, double max) {
     // min and max are in thrust units (Newtons)
     thrust = constrain(thrust, min, max);
-    float return_var = thrust / (max - min);
+    float pwm_min = 1000;
+    float pwm_max = 2000;
+    float return_var = (thrust / (max - min)) * (pwm_max - pwm_min) + pwm_min;
     return return_var;
 }
 
-float computeServoCommand(double rad, float zero) {
-    double rad_to_servo = 0.7957728546;
-    float return_var = rad_to_servo * rad + zero;
+float computeServoCommand(double rad, float zero, float direction) {
+    double rad_to_deg = 57.2958;
+    float return_var = constrain(direction * rad_to_deg * rad + zero, 0, 180);
     return return_var;
 }
 
