@@ -20,6 +20,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Tuple, List
 
+# imports mpc.py from the same directory. Add other py files as needed.
+import sys
+from pathlib import Path
+
+# Add the directory containing mpc.py to the Python path
+sys.path.append(str(Path(__file__).parent))
+
+import mpc  # needed for mpc controller
+from mpc import *
+
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
@@ -58,6 +68,8 @@ class RocketParams:
     m_gimbal_top: float = 0.05
     m_gimbal_bottom: float = 0.05
     I_body: np.ndarray = field(default_factory=lambda: np.diag([0.00940, 0.00940, 0.00014]))
+    I_gimbal_top: np.ndarray = field(default_factory=lambda: np.diag([0.0001, 0.0001, 0.0001]))
+    I_gimbal_bottom: np.ndarray = field(default_factory=lambda: np.diag([0.0001, 0.0001, 0.0001]))
 
     # Geometry offsets (set to zero by default)
     COM_offset: np.ndarray = field(default_factory=lambda: np.zeros(3))
@@ -99,6 +111,24 @@ class State:
     att: R = field(default_factory=lambda: R.identity())  # body→world
     ang_vel: np.ndarray = field(default_factory=lambda: np.zeros(3))
     ang_accel: np.ndarray = field(default_factory=lambda: np.zeros(3))
+
+def state_to_vec(s: State, *, to_dm: bool = False):
+    """
+    Convert `State` → 12×1 NumPy (or CasADi DM) vector in the order
+    [ r_x, r_y, r_z,  v_x, v_y, v_z,  ψ, θ, φ,  ψ̇, θ̇, φ̇ ].
+    """
+    # Euler angles MUST match the convention in your model:
+    # R_bf = R_z(phi) * R_y(theta) * R_x(psi)  ⇒  extrinsic Z‑Y‑X
+    psi, theta, phi = s.att.as_euler('xyz', degrees=False)  # X‑Y‑Z intrinsic
+    x_vec = np.concatenate([
+        s.pos,                    # r_x, r_y, r_z
+        s.vel,                    # v_x, v_y, v_z
+        [psi, theta, phi],        # ψ, θ, φ
+        s.ang_vel                 # ψ̇, θ̇, φ̇
+    ])
+    if to_dm:
+        return ca.DM(x_vec).reshape((-1, 1))  # (12,1) DM column
+    return x_vec                               # (12,) NumPy
 
 
 # -----------------------------------------------------------------------------
@@ -184,7 +214,7 @@ def integrate_step(params: RocketParams,
 # Simulation driver (open‑loop thrust profile)
 # -----------------------------------------------------------------------------
 
-def simulate(params: RocketParams,
+def simulate(params: RocketParams, controller,
              t_end: float = 40.0,
              out_csv: str | Path = "simulation_results.csv") -> None:
     """Run an open‑loop ascent/hover/descent profile and dump CSV."""
@@ -210,16 +240,22 @@ def simulate(params: RocketParams,
         #   20–30 s : engine off, free fall
         #   30–40 s : retro‑thrust to slow
         # -----------------------------------
-        if t < 10.0:
-            F_mag = 15.0
-        elif t < 20.0:
-            F_mag = params.m * 9.80665
-        elif t < 30.0:
-            F_mag = 0.0
-        else:
-            F_mag = 5.0
+        # if t < 10.0:
+        #     F_mag = 15.0
+        # elif t < 20.0:
+        #     F_mag = params.m * 9.80665
+        # elif t < 30.0:
+        #     F_mag = 0.0
+        # else:
+        #     F_mag = 5.0
 
-        thrust_gimbal = np.zeros(3)  # keep nozzle aligned with body Z
+        # thrust_gimbal = np.zeros(3)  # keep nozzle aligned with body Z
+
+        x_meas = state_to_vec(state, to_dm=False)
+
+        u_cmd = float(controller.make_step(x_meas))
+        F_mag = u_cmd[0]
+        thrust_gimbal = np.ndarray([u_cmd[1], u_cmd[2]])  # gimbal angles
 
         # Update aero coefficients based on AoA 
         # TODO: currently uses monoprop data, update to FHL data when possible.
@@ -239,6 +275,7 @@ def simulate(params: RocketParams,
         T_total_b = T_thrust_b + T_drag_b
 
         # Integrate one step
+        print("integrating step")
         state = integrate_step(params, state, F_total_b, T_total_b)
 
         # History ---------------------------------------------------
@@ -267,5 +304,10 @@ def simulate(params: RocketParams,
 # Main guard
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
+    f_sym, x_sym, u_sym = calculate_f_nonlinear_sym()
     params = RocketParams()
-    simulate(params)
+    mpc = initialize_mpc(x_sym, u_sym, f_sym)
+    x = np.zeros(12)
+    mpc.x0 = x
+    mpc.set_initial_guess()
+    simulate(params, mpc)
