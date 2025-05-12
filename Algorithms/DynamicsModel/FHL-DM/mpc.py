@@ -71,6 +71,20 @@ def calculate_f_nonlinear_sym():
                         [Ixy_b, Iyy_b, Iyz_b],
                         [Ixz_b, Iyz_b, Izz_b]])
 
+    # placeholder subsitutions, make sure to match with dynamics model values
+    r_c = r_c.subs({r_cx: 0, r_cy: 0, r_cz: 0.1})
+    r_t = r_t.subs({r_tx: 0, r_ty: 0, r_tz: -0.1})
+    rho = rho.subs({rho: 1.225})
+    # TODO: implement 3-axis cD instead of 1D
+    C_d = C_d.subs({C_d: 0.5})
+    A_ref = A_ref.subs({A_ref: 0.1})
+    m = m.subs({m: 0.7})
+    r_rcs = r_rcs.subs({r_rcs: 0.1})
+    I = I.subs({Ixx: 1, Ixy: 0, Ixz: 0, Iyy:1, Iyz: 0, Izz:1})
+    I_s = I_s.subs({Ixx_s: 0.7, Ixy_s: 0, Ixz_s: 0, Iyy_s:0.7, Iyz_s: 0, Izz_s:0.7})
+    I_a = I_a.subs({Ixx_a: 0.1, Ixy_a: 0, Ixz_a: 0, Iyy_a:0.1, Iyz_a: 0, Izz_a:0.1})
+    I_b = I_b.subs({Ixx_b: 0.1, Ixy_b: 0, Ixz_b: 0, Iyy_b:0.1, Iyz_b: 0, Izz_b:0.1})
+
     # ------------------------------------------------------------------
     # 3. Rotation matrices (world→body, Z‑Y‑X extrinsic)
     # ------------------------------------------------------------------
@@ -100,6 +114,9 @@ def calculate_f_nonlinear_sym():
 
     vel_b   = R_bf * velocity_wf
     vel_mag = sp.sqrt(vel_b.dot(vel_b))
+    # Guard against a zero‑velocity singularity (sqrt'(0) is undefined)
+    eps_vel = 1e-8  # small positive constant
+    vel_mag = sp.sqrt(vel_b.dot(vel_b) + eps_vel)
 
     Fd_b = (sp.Rational(1,2)*rho*C_d*A_ref*vel_mag) * vel_b
 
@@ -176,7 +193,7 @@ def calculate_f_nonlinear_sym():
         psi, theta, phi,
         psi_d, theta_d, phi_d
     ])
-    u_sym = sp.Matrix([T, R1, R2, a, b])
+    u_sym = sp.Matrix([T, R1, R2, a, b, a_d, b_d, a_dd, b_dd])
     print("State space model initialized.")
 
     
@@ -214,7 +231,7 @@ def initialize_mpc(x_sym, u_sym, f_sym):
 }
     
     
-    dt_disc = 0.001  # sampling period (s)
+    dt_disc = 0.01  # sampling period (s) - match with dynamics model (?)
 
     # ------------------ Helper to build k2, k3, k4 symbolically ---------------------------
 
@@ -268,7 +285,7 @@ def initialize_mpc(x_sym, u_sym, f_sym):
         """Return CasADi MX column vector f(x,u).  x_mx ∈ ℝ¹²×¹, u_mx ∈ ℝ⁵×¹."""
         # Extract scalar MX components (safe – we iterate over Python ints)
         x_list = [x_mx[i] for i in range(12)]
-        u_list = [u_mx[i] for i in range(5)]
+        u_list = [u_mx[i] for i in range(9)]
         f_list = f_lamb(*x_list, *u_list)  # <- list of 12 MX scalars
         return ca.vertcat(*f_list)          # column vector (12×1 MX)
     
@@ -280,7 +297,7 @@ def initialize_mpc(x_sym, u_sym, f_sym):
     model = do_mpc.model.Model('continuous')
 
     x_mx = model.set_variable('_x', 'x', shape=(12,1))   # state at k
-    u_mx = model.set_variable('_u', 'u', shape=(5,1))                # control at k
+    u_mx = model.set_variable('_u', 'u', shape=(9,1))                # control at k
 
     # RHS now represents x_{k+1}
     model.set_rhs('x', f_dt_casadi(x_mx, u_mx))
@@ -300,38 +317,51 @@ def initialize_mpc(x_sym, u_sym, f_sym):
         collocation_type = 'radau',
         collocation_deg  = 3,
         store_full_solution = True,
+        # mute Ipopt solver output (will ounly show errors)
+        nlpsolver='ipopt',
+        nlpsol_opts={
+            # ---------- Ipopt’s own options ----------
+            'ipopt': {
+                'print_level': 0,   # 0 = mute everything
+                'sb':          'yes'  # skip the decorative banner
+            },
+            # ---------- CasADi wrapper options ----------
+            'print_time': 0         # don’t show CasADi timing
+        },
     )
 
     # Reference variable
-    x_ref = mpc.set_variable('_tvp', 'x_ref', shape=(12,1))
+    # x_ref = model.set_variable('_tvp','x_ref',shape=(12,1))
 
-
+    x_ref = np.array([0,0,50,0,0,0,0,0,0,0,0,0])  # desired state at all times
     print("Setting up cost function...")
     # Q_vel, R_u = 10.0, 1.0
     Q = np.diag([0.5, 0.5, 1.0, 0.5, 0.5, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
-    R_u = np.array([0.1, 0.1, 0.1, 0.5, 0.5])
+    R_u = np.diag([0.1, 0.1, 0.1, 0.5, 0.5,1,1,1,1])
     # mpc.set_objective(mterm = Q_vel*(x_mx-x_ref)**2,
     #                 lterm = Q_vel*(x_mx-x_ref)**2 + R_u*u_mx**2)
     # quadratic cost function with vectors
     err = x_mx - x_ref
 
-    mpc.set_objective(lterm=ca.mtimes([err.T, Q, err]) + R_u*u_mx**2,
+    mpc.set_objective(lterm=ca.mtimes([err.T, Q, err]) + (ca.mtimes([u_mx.T, R_u, u_mx])),
                   mterm=ca.mtimes([err.T, Q, err]))
 
-    mpc.bounds['lower','_u','u'] = np.array([0.0, 0.0, 0.0, -np.pi/12, -np.pi/12])
-    mpc.bounds['upper','_u','u'] =  np.array([15.0, 1.0, 1.0, np.pi/12, np.pi/12])
-    mpc.set_rterm(u = R_u)
+    mpc.bounds['lower','_u','u'] = np.array([0.0, 0.0, 0.0, -np.pi/12, -np.pi/12, -5, -5, -10, -10])
+    mpc.bounds['upper','_u','u'] =  np.array([15.0, 1.0, 1.0, np.pi/12, np.pi/12, 5, 5, 10, 10])
+    mpc.set_rterm(u = np.array([0.1, 0.1, 0.1, 0.5, 0.5, 1, 1, 1, 1])) # input penalty
 
 
-    print("Time varying parameters...")
+    # print("Time varying parameters...")
     # Time‑varying parameter template
-    _tvpt = mpc.get_tvp_template()
-    def tvp_fun(t_now):
-        # change these target values to what we need (for now, targeting just hovering at 50 m)
-        _tvpt['_tvp','x_ref'][:] = np.array([0.0,0.0,50.0,0.0,0.0,0.0,0.0,0.0,0.0])   # desired state at all times
-        return _tvpt
+    # not doing this for now
+    # _tvpt = mpc.get_tvp_template()
+    # def tvp_fun(t_now):
+    #     # change these target values to what we need (for now, targeting just hovering at 50 m)
+    #     # _tvpt['_tvp','x_ref'][:] = np.array([0.0,0.0,50.0,0.0,0.0,0.0,0.0,0.0,0.0])   # desired state at all times
 
-    mpc.set_tvp_fun(tvp_fun)
+    #     return _tvpt
+
+    # mpc.set_tvp_fun(tvp_fun)
 
     mpc.setup()
 

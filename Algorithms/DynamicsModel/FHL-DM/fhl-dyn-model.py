@@ -72,8 +72,8 @@ class RocketParams:
     I_gimbal_bottom: np.ndarray = field(default_factory=lambda: np.diag([0.0001, 0.0001, 0.0001]))
 
     # Geometry offsets (set to zero by default)
-    COM_offset: np.ndarray = field(default_factory=lambda: np.zeros(3))
-    COP_offset: np.ndarray = field(default_factory=lambda: np.array([0.0, 0.0, 0.01]))
+    thrust_offset: np.ndarray = field(default_factory=lambda: np.array([0.0, 0.0, -0.1]))
+    COP_offset: np.ndarray = field(default_factory=lambda: np.array([0.0, 0.0, 0.1]))
     gimbal_offset: np.ndarray = field(default_factory=lambda: np.zeros(3))
 
     # Aero coefficients (will be updated each step via AoA curve fit)
@@ -84,12 +84,14 @@ class RocketParams:
     A_y: float = 0.7
     A_z: float = 0.3
 
+    rcs_offset: float = 0.1  # m
+
     air_density: float = 1.225  # kg / m³
 
     # Thrust envelope (N) and timestep (s)
     T_max: float = 100.0
     T_min: float = 0.0
-    dt: float = 1e-3
+    dt: float = 0.01
 
     @property
     def m(self) -> float:
@@ -135,7 +137,7 @@ def state_to_vec(s: State, *, to_dm: bool = False):
 # Force / torque models
 # -----------------------------------------------------------------------------
 
-def thrust_body(params: RocketParams, F_mag: float, thrust_gimbal_xyz: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def thrust_body(params: RocketParams, F_mag: float, thrust_gimbal_xyz: np.ndarray, R1: float, R2: float) -> Tuple[np.ndarray, np.ndarray]:
     """Return thrust force/torque in the **body** frame.
 
     * ``thrust_gimbal_xyz`` – extrinsic‑XYZ angles (rad) describing how the
@@ -146,8 +148,9 @@ def thrust_body(params: RocketParams, F_mag: float, thrust_gimbal_xyz: np.ndarra
     F_b = F_mag * (R_gimbal @ ez)  # N
 
     # Assume torque about COM arises from gimbal and structural offset
-    r_b = params.COM_offset + params.gimbal_offset
+    r_b = params.thrust_offset + params.gimbal_offset
     T_b = np.cross(r_b, F_b)
+    T_rcs = params.rcs_offset * R1 - params.rcs_offset * R2
     return F_b, T_b
 
 
@@ -215,7 +218,7 @@ def integrate_step(params: RocketParams,
 # -----------------------------------------------------------------------------
 
 def simulate(params: RocketParams, controller,
-             t_end: float = 40.0,
+             t_end: float = 5.0,
              out_csv: str | Path = "simulation_results.csv") -> None:
     """Run an open‑loop ascent/hover/descent profile and dump CSV."""
     n = int(np.round(t_end / params.dt)) + 1
@@ -232,6 +235,7 @@ def simulate(params: RocketParams, controller,
 
     for i in range(n):
         t = i * params.dt
+        print(t)
 
         # -----------------------------------
         # Basic thrust schedule (open loop):
@@ -250,12 +254,15 @@ def simulate(params: RocketParams, controller,
         #     F_mag = 5.0
 
         # thrust_gimbal = np.zeros(3)  # keep nozzle aligned with body Z
-
         x_meas = state_to_vec(state, to_dm=False)
-
-        u_cmd = float(controller.make_step(x_meas))
-        F_mag = u_cmd[0]
-        thrust_gimbal = np.ndarray([u_cmd[1], u_cmd[2]])  # gimbal angles
+        u_cmd = controller.make_step(x_meas).flatten()
+        F_mag = float(u_cmd[0])
+        # thrust_gimbal = np.ndarray([float(u_cmd[1]), float(u_cmd[2])])  # gimbal angles
+        thrust_gimbal = np.zeros(3)  # keep nozzle aligned with body Z
+        thrust_gimbal[0] = float(u_cmd[1])  # gimbal angle A
+        thrust_gimbal[1] = float(u_cmd[2])  # gimbal angle B
+        R1 = float(u_cmd[3])  # RCS1
+        R2 = float(u_cmd[4])
 
         # Update aero coefficients based on AoA 
         # TODO: currently uses monoprop data, update to FHL data when possible.
@@ -263,12 +270,13 @@ def simulate(params: RocketParams, controller,
         if velocity_mag > 0.0:
             cos_alpha = np.clip(np.dot(state.vel / velocity_mag, np.array([0.0, 0.0, np.sign(state.vel[2])])), -1.0, 1.0)
             AoA = np.arccos(cos_alpha)
-            params.Cd_x = -0.449 * np.cos(3.028 * np.degrees(AoA)) + 0.463
-            params.Cd_y = params.Cd_x
-            params.Cd_z = -0.376 * np.cos(5.675 * np.degrees(AoA)) + 1.854
+            # params.Cd_x = -0.449 * np.cos(3.028 * np.degrees(AoA)) + 0.463
+            # params.Cd_y = params.Cd_x
+            # params.Cd_z = -0.376 * np.cos(5.675 * np.degrees(AoA)) + 1.854
+            # ignoring these curve fits for now because MPC model is not updated to this standard.
 
         # Body‑frame forces
-        F_thrust_b, T_thrust_b = thrust_body(params, F_mag, thrust_gimbal)
+        F_thrust_b, T_thrust_b = thrust_body(params, F_mag, thrust_gimbal, R1, R2)
         F_drag_b, T_drag_b = drag_body(params, state.att, state.vel, v_wind)
 
         F_total_b = F_thrust_b + F_drag_b
@@ -310,4 +318,5 @@ if __name__ == "__main__":
     x = np.zeros(12)
     mpc.x0 = x
     mpc.set_initial_guess()
+    u = np.zeros(9)
     simulate(params, mpc)
