@@ -9,6 +9,9 @@ Sensing&Controls/AttitudeEstimation/Fouratis.pdb
 Sensing&Controls/AttitudeEstimation/vc140.pdb
 Sensing&Controls/AttitudeEstimation/__pycache__/ExtendedKalmanFilter.cpython-312.pyc
 Algorithms/DynamicsModel/monocopter_dynamics_model.asv
+Algorithms/DynamicsModel/FHL-DM/position_plot.html
+Algorithms/DynamicsModel/FHL-DM/velocity_plot.html
+Algorithms/DynamicsModel/FHL-DM/simulation_results.csv
 Sensing&Controls/AttitudeEstimation/__pycache__/ExtendedKalmanFilterAltitude.cpython-312.pyc
 ControlLoop/data_creators/dataEnv/
 ControlLoop/state_lookup.csv
