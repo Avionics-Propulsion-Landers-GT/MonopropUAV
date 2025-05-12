@@ -6,7 +6,7 @@
 import sympy as sp
 
 def calculate_state_matrices_sym():
-    """Return symbolic LQR A, B matrices (12 × 12 and 12 × 7)."""
+    """Return symbolic A, B matrices (12 × 12 and 12 × 7)."""
     # ------------------------------------------------------------------
     # 1. State symbols (angular + translational)
     # ------------------------------------------------------------------
@@ -16,9 +16,10 @@ def calculate_state_matrices_sym():
 
     r_x, r_y, r_z = sp.symbols('r_x r_y r_z', real=True)
     v_x, v_y, v_z = sp.symbols('v_x v_y v_z', real=True)
+    r_rcs = sp.symbols('r_rcs', real=True)  # RCS offset
 
-    # Inputs: thrust magnitude + gimbal (a, b) & derivatives
-    T, a, b, a_d, b_d, a_dd, b_dd = sp.symbols('T a b a_dot b_dot a_ddot b_ddot', real=True)
+    # Inputs: thrust magnitude + two RCS thrusters + gimbal (a, b) & derivatives
+    T, R1, R2, a, b, a_d, b_d, a_dd, b_dd = sp.symbols('T R1 R2 a b a_dot b_dot a_ddot b_ddot', real=True)
 
     # Aerodynamic / physical constants
     rho, C_d, A_ref = sp.symbols('rho cDrag areaVar', real=True)
@@ -47,7 +48,7 @@ def calculate_state_matrices_sym():
     velocity_wf  = sp.Matrix([v_x, v_y, v_z])
     ang_vel_wf   = sp.Matrix([psi_d, theta_d, phi_d])
 
-    full_input = sp.Matrix([T, a, b, a_d, b_d, a_dd, b_dd])
+    full_input = sp.Matrix([T, R1, R2, a, b])
 
     # Offsets & inertia matrices
     r_c = sp.Matrix([r_cx, r_cy, r_cz])
@@ -103,7 +104,13 @@ def calculate_state_matrices_sym():
     # ------------------------------------------------------------------
     aero_tau_b   = r_c.cross(Fd_b)
     thrust_tau_b = r_t.cross(thrust_b)
-    tau_net_b    = aero_tau_b + thrust_tau_b
+    # R1 is clockwise, R2 is counterclockwise. Only points one way.
+    rcs_tau_b = sp.Matrix([
+        0,
+        0,
+        r_rcs*R1 - r_rcs*R2,
+    ])
+    tau_net_b    = aero_tau_b + thrust_tau_b + rcs_tau_b
 
     tau_net_w = R_wf * tau_net_b
 
@@ -153,8 +160,8 @@ def calculate_state_matrices_sym():
     A1 = sp.Matrix.hstack(sp.zeros(3), sp.eye(3), sp.zeros(3,6))
     A3 = sp.Matrix.hstack(sp.zeros(3,9), sp.eye(3))
 
-    B1 = sp.zeros(3,7)
-    B3 = sp.zeros(3,7)
+    B1 = sp.zeros(3,5)
+    B3 = sp.zeros(3,5)
 
     A = sp.Matrix.vstack(A1, A2, A3, A4)
     B = sp.Matrix.vstack(B1, B2, B3, B4)
