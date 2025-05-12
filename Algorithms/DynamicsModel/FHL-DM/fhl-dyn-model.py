@@ -61,7 +61,7 @@ class RocketParams:
 
     # Geometry offsets (set to zero by default)
     COM_offset: np.ndarray = field(default_factory=lambda: np.zeros(3))
-    COP_offset: np.ndarray = field(default_factory=lambda: np.zeros(3))
+    COP_offset: np.ndarray = field(default_factory=lambda: np.array([0.0, 0.0, 0.01]))
     gimbal_offset: np.ndarray = field(default_factory=lambda: np.zeros(3))
 
     # Aero coefficients (will be updated each step via AoA curve fit)
@@ -192,9 +192,11 @@ def simulate(params: RocketParams,
     times: List[float] = []
     poses: List[np.ndarray] = []
     vels: List[np.ndarray] = []
+    attitude: List[np.ndarray] = []
+    command: List[np.ndarray] = []
 
-    # Initial state: slight attitude offset to show quaternion math works
-    state = State(att=R.from_euler("xyz", [0.1, -0.1, 0.0]))
+    # Initial state: add slight attitude offset to see if quaternion math works
+    state = State(att=R.from_euler("xyz", [0, 0, 0.0]))
 
     v_wind = np.zeros(3)  # no wind
 
@@ -203,19 +205,19 @@ def simulate(params: RocketParams,
 
         # -----------------------------------
         # Basic thrust schedule (open loop):
-        #   0–10 s  : full thrust up (70 N)
+        #   0–10 s  : full thrust up (15 N)
         #   10–20 s : hover (~mg)
         #   20–30 s : engine off, free fall
         #   30–40 s : retro‑thrust to slow
         # -----------------------------------
         if t < 10.0:
-            F_mag = 70.0
+            F_mag = 15.0
         elif t < 20.0:
             F_mag = params.m * 9.80665
         elif t < 30.0:
             F_mag = 0.0
         else:
-            F_mag = 40.0
+            F_mag = 5.0
 
         thrust_gimbal = np.zeros(3)  # keep nozzle aligned with body Z
 
@@ -243,6 +245,8 @@ def simulate(params: RocketParams,
         times.append(t)
         poses.append(state.pos.copy())
         vels.append(state.vel.copy())
+        attitude.append(state.att.as_euler("xyz"))
+        command.append(np.array([F_mag, thrust_gimbal[0], thrust_gimbal[1]]))
 
     # -------------------------------------------------------------------------
     # Dump CSV
@@ -251,8 +255,10 @@ def simulate(params: RocketParams,
         np.array(times),
         np.array(poses),
         np.array(vels),
+        np.array(attitude),
+        np.array(command),
     ])
-    header = "time,x,y,z,vx,vy,vz"
+    header = "time,x,y,z,vx,vy,vz,att_x,att_y,att_z,thrust,gimbal_a,gimbal_b"
     np.savetxt(out_csv, data, delimiter=",", header=header, comments="")
     print(f"Simulation complete → {out_csv} ({len(times)} samples).")
 

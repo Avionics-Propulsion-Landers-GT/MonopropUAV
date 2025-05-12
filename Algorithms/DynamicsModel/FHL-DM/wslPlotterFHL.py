@@ -40,19 +40,30 @@ layout_vel = go.Layout(
 
 fig_vel = go.Figure(data=[trace_vx, trace_vy, trace_vz], layout=layout_vel)
 
-# # --- Thrust & Gimbal Plot ---
-# trace_thrust = go.Scatter(x=data['time'], y=data['thrust'], mode='lines', name='Thrust [N]')
-# trace_a = go.Scatter(x=data['time'], y=data['a'], mode='lines', name='Gimbal A [rad]')
-# trace_b = go.Scatter(x=data['time'], y=data['b'], mode='lines', name='Gimbal B [rad]')
+# --- Attitude Plot ---
+trace_att_x = go.Scatter(x=data['time'], y=data['att_x'], mode='lines', name='Attitude X')
+trace_att_y = go.Scatter(x=data['time'], y=data['att_y'], mode='lines', name='Attitude Y')
+trace_att_z = go.Scatter(x=data['time'], y=data['att_z'], mode='lines', name='Attitude Z')
+layout_att = go.Layout(
+    title='Attitude vs. Time',
+    xaxis=dict(title='Time'),
+    yaxis=dict(title='Attitude [rad]')
+)
+fig_att = go.Figure(data=[trace_att_x, trace_att_y, trace_att_z], layout=layout_att)
 
-# layout_cmd = go.Layout(
-#     title='Thrust and Gimbal Angles vs. Time',
-#     xaxis=dict(title='Time'),
-#     yaxis=dict(title='Commanded Values'),
-#     legend_title='Command Inputs'
-# )
+# --- Thrust & Gimbal Plot ---
+trace_thrust = go.Scatter(x=data['time'], y=data['thrust'], mode='lines', name='Thrust [N]')
+trace_a = go.Scatter(x=data['time'], y=data['gimbal_a'], mode='lines', name='Gimbal A [rad]')
+trace_b = go.Scatter(x=data['time'], y=data['gimbal_b'], mode='lines', name='Gimbal B [rad]')
 
-# fig_cmd = go.Figure(data=[trace_thrust, trace_a, trace_b], layout=layout_cmd)
+layout_cmd = go.Layout(
+    title='Thrust and Gimbal Angles vs. Time',
+    xaxis=dict(title='Time'),
+    yaxis=dict(title='Commanded Values'),
+    legend_title='Command Inputs'
+)
+
+fig_cmd = go.Figure(data=[trace_thrust, trace_a, trace_b], layout=layout_cmd)
 
 # # --- Desired Position Plot ---
 # trace_xac = go.Scatter(x=data['time'], y=data['xac'], mode='lines', name='x_desired')
@@ -83,19 +94,21 @@ fig_vel = go.Figure(data=[trace_vx, trace_vy, trace_vz], layout=layout_vel)
 # --- Save HTML files (double write with abspath) ---
 position_path = os.path.join(BASE_DIR, "position_plot.html")
 velocity_path = os.path.join(BASE_DIR, "velocity_plot.html")
-# command_path  = os.path.join(BASE_DIR, "command_plot.html")
+attitude_path = os.path.join(BASE_DIR, "attitude_plot.html")
+command_path  = os.path.join(BASE_DIR, "command_plot.html")
 # pos_des_path  = os.path.join(BASE_DIR, "desired_position_plot.html")
 # vel_des_path  = os.path.join(BASE_DIR, "desired_velocity_plot.html")
 
 fig_pos.write_html(position_path)
 fig_vel.write_html(velocity_path)
-# fig_cmd.write_html(command_path)
+fig_att.write_html(attitude_path)
+fig_cmd.write_html(command_path)
 # fig_pos_des.write_html(pos_des_path)
 # fig_vel_des.write_html(vel_des_path)
 
 # Absolute paths
 abs_paths = [os.path.abspath(p) for p in [
-    position_path, velocity_path
+    position_path, velocity_path, attitude_path, command_path
 ]]
 win_paths = [to_windows_path(p) for p in abs_paths]
 
