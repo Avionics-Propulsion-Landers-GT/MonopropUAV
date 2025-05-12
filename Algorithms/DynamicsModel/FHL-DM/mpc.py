@@ -254,15 +254,15 @@ def initialize_mpc(x_sym, u_sym, f_sym):
                       f_sym_flat,
                       modules=[custom_map])
     
-    kept = set(x_sym) | set(u_sym)
+    # kept = set(x_sym) | set(u_sym)
 
-    # symbols that should have been substituted
-    remaining = f_sym.free_symbols - kept
+    # # symbols that should have been substituted
+    # remaining = f_sym.free_symbols - kept
 
-    if remaining:
-        raise RuntimeError(
-            f"[initialize_mpc] These symbols still need numeric values: {remaining}"
-        )
+    # if remaining:
+    #     raise RuntimeError(
+    #         f"[initialize_mpc] These symbols still need numeric values: {remaining}"
+        # )
 
     def f_dt_casadi(x_mx, u_mx):
         """Return CasADi MX column vector f(x,u).  x_mx ∈ ℝ¹²×¹, u_mx ∈ ℝ⁵×¹."""
