@@ -53,6 +53,7 @@ def calculate_f_nonlinear_sym():
     ang_vel_wf   = sp.Matrix([psi_d, theta_d, phi_d])
 
     full_input = sp.Matrix([T, R1, R2, a, b])
+    # full_input = sp.Matrix([T, R1, R2, a, b])
 
     # Offsets & inertia matrices
     r_c = sp.Matrix([r_cx, r_cy, r_cz])
@@ -144,19 +145,20 @@ def calculate_f_nonlinear_sym():
 
     ang_vel_a_b = sp.Matrix([a_d, 0, 0])
     ang_vel_b_b = sp.Matrix([0, b_d, 0])
-    ang_vel_a_w = R_wf*ang_vel_a_b + ang_vel_wf
-    ang_vel_b_w = R_wf*ang_vel_b_b + ang_vel_wf
-    gyro_tau_a  = ang_vel_a_w.cross(I_a_w*ang_vel_a_w)
-    gyro_tau_b  = ang_vel_b_w.cross(I_b_w*ang_vel_b_w)
+    # ang_vel_a_w = R_wf*ang_vel_a_b + ang_vel_wf
+    # ang_vel_b_w = R_wf*ang_vel_b_b + ang_vel_wf
+    # gyro_tau_a  = ang_vel_a_w.cross(I_a_w*ang_vel_a_w)
+    # gyro_tau_b  = ang_vel_b_w.cross(I_b_w*ang_vel_b_w)
 
     ang_acc_a_b = sp.Matrix([a_dd, 0, 0])
     ang_acc_b_b = sp.Matrix([0, b_dd, 0])
-    m_tau_a_w   = R_wf * (I_a*ang_acc_a_b)
-    m_tau_b_w   = R_wf * (I_b*ang_acc_b_b)
+    # m_tau_a_w   = R_wf * (I_a*ang_acc_a_b)
+    # m_tau_b_w   = R_wf * (I_b*ang_acc_b_b)
 
-    tau_net_w = (tau_net_w
-                    - (gyro_tau_s + gyro_tau_a + gyro_tau_b)
-                    + m_tau_a_w + m_tau_b_w)
+    # tau_net_w = (tau_net_w
+    #                 - (gyro_tau_s + gyro_tau_a + gyro_tau_b)
+    #                 + m_tau_a_w + m_tau_b_w)
+    tau_net_w = (tau_net_w - gyro_tau_s)
 
     ang_accel_w = I.inv() * tau_net_w
 
@@ -193,10 +195,8 @@ def calculate_f_nonlinear_sym():
         psi, theta, phi,
         psi_d, theta_d, phi_d
     ])
-    u_sym = sp.Matrix([T, R1, R2, a, b, a_d, b_d, a_dd, b_dd])
+    u_sym = sp.Matrix([T, R1, R2, a, b])
     print("State space model initialized.")
-
-    
 
     return f_sym, x_sym, u_sym
 
@@ -285,7 +285,7 @@ def initialize_mpc(x_sym, u_sym, f_sym):
         """Return CasADi MX column vector f(x,u).  x_mx ∈ ℝ¹²×¹, u_mx ∈ ℝ⁵×¹."""
         # Extract scalar MX components (safe – we iterate over Python ints)
         x_list = [x_mx[i] for i in range(12)]
-        u_list = [u_mx[i] for i in range(9)]
+        u_list = [u_mx[i] for i in range(5)]
         f_list = f_lamb(*x_list, *u_list)  # <- list of 12 MX scalars
         return ca.vertcat(*f_list)          # column vector (12×1 MX)
     
@@ -297,7 +297,7 @@ def initialize_mpc(x_sym, u_sym, f_sym):
     model = do_mpc.model.Model('continuous')
 
     x_mx = model.set_variable('_x', 'x', shape=(12,1))   # state at k
-    u_mx = model.set_variable('_u', 'u', shape=(9,1))                # control at k
+    u_mx = model.set_variable('_u', 'u', shape=(5,1))                # control at k
 
     # RHS now represents x_{k+1}
     model.set_rhs('x', f_dt_casadi(x_mx, u_mx))
@@ -311,7 +311,7 @@ def initialize_mpc(x_sym, u_sym, f_sym):
     print("Creating do-mpc controller...")
     mpc = do_mpc.controller.MPC(model)
     mpc.set_param(
-        n_horizon = 20,   # 20 steps ahead, adjust if needed. Higher -
+        n_horizon = 10,   # 20 steps ahead, adjust if needed. Higher -
         t_step    = dt_disc,   # just for time axis scaling in logs/plotting
         state_discretization = 'collocation',   # Radau collocation (default)
         collocation_type = 'radau',
@@ -337,7 +337,7 @@ def initialize_mpc(x_sym, u_sym, f_sym):
     print("Setting up cost function...")
     # Q_vel, R_u = 10.0, 1.0
     Q = np.diag([0.5, 0.5, 1.0, 0.5, 0.5, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
-    R_u = np.diag([0.1, 0.1, 0.1, 0.5, 0.5,1,1,1,1])
+    R_u = np.diag([0.1, 0.1, 0.1, 0.5, 0.5])
     # mpc.set_objective(mterm = Q_vel*(x_mx-x_ref)**2,
     #                 lterm = Q_vel*(x_mx-x_ref)**2 + R_u*u_mx**2)
     # quadratic cost function with vectors
@@ -346,9 +346,9 @@ def initialize_mpc(x_sym, u_sym, f_sym):
     mpc.set_objective(lterm=ca.mtimes([err.T, Q, err]) + (ca.mtimes([u_mx.T, R_u, u_mx])),
                   mterm=ca.mtimes([err.T, Q, err]))
 
-    mpc.bounds['lower','_u','u'] = np.array([0.0, 0.0, 0.0, -np.pi/12, -np.pi/12, -5, -5, -10, -10])
-    mpc.bounds['upper','_u','u'] =  np.array([15.0, 1.0, 1.0, np.pi/12, np.pi/12, 5, 5, 10, 10])
-    mpc.set_rterm(u = np.array([0.1, 0.1, 0.1, 0.5, 0.5, 1, 1, 1, 1])) # input penalty
+    mpc.bounds['lower','_u','u'] = np.array([0.0, 0.0, 0.0, -np.pi/12, -np.pi/12])
+    mpc.bounds['upper','_u','u'] =  np.array([15.0, 1.0, 1.0, np.pi/12, np.pi/12])
+    mpc.set_rterm(u = np.array([0.1, 0.1, 0.1, 0.5, 0.5])) # input penalty
 
 
     # print("Time varying parameters...")
