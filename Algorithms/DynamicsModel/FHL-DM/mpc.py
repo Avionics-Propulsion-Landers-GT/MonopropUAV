@@ -78,7 +78,7 @@ def calculate_f_nonlinear_sym():
     rho = rho.subs({rho: 1.225})
     # TODO: implement 3-axis cD instead of 1D
     C_d = C_d.subs({C_d: 0.5})
-    A_ref = A_ref.subs({A_ref: 0.1})
+    A_ref = A_ref.subs({A_ref: 0.7})
     m = m.subs({m: 0.7})
     r_rcs = r_rcs.subs({r_rcs: 0.1})
     I = I.subs({Ixx: 1, Ixy: 0, Ixz: 0, Iyy:1, Iyz: 0, Izz:1})
@@ -240,7 +240,7 @@ def initialize_mpc(x_sym, u_sym, f_sym):
     # psi, theta, phi,
     # psi_d, theta_d, phi_d) = x_sym
 
-    print("Discretizing f_sym...")
+    # print("Discretizing f_sym...")
 
     # k1 = f_sym
     # # print("k1 done.")
@@ -299,7 +299,6 @@ def initialize_mpc(x_sym, u_sym, f_sym):
     x_mx = model.set_variable('_x', 'x', shape=(12,1))   # state at k
     u_mx = model.set_variable('_u', 'u', shape=(5,1))                # control at k
 
-    # RHS now represents x_{k+1}
     model.set_rhs('x', f_dt_casadi(x_mx, u_mx))
     model.set_expression('y', x_mx)                     # full‑state output
     model.setup()
@@ -333,11 +332,12 @@ def initialize_mpc(x_sym, u_sym, f_sym):
     # Reference variable
     # x_ref = model.set_variable('_tvp','x_ref',shape=(12,1))
 
-    x_ref = np.array([0,0,50,0,0,0,0,0,0,0,0,0])  # desired state at all times
+    x_ref = np.array([0,0,0.5,0,0,0,0,0,0,0,0,0])  # desired state at all times
     print("Setting up cost function...")
     # Q_vel, R_u = 10.0, 1.0
     Q = np.diag([0.5, 0.5, 1.0, 0.5, 0.5, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
-    R_u = np.diag([0.1, 0.1, 0.1, 0.5, 0.5])
+    R_vec = [0.2, 0.1, 0.1, 0.5, 0.5]
+    R_u = np.diag(R_vec)
     # mpc.set_objective(mterm = Q_vel*(x_mx-x_ref)**2,
     #                 lterm = Q_vel*(x_mx-x_ref)**2 + R_u*u_mx**2)
     # quadratic cost function with vectors
@@ -348,7 +348,17 @@ def initialize_mpc(x_sym, u_sym, f_sym):
 
     mpc.bounds['lower','_u','u'] = np.array([0.0, 0.0, 0.0, -np.pi/12, -np.pi/12])
     mpc.bounds['upper','_u','u'] =  np.array([15.0, 1.0, 1.0, np.pi/12, np.pi/12])
-    mpc.set_rterm(u = np.array([0.1, 0.1, 0.1, 0.5, 0.5])) # input penalty
+    # mpc.bounds['lower', '_u', 'T'] = 0.0
+    # mpc.bounds['lower', '_u', 'RCS1'] = 0.0
+    # mpc.bounds['lower', '_u', 'RCS2'] = 0.0
+    # mpc.bounds['lower', '_u', 'gimbal_a'] = -np.pi/12
+    # mpc.bounds['lower', '_u', 'gimbal_b'] = -np.pi/12
+    # mpc.bounds['upper', '_u', 'thrust'] = 15.0
+    # mpc.bounds['upper', '_u', 'RCS1'] = 1.0
+    # mpc.bounds['upper', '_u', 'RCS2'] = 1.0
+    # mpc.bounds['upper', '_u', 'gimbal_a'] = np.pi/12
+    # mpc.bounds['upper', '_u', 'gimbal_b'] = np.pi/12
+    mpc.set_rterm(u = np.array(R_vec)) # input penalty
 
 
     # print("Time varying parameters...")
