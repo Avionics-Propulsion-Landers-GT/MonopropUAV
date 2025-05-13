@@ -259,14 +259,14 @@ def simulate(params: RocketParams, controller,
         x_meas = np.array([state.pos[0], state.pos[1], state.pos[2], state.vel[0], state.vel[1], state.vel[2], state.att.as_euler("xyz")[0], state.att.as_euler("xyz")[1], state.att.as_euler("xyz")[2], state.ang_vel[0], state.ang_vel[1], state.ang_vel[2]])
         # print(x_meas)
         u_cmd = controller.make_step(x_meas).flatten()
-        print(u_cmd)
+        # print(u_cmd)
         F_mag = u_cmd[0]
         # thrust_gimbal = np.ndarray([float(u_cmd[1]), float(u_cmd[2])])  # gimbal angles
-        thrust_gimbal = np.zeros(3)  # keep nozzle aligned with body Z
+        thrust_gimbal = np.zeros(3)
         thrust_gimbal[0] = u_cmd[3]  # gimbal angle A
         thrust_gimbal[1] = u_cmd[4]  # gimbal angle B
-        R1 = float(u_cmd[1])  # RCS1
-        R2 = float(u_cmd[2])
+        R1 = u_cmd[1]  # RCS1
+        R2 = u_cmd[2]
 
         # Update aero coefficients based on AoA 
         # TODO: currently uses monoprop data, update to FHL data when possible.

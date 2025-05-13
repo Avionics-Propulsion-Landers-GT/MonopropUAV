@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sympy as sp
 from sympy.utilities.lambdify import lambdify
+from matplotlib import rcParams
 import casadi as ca
 import do_mpc
 
@@ -297,10 +298,14 @@ def initialize_mpc(x_sym, u_sym, f_sym):
     model = do_mpc.model.Model('continuous')
 
     x_mx = model.set_variable('_x', 'x', shape=(12,1))   # state at k
-    u_mx = model.set_variable('_u', 'u', shape=(5,1))                # control at k
+    u_mx = model.set_variable('_u', 'u', shape=(5,1))    # control at k
+
+    # print(x_mx)
+    # print(u_mx)
 
     model.set_rhs('x', f_dt_casadi(x_mx, u_mx))
-    model.set_expression('y', x_mx)                     # full‑state output
+    model.set_expression('y', x_mx)      
+    print(ca.Function('test', [x_mx, u_mx], [f_dt_casadi(x_mx, u_mx)])())               # full‑state output
     model.setup()
 
     # ------------------------------------------------------------------
@@ -332,11 +337,11 @@ def initialize_mpc(x_sym, u_sym, f_sym):
     # Reference variable
     # x_ref = model.set_variable('_tvp','x_ref',shape=(12,1))
 
-    x_ref = np.array([0,0,0.5,0,0,0,0,0,0,0,0,0])  # desired state at all times
+    x_ref = np.array([0,0,1,0,0,0,0,0,0,0,0,0])  # desired state at all times
     print("Setting up cost function...")
     # Q_vel, R_u = 10.0, 1.0
     Q = np.diag([0.5, 0.5, 1.0, 0.5, 0.5, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
-    R_vec = [0.2, 0.1, 0.1, 0.5, 0.5]
+    R_vec = [0, 1, 1, 5, 5]
     R_u = np.diag(R_vec)
     # mpc.set_objective(mterm = Q_vel*(x_mx-x_ref)**2,
     #                 lterm = Q_vel*(x_mx-x_ref)**2 + R_u*u_mx**2)
@@ -377,9 +382,45 @@ def initialize_mpc(x_sym, u_sym, f_sym):
 
     print("MPC initialized.")
 
-    return mpc
+    # return mpc
+
+    # DEBUGGING. REMOVE LATER (MAYBE)
+
+    # estimator - for debugging state space model
+    estimator = do_mpc.estimator.StateFeedback(model)
+
+    # integrated simulator - for debugging state space model 
+    simulator = do_mpc.simulator.Simulator(model)
+    simulator.set_param(t_step=dt_disc)
+    simulator.setup()
+
+    x0 = np.zeros((12,1))
+    simulator.x0 = x0
+    estimator.x0 = x0
+
+    mpc.set_initial_guess()
+
+    # %%capture - use only on jupyter notebook
+    for k in range(50):
+        u0 = mpc.make_step(x0)
+        y_next = simulator.make_step(u0)
+        x0 = estimator.make_step(y_next)
+
+    rcParams['axes.grid'] = True
+    rcParams['font.size'] = 18
+
+    import matplotlib.pyplot as plt
+    fig, ax, graphics = do_mpc.graphics.default_plot(mpc.data, figsize=(16,9))
+    graphics.plot_results()
+    graphics.reset_axes()
+    plt.show()
 
 def run_mpc(f_sym_dt, x, u):
     print("Running MPC with f_sym_dt, debug")
     return np.array(f_sym_dt(x.reshape(12,1), u)).flatten()
     
+if __name__ == "__main__":
+    # Example usage
+    f_sym, x_sym, u_sym = calculate_f_nonlinear_sym()
+    mpc = initialize_mpc(x_sym, u_sym, f_sym)
+    print("Integrated testing completed.")
