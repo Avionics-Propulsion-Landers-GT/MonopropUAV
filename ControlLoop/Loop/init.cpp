@@ -75,34 +75,7 @@ SystemComponents init(std::vector<double> gpsInit, std::vector<std::vector<doubl
     EKF_Altitude ekf_x(initial_z_state, dt, q_scalar_pos, r_scalar_pos, initial_p_pos);
     EKF_Altitude ekf_y(initial_z_state, dt, q_scalar_pos, r_scalar_pos, initial_p_pos);
     EKF_Altitude ekf_z2(initial_z_state, dt, q_scalar_Z, r_scalar_Z, initial_p_Z);
-<<<<<<< HEAD
     EKF_Altitude ekf_thrust(initial_z_state, dt, q_scalar_Z, r_scalar_Z, initial_p_Z);
-=======
-
-    EKF_Altitude ekf_ax(initial_z_state, dt, q_scalar_pos, r_scalar_pos, 0);
-
-    EKF_Altitude ekf_ay(initial_z_state, dt, q_scalar_pos, r_scalar_pos, 0);
-
-    EKF_Altitude ekf_az(initial_z_state, dt, q_scalar_pos, r_scalar_pos, 0);
-
-    q_scalar_pos = 0.00001;
-    r_scalar_pos = 100000;
-    initial_p_pos = 10;
-
-    EKF_Altitude ekf_a(initial_z_state, dt, q_scalar_Z, r_scalar_Z, initial_p_Z);
-    EKF_Altitude ekf_b(initial_z_state, dt, q_scalar_Z, r_scalar_Z, initial_p_Z);
-    EKF_Altitude ekf_t(initial_z_state, dt, q_scalar_Z, r_scalar_Z, initial_p_Z);
-
-   
-
-    EKF_Altitude ekf_ox(initial_z_state, dt, q_scalar_pos, r_scalar_pos, initial_p_pos);
-
-    EKF_Altitude ekf_oy(initial_z_state, dt, q_scalar_pos, r_scalar_pos, initial_p_pos);
-
-    EKF_Altitude ekf_oz(initial_z_state, dt, q_scalar_pos, r_scalar_pos, initial_p_pos);
-
-
->>>>>>> d3cceadcdc561096740877513fd6a87c63f8ec22
 
     EKF_Altitude ekf_ax(initial_z_state, dt, q_scalar_pos, r_scalar_pos, 0);
     EKF_Altitude ekf_ay(initial_z_state, dt, q_scalar_pos, r_scalar_pos, 0);
@@ -115,9 +88,5 @@ SystemComponents init(std::vector<double> gpsInit, std::vector<std::vector<doubl
     LQR lqrController;
 
     // Return struct of filters
-<<<<<<< HEAD
     return {madgwickFilter, ekf_xy, ekf_z, ekf_x, ekf_y, ekf_z2, ekf_vx, ekf_vy, ekf_vz, ekf_ox, ekf_oy, ekf_oz, ekf_ax, ekf_ay, ekf_az, lqrController};
-=======
-    return {madgwickFilter, ekf_xy, ekf_z, ekf_x, ekf_y, ekf_z2, ekf_vx, ekf_vy, ekf_vz, ekf_ox, ekf_oy, ekf_oz, ekf_a, ekf_b, ekf_t, ekf_ax, ekf_ay, ekf_az, lqrController};
->>>>>>> d3cceadcdc561096740877513fd6a87c63f8ec22
 }

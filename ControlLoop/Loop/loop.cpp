@@ -297,11 +297,7 @@ LoopOutput loop(LoopInput in) {
     const std::vector<double>& command = in.command; 
     const std::vector<double>& prevCommand = in.prevCommand; 
     const std::vector<double>& prevPrevCommand = in.prevPrevCommand; 
-<<<<<<< HEAD
    
-=======
-
->>>>>>> d3cceadcdc561096740877513fd6a87c63f8ec22
     // Read in values
     std::vector<double> nineAxisIMU = values[0]; // Time, Gyro<[rad/s]>, Accel<[m/s2]>, Mag<[]>
     std::vector<double> sixAxisIMU = values[1]; // Time, Gyro<[rad/s]>, Accel<[m/s2]>
@@ -322,19 +318,10 @@ LoopOutput loop(LoopInput in) {
     EKF_Altitude& ekf_ox = system.ekf_ox;
     EKF_Altitude& ekf_oy = system.ekf_oy;
     EKF_Altitude& ekf_oz = system.ekf_oz;
-<<<<<<< HEAD
     EKF_Altitude& ekf_ax = system.ekf_ax;
     EKF_Altitude& ekf_ay = system.ekf_ay;
     EKF_Altitude& ekf_az = system.ekf_az;
     // EKF_Altitude& ekf_thrust = system.ekf_thrust;
-=======
-    EKF_Altitude& ekf_a = system.ekf_a;
-    EKF_Altitude& ekf_b = system.ekf_b;
-    EKF_Altitude& ekf_t = system.ekf_t;
-    EKF_Altitude& ekf_ax = system.ekf_ax;
-    EKF_Altitude& ekf_ay = system.ekf_ay;
-    EKF_Altitude& ekf_az = system.ekf_az;
->>>>>>> d3cceadcdc561096740877513fd6a87c63f8ec22
     LQR& lqrController = system.lqrController;
 
     // -------------------- I. SENSOR FUSION ALGORITHM ------------------------
@@ -368,7 +355,6 @@ LoopOutput loop(LoopInput in) {
     gyro = {gyro[0] - gyro_bias[0], gyro[1] - gyro_bias[1], gyro[2] - gyro_bias[2]};
 
     // Set up and update Madgwick filter
-<<<<<<< HEAD
     // std::vector<double> euler_attitude = state[2];
     
     // std::vector<double> q = madgwickFilter.eulerToQuaternion(euler_attitude);
@@ -401,27 +387,6 @@ LoopOutput loop(LoopInput in) {
 
 
     
-=======
-    std::vector<double> euler_attitude = state[2];
-    std::vector<double> q = madgwickFilter.eulerToQuaternion(euler_attitude);
-    std::vector<double> qnew = madgwickFilter.madgwickUpdate(q, gyro, accel, mag, dt);
-    std::vector<double> new_attitude = madgwickFilter.quaternionToEuler(qnew);
-
-    // New LPF on direct attitude measurements
-    double ax = new_attitude[0];
-    double ay = new_attitude[1];
-    double az = new_attitude[2];
-    Vector measurement_ax(2, 0.0); Vector measurement_ay(2, 0.0); Vector measurement_az(2, 0.0);
-    measurement_ax(0, 0) = ax; measurement_ax(1, 0) = 0;
-    measurement_ay(0, 0) = ay; measurement_ay(1, 0) = 0; 
-    measurement_az(0, 0) = az; measurement_az(1, 0) = 0;  
-    ekf_ax.update(measurement_ax); ekf_ax.predict();
-    ekf_ay.update(measurement_ay); ekf_ay.predict();
-    ekf_az.update(measurement_az); ekf_az.predict();
-    Vector estimated_state_ax = ekf_ax.getState(); double ax_actual = estimated_state_ax(0, 0);
-    Vector estimated_state_ay = ekf_ay.getState(); double ay_actual = estimated_state_ay(0, 0);
-    Vector estimated_state_az = ekf_az.getState(); double az_actual = estimated_state_az(0, 0);
->>>>>>> d3cceadcdc561096740877513fd6a87c63f8ec22
 
     new_attitude = {ax_actual, ay_actual, az_actual};
   
@@ -592,13 +557,8 @@ LoopOutput loop(LoopInput in) {
     angular_states = {0,0,0,0};
     
     // 7. Calculate A and B Matrices << NOTE AERO HAS BEEN ZEROED
-<<<<<<< HEAD
     Matrix A = calculateA(m, f, area, Cd, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector({0,0,0,0}));
     Matrix B = calculateB(m, f, area, Cd, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector({0,0,0,0}));
-=======
-    Matrix A = calculateA(m, f, area, Cd, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector(angular_states));
-    Matrix B = calculateB(m, f, area, Cd, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector({angular_states}));
->>>>>>> d3cceadcdc561096740877513fd6a87c63f8ec22
 
 
     // // 8. Sanitize NaNs that pop up from numerical errors close to zero.

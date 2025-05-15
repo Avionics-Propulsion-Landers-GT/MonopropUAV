@@ -6,11 +6,7 @@
 #include <cmath>
 #include <limits>
 #include <cassert>
-<<<<<<< HEAD:firmware/src/CustomLinear/Matrix.cpp
 #include <cstring>
-=======
-#include <vector>
->>>>>>> d3cceadcdc561096740877513fd6a87c63f8ec22:ControlLoop/CustomLinear/Matrix.cpp
 
 
 //Initialize data pointer to a double which allows for efficient array creation etc. and rows and cols
