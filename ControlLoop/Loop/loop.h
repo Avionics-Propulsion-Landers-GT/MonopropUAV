@@ -33,7 +33,10 @@ struct LoopInput {
     const std::vector<double>& command;
     const std::vector<double>& prevCommand; 
     const std::vector<double>& prevPrevCommand; 
+<<<<<<< HEAD
     unsigned int iter;
+=======
+>>>>>>> d3cceadcdc561096740877513fd6a87c63f8ec22
 };
 
 void preciseLatLonToMeters(double lat, double deltaLat, double deltaLon, double &dY, double &dX);

@@ -90,5 +90,6 @@
         "cinttypes": "cpp",
         "typeindex": "cpp",
         "variant": "cpp"
-    }
+    },
+    "cmake.sourceDirectory": "/home/brotherhobo/MonopropUAV/ControlLoop/IntegratedDynModel"
 }

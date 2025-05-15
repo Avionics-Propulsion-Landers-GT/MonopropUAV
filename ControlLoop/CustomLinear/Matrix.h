@@ -3,6 +3,7 @@
 
 #include <stdexcept>
 #include <cmath>
+#include <vector>
 
 // Dummy struct to tell constructor it's reading from array
 struct FromArrayTag {};
@@ -44,8 +45,10 @@ class Matrix {
         double magnitude() const;
         double cofactor (unsigned int row, unsigned int col) const;
         void swapRows(unsigned int r1, unsigned int r2);
+        double frobeniusNorm(Matrix a);
         Matrix getSubMatrix(unsigned int row, unsigned int col) const;
         void print() const;
+        Matrix reorderColumns(const std::vector<int>& indices) const;
         Matrix pseudoInverseJacobi(double rankEps, int maxIter) const;
         void thinJacobiSVD(Matrix& U, Matrix& Sigma, Matrix& V, double rankEps, int maxIter) const;
         Matrix controllabilityMatrix(const Matrix& B) const;

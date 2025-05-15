@@ -6,6 +6,7 @@
 #include "../LQR/calculateABF.h"
 #include "../LQR/calculateBBF.h"
 #include <iostream>
+#include <cmath>
 
 
 /*
@@ -42,12 +43,11 @@ Matrix initAnchors() {
 const Matrix ANCHORS = initAnchors();
 
 // Structures numbers
-const double M = 0.7; // kg; mass of uav
-const double F = 1.225; // kg/m3; density of air
+const double m = 0.7; // kg; mass of uav
+const double f = 1.225; // kg/m3; density of air
 const std::vector<double> INERTIA = {0.00940, 0, 0, 0, 0.00940, 0, 0, 0, 0.00014}; // kgm2; static inertia tensor about cylidner CoM
 const double THRUST_OFFSET = 7*24*0.001; // thrust offset from CoM in meters
 std::vector<double> G_VECTOR = {0,0,0, 0,0,-9.80665, 0,0,0, 0,0,0};
-
 static Vector IE = Vector(12,0);
 static Vector static_input = Vector(3, 0.0);
 
@@ -56,27 +56,27 @@ static Vector static_input = Vector(3, 0.0);
 const std::vector<double> Q_MATRIX = { // 12 x 12
     /* Starting values based of Bryson's Rule */
     // Position (x, y, z)
-    0.0, 0.00, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    0.00, 0.0, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    0.00, 0.00, 400.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+    1.0, 0.00, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+    0.00, 1.0, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+    0.00, 0.00, 1.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
     // Linear velocity (vx, vy, vz)
-    0.0, 0.0, 0.0,  0.0, 0.00, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    0.0, 0.0, 0.0,  0.00, 0.0, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
-    0.0, 0.0, 0.0,  0.00, 0.00, 100.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0,  1.0, 0.00, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0,  0.00, 1.0, 0.00,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0,  0.00, 0.0, 1.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,
     // Angular position (roll, pitch, yaw)
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  100.0, 0.00, 0.00,  0.0, 0.0, 0.0,
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 100.0, 0.00,  0.0, 0.0, 0.0,
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 0.00, 0.0,  0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  1.0, 0.00, 0.00,  0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 1.0, 0.00,  0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 0.00, 1.0,  0.0, 0.0, 0.0,
     // Angular velocity (wx, wy, wz)
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  2.5, 0.00, 0.00,
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 2.5, 0.00,
-    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 0.00, 0.0
+    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  1, 0.00, 0.00,
+    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 1, 0.00,
+    0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.0, 0.0, 0.0,  0.00, 0.00, 1
 }; 
 const std::vector<double> R_MATRIX = { // 3 x 3
 /* Starting values based of Bryson's Rule */
     1.0, 0.0, 0.0, 
-    0.0, 1.0, 0.0, 
-    0.0, 0.0, 1.0, 
+    0.0, 1, 0.0, 
+    0.0, 0.0, 1, 
 };
 
 
@@ -138,6 +138,30 @@ Matrix toMatrix(const std::vector<double>& v) {
     return result;
 }
 
+double frobeniusNorm(const Matrix& A) {
+    double sum = 0.0;
+    for (unsigned int i = 0; i < A.getRows(); ++i) {
+        for (unsigned int j = 0; j < A.getCols(); ++j) {
+            double val = A(i, j);
+            sum += val * val;
+        }
+    }
+    return std::sqrt(sum);
+}
+
+Matrix absMatrix(const Matrix& in) {
+    Matrix result(in.getRows(), in.getCols(), 0);
+
+    for (unsigned int i = 0; i < in.getRows(); ++i) {
+        for (unsigned int j = 0; j < in.getCols(); ++j) {
+            result(i, j) = std::abs(in(i, j));
+        }
+    }
+
+    return result;
+}
+
+
 Matrix toRectMatrix(const std::vector<double>& v, unsigned int m, unsigned int n) {
     if (v.size() != m * n) {
         // std::cerr << "[ERROR] Vector size does not match matrix dimensions (" 
@@ -168,8 +192,15 @@ std::vector<double> toStdVector(const Matrix& mat) {
 */
 
 double cdRegression(double AoA) {
-    return ((2.5/90)*AoA+(1.5/10000)*(AoA*AoA)); //placeholder regression, accurate enough
+    // return ((2.5/90)*AoA+(1.5/10000)*(AoA*AoA)); //placeholder regression, accurate enough
+    double cd_x = -0.449*std::cos(3.028*AoA*M_PI/180) + 0.463;
+    double cd_y = -0.376*std::cos(5.675*AoA*M_PI/180) + 1.854;
+
+    return std::sqrt(cd_x*cd_x + cd_y*cd_y); // sqrt of sum of squares
+    // is this method right? Might cause problems later.
+    
 }
+
 
 double areaRegression(double AoA) {
     return 0.0072382 + 0.000226775*AoA;
@@ -247,22 +278,6 @@ void printVector(const std::vector<double>& vec) {
     std::cout << "]" << std::endl;
 }
 
-
-double frobeniusNorm(Matrix a) {
-    double sum = 0.0;
-    unsigned int rows = a.getRows();
-    unsigned int cols = a.getCols();
-
-    for (unsigned int i = 0; i < rows; ++i) {
-        for (unsigned int j = 0; j < cols; ++j) {
-            double val = a(i, j);
-            sum += val * val;
-        }
-    }
-    return std::sqrt(sum);
-}
-
-
 /*
                      -=- LOOP -=-
 */
@@ -279,10 +294,14 @@ LoopOutput loop(LoopInput in) {
     double dt = in.dt;
     std::vector<double>& desired_state = in.desired_state;
     std::vector<double>& delta_desired_state = in.delta_desired_state; 
-    const std::vector<double>& command = in.command;
+    const std::vector<double>& command = in.command; 
     const std::vector<double>& prevCommand = in.prevCommand; 
     const std::vector<double>& prevPrevCommand = in.prevPrevCommand; 
+<<<<<<< HEAD
    
+=======
+
+>>>>>>> d3cceadcdc561096740877513fd6a87c63f8ec22
     // Read in values
     std::vector<double> nineAxisIMU = values[0]; // Time, Gyro<[rad/s]>, Accel<[m/s2]>, Mag<[]>
     std::vector<double> sixAxisIMU = values[1]; // Time, Gyro<[rad/s]>, Accel<[m/s2]>
@@ -303,15 +322,20 @@ LoopOutput loop(LoopInput in) {
     EKF_Altitude& ekf_ox = system.ekf_ox;
     EKF_Altitude& ekf_oy = system.ekf_oy;
     EKF_Altitude& ekf_oz = system.ekf_oz;
+<<<<<<< HEAD
     EKF_Altitude& ekf_ax = system.ekf_ax;
     EKF_Altitude& ekf_ay = system.ekf_ay;
     EKF_Altitude& ekf_az = system.ekf_az;
     // EKF_Altitude& ekf_thrust = system.ekf_thrust;
+=======
+    EKF_Altitude& ekf_a = system.ekf_a;
+    EKF_Altitude& ekf_b = system.ekf_b;
+    EKF_Altitude& ekf_t = system.ekf_t;
+    EKF_Altitude& ekf_ax = system.ekf_ax;
+    EKF_Altitude& ekf_ay = system.ekf_ay;
+    EKF_Altitude& ekf_az = system.ekf_az;
+>>>>>>> d3cceadcdc561096740877513fd6a87c63f8ec22
     LQR& lqrController = system.lqrController;
-
-    // Constants
-    double m = M;
-    double f = F;
 
     // -------------------- I. SENSOR FUSION ALGORITHM ------------------------
 
@@ -339,7 +363,12 @@ LoopOutput loop(LoopInput in) {
     // toVector(gyro).print();
 
 
+    // debias
+    std::vector<double> gyro_bias = {0.01,0.01,0.01};
+    gyro = {gyro[0] - gyro_bias[0], gyro[1] - gyro_bias[1], gyro[2] - gyro_bias[2]};
+
     // Set up and update Madgwick filter
+<<<<<<< HEAD
     // std::vector<double> euler_attitude = state[2];
     
     // std::vector<double> q = madgwickFilter.eulerToQuaternion(euler_attitude);
@@ -372,7 +401,30 @@ LoopOutput loop(LoopInput in) {
 
 
     
+=======
+    std::vector<double> euler_attitude = state[2];
+    std::vector<double> q = madgwickFilter.eulerToQuaternion(euler_attitude);
+    std::vector<double> qnew = madgwickFilter.madgwickUpdate(q, gyro, accel, mag, dt);
+    std::vector<double> new_attitude = madgwickFilter.quaternionToEuler(qnew);
 
+    // New LPF on direct attitude measurements
+    double ax = new_attitude[0];
+    double ay = new_attitude[1];
+    double az = new_attitude[2];
+    Vector measurement_ax(2, 0.0); Vector measurement_ay(2, 0.0); Vector measurement_az(2, 0.0);
+    measurement_ax(0, 0) = ax; measurement_ax(1, 0) = 0;
+    measurement_ay(0, 0) = ay; measurement_ay(1, 0) = 0; 
+    measurement_az(0, 0) = az; measurement_az(1, 0) = 0;  
+    ekf_ax.update(measurement_ax); ekf_ax.predict();
+    ekf_ay.update(measurement_ay); ekf_ay.predict();
+    ekf_az.update(measurement_az); ekf_az.predict();
+    Vector estimated_state_ax = ekf_ax.getState(); double ax_actual = estimated_state_ax(0, 0);
+    Vector estimated_state_ay = ekf_ay.getState(); double ay_actual = estimated_state_ay(0, 0);
+    Vector estimated_state_az = ekf_az.getState(); double az_actual = estimated_state_az(0, 0);
+>>>>>>> d3cceadcdc561096740877513fd6a87c63f8ec22
+
+    new_attitude = {ax_actual, ay_actual, az_actual};
+  
     // ---------------------- ii. EKF for Position ----------------------------
 
     // STRATEGY: We need to split up the altitude from the XY position. Therefore we will do:
@@ -396,13 +448,13 @@ LoopOutput loop(LoopInput in) {
     preciseLatLonToMeters(lat, deltaLat, deltaLon, x_pos2, y_pos2); // Convert lat + lon to m (for gps)
 
     Vector measurement_xy(4, 0.0);  // Create 4x1 vector
-    measurement_xy(0, 0) = x_pos1;
-    measurement_xy(1, 0) = y_pos1;
-    measurement_xy(2, 0) = x_pos1; // can change to use ony uwb
-    measurement_xy(3, 0) = y_pos1;
+    measurement_xy(0, 0) = x_pos2;
+    measurement_xy(1, 0) = y_pos2;
+    measurement_xy(2, 0) = x_pos2; // <--- changed to use only gps (pos2)
+    measurement_xy(3, 0) = y_pos2;
     ekf_xy.update(measurement_xy);      // Update EKF with measurement 
     ekf_xy.predict();                   // Predict next state
-    Vector estimated_state_xy = ekf_xy.getState();  // [X, Y, VX, VY]
+    Vector estimated_state_xy = ekf_xy.getState(); 
     double x_actual = estimated_state_xy(0, 0);
     double y_actual = estimated_state_xy(1, 0);
 
@@ -433,14 +485,17 @@ LoopOutput loop(LoopInput in) {
     ekf_x.update(measurement_x); ekf_x.predict();
     ekf_y.update(measurement_y); ekf_y.predict();
     ekf_z2.update(measurement_z2); ekf_z2.predict(); 
-    // Vector estimated_state_x = ekf_x.getState(); x_actual = estimated_state_x(0, 0);
-    // Vector estimated_state_y = ekf_y.getState(); y_actual = estimated_state_y(0, 0);
+    Vector estimated_state_x = ekf_x.getState(); x_actual = estimated_state_x(0, 0);
+    Vector estimated_state_y = ekf_y.getState(); y_actual = estimated_state_y(0, 0);
     Vector estimated_state_z2 = ekf_z2.getState(); z_actual = estimated_state_z2(0, 0);
 
     // Slap a low pass filter onto velocity
-    double vx = (x_actual - prevState[0][0])/(2*dt); 
-    double vy = (y_actual - prevState[0][1])/(2*dt);
-    double vz = (z_actual - prevState[0][2])/(2*dt);
+    // double vx = (x_actual - prevState[0][0])/(2*dt); 
+    // double vy = (y_actual - prevState[0][1])/(2*dt);
+    // double vz = (z_actual - prevState[0][2])/(2*dt);
+    double vx = prevState[1][0] + 2*accel[0]*dt;
+    double vy = prevState[1][1] + 2*accel[1]*dt;
+    double vz = prevState[1][2] + 2*accel[2]*dt;  
     Vector measurement_vx(2, 0.0); Vector measurement_vy(2, 0.0); Vector measurement_vz(2, 0.0);
     measurement_vx(0, 0) = vx; measurement_vx(1, 0) = 0;
     measurement_vy(0, 0) = vy; measurement_vy(1, 0) = 0; 
@@ -468,16 +523,6 @@ LoopOutput loop(LoopInput in) {
     Vector estimated_state_oy = ekf_oy.getState(); double oy_actual = estimated_state_oy(0, 0);
     Vector estimated_state_oz = ekf_oz.getState(); double oz_actual = estimated_state_oz(0, 0);
 
-
-    // Check for timestamp problems
-    double time1 = nineAxisIMU[0];
-    double time2 = sixAxisIMU[0];
-    double time3 = uwb[0];
-
-    if ((time1 - time2 >= TIMESTAMP_THRESHOLD) || (time2 - time3 >= TIMESTAMP_THRESHOLD)) {
-        // std::cout << "IMU or UWB timestamps don't match. Continuing, but you have been warned." << std::endl;
-    }
-
     // Calculate new state vector based on measurements
     std::vector<double> angular_velocity = {ox_actual, oy_actual, oz_actual};
     std::vector<double> velocity = {vx_actual, vy_actual, vz_actual};
@@ -492,9 +537,7 @@ LoopOutput loop(LoopInput in) {
 
     std::vector<double> angular_states = {omega_a, omega_b, alpha_a, alpha_b};
 
-
-
-    // -------------------------- II. LQR --------------------------------------
+    // -------------------------- II. PID --------------------------------------
 
     // ----------------------- i. set up key quantities ------------------------
 
@@ -538,8 +581,6 @@ LoopOutput loop(LoopInput in) {
     previous_state(6, 0) = prevState[2][0]; previous_state(7, 0) = prevState[2][1]; previous_state(8, 0) = prevState[2][2];
     previous_state(9, 0) = prevState[3][0]; previous_state(10, 0) = prevState[3][1]; previous_state(11, 0) = prevState[3][2];
 
-
-
     // 5. Construct input Vector
     Vector current_input = toVector(command);
 
@@ -547,20 +588,29 @@ LoopOutput loop(LoopInput in) {
     Matrix inertia = toMatrix(INERTIA);
     Matrix inertia_a = toMatrix(getInertiaA(command[1]));
     Matrix inertia_b = toMatrix(getInertiaB(command[2]));
+
+    angular_states = {0,0,0,0};
     
     // 7. Calculate A and B Matrices << NOTE AERO HAS BEEN ZEROED
+<<<<<<< HEAD
     Matrix A = calculateA(m, f, area, Cd, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector({0,0,0,0}));
     Matrix B = calculateB(m, f, area, Cd, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector({0,0,0,0}));
+=======
+    Matrix A = calculateA(m, f, area, Cd, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector(angular_states));
+    Matrix B = calculateB(m, f, area, Cd, toVector(desired_state), static_input, rc, rt, inertia, inertia_a, inertia_b, toVector({angular_states}));
+>>>>>>> d3cceadcdc561096740877513fd6a87c63f8ec22
 
-    // 8. Sanitize NaNs that pop up from numerical errors close to zero.
+
+    // // 8. Sanitize NaNs that pop up from numerical errors close to zero.
     A.sanitizeNaNs();
     B.sanitizeNaNs();
 
+    
 
-    // std::cout << "" << std::endl;
-    // A.print();
-    // std::cout << "" << std::endl;
-    // B.print();
+    // std::cout << "\nA: " << frobeniusNorm(A) << std::endl;
+    // // A.print()
+    // std::cout << "\nB: " << frobeniusNorm(B) << std::endl;
+    // // B.print();
     // std::cout << "" << std::endl;
 
     // ---------- ii. Use state matrices to compute optimal controls -----------
@@ -580,11 +630,8 @@ LoopOutput loop(LoopInput in) {
 
     static_input = u_d;
 
-    // std::cout << "xact:\n"; current_state.print();
-    // std::cout << "uact:\n"; current_input.print();
-
     std::vector<double> K_MATRIX = {
-        0,0,4,         0,0,1,           0,0,0,          0,0,0,
+        0,0,1,         0,0,1,           0,0,0,          0,0,0,
         0,0,0,         0,0,0,           1,0,0,          0,0,0,
         0,0,0,         0,0,0,           0,1,0,          0,0,0,
     };
@@ -653,44 +700,10 @@ LoopOutput loop(LoopInput in) {
 
     IE = IE.add(state_error.multiply(dt));
 
-
     // Compute control commands
     Vector control_command = u_d.subtract(((K.multiply(state_error)).add(I.multiply(IE))).add(D.multiply(DE)));  // result is 3x1 Matrix
 
-
-    //  // Read in Q, R matrices
-    //  Matrix Q = toRectMatrix(Q_MATRIX, 12, 12);
-    //  Matrix R = toRectMatrix(R_MATRIX, 3, 3);
-
-    //  std::cout << "\nAfn: " << frobeniusNorm(A);
-    //  std::cout << "\nBfn: " << frobeniusNorm(B);
-
- 
-    //  // Set state and setpoint in LQR controller
-    //  lqrController.setA(A);
-    //  lqrController.setB(B);
-    //  lqrController.setQ(Q);
-    //  lqrController.setR(R);
- 
-    //  // Read in current + desired states
-    //  lqrController.setState(current_state);
-    //  lqrController.setPoint = toVector(desired_state); // Assuming setPoint is a std::vector
- 
-    //  // Compute error between current state and desired state
-    //  Matrix neg_setpoint = lqrController.setPoint.multiply(-1.0);
-    //  Vector state_error = lqrController.getState().add(Vector(neg_setpoint));
- 
-    //  // Recalculate K if needed (e.g., time-varying system)
-    //  if ( iter % 5 == 0) {
-    //     lqrController.calculateK(dt);
-    //  }
- 
-    //  // // // // Compute control command: u = -K * state_error
-
-    // Matrix negative_K = lqrController.getK().multiply(-1.0);
-    // Vector control_command = u_d.add(negative_K.multiply(state_error)); 
     Vector filtered_command = control_command;
-    // Vector change_command = (negative_K.multiply(state_error));
 
     // sanity checks on T for feedback command
     if (control_command[0] > 15) control_command[0] = 15;
@@ -700,14 +713,12 @@ LoopOutput loop(LoopInput in) {
     if (filtered_command[0] > 15) filtered_command[0] = 15; if (filtered_command[0] < 0) filtered_command[0] = 0;
     if (filtered_command[1] > 1) filtered_command[1] = 1; if (filtered_command[1] < -1) filtered_command[1] = -1;
     if (filtered_command[2] > 1) filtered_command[2] = 1; if (filtered_command[2] < -1) filtered_command[2] = -1;
-    
-    std::vector<double> filteredCommand = toStdVector(filtered_command);
+
+   
+    std::vector<double> filteredCommand = {filtered_command[0], filtered_command[1], filtered_command[2]}; // somehow we got a and b switched
     std::vector<double> newCommand = toStdVector(control_command);  
     std::vector<double> error = toStdVector(state_error);
     std::vector<bool> newStatus = {true, true};
-
-
-    // std::cout << "U:\n"; filtered_command.print();
 
     // Return pertinent values to data_mocker
     LoopOutput out = {
@@ -716,7 +727,7 @@ LoopOutput loop(LoopInput in) {
         newCommand, 
         error, 
         desired_command, 
-        filteredCommand
+        filteredCommand,
     };
 
     return out;

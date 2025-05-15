@@ -589,6 +589,7 @@ Matrix calculateABF(
         )
     };
     
+<<<<<<< HEAD:firmware/src/LQR/calculateABF.cpp
     // std::vector<double> mt3 = {
     //     t165 * t257 * t385 - t163 * t257 * t388 - t199 * t257 * t383,
     //     t163 * t257 * t383 + t164 * t257 * t385 + t198 * t257 * t388,
@@ -621,6 +622,8 @@ Matrix calculateABF(
     //     )
     // };
     
+=======
+>>>>>>> d3cceadcdc561096740877513fd6a87c63f8ec22:ControlLoop/LQR/calculateABF.cpp
     std::vector<double> mt4 = {
         -t32 * (
             (areaVar * cDrag * f * t255 * t326) / 2.0 + 
