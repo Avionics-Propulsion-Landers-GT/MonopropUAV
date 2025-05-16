@@ -1,16 +1,17 @@
 """
 Rocket Physics Integrator (Python)
 ----------------------------------
-A bare‑bones translation of the C++ dynamics core, stripped of any
-control‑law or state‑estimation logic.  It propagates a rigid body
-(rocket) forward in time under gravity, thrust, and aerodynamic drag.
+A translation of the C++ dynamics model/simulator, stripped of state‑estimation logic.  
+It propagates a rigid body (rocket) forward in time under gravity, thrust, and aerodynamic drag.
 
-TODO: CREATE CONTROL LOOP AND STATE ESTIMATION CONNECTION.
+TODO: ADD NOISE, WIND, AND CREATE STATE ESTIMATION FILTERS.
 
 Dependencies
 ============
 * numpy
 * scipy
+* do-mpc, in the mpc.py file
+* mpc.py
 
 Author: Propulsive Landers @ GT, for the Future Hovering Lander.
 """
@@ -36,6 +37,8 @@ from scipy.spatial.transform import Rotation as R
 # -----------------------------------------------------------------------------
 # Helper functions (vector + quaternion)
 # -----------------------------------------------------------------------------
+
+m_0 = 1.0 # initial mass, in kg. 
 
 def extrinsic_rotation_matrix(euler_xyz: np.ndarray) -> np.ndarray:
     """Return *world←body* rotation for extrinsic **Z‑Y‑X** (yaw‑pitch‑roll)."""
@@ -63,20 +66,21 @@ def extrinsic_rotation_matrix(euler_xyz: np.ndarray) -> np.ndarray:
 @dataclass
 class RocketParams:
     """Physical and aerodynamic constants (subset of the C++ struct)."""
-    # Mass / inertia
-    m_static: float = 0.6  # kg
+    # NOTE: Mass / inertia - these must match with the MPC.py file!!!
+    # TODO: Find a way to import the values from mpc.py.
+    m_static: float = 0.9  # kg
     m_gimbal_top: float = 0.05
     m_gimbal_bottom: float = 0.05
-    I_body: np.ndarray = field(default_factory=lambda: np.diag([0.00940, 0.00940, 0.00014]))
-    I_gimbal_top: np.ndarray = field(default_factory=lambda: np.diag([0.0001, 0.0001, 0.0001]))
-    I_gimbal_bottom: np.ndarray = field(default_factory=lambda: np.diag([0.0001, 0.0001, 0.0001]))
+    I_body: np.ndarray = field(default_factory=lambda: np.diag([1.0, 1.0, 1.0]))
+    I_gimbal_top: np.ndarray = field(default_factory=lambda: np.diag([0.5, 0.5, 0.5]))
+    I_gimbal_bottom: np.ndarray = field(default_factory=lambda: np.diag([0.5, 0.5, 0.5]))
 
     # Geometry offsets (set to zero by default)
     thrust_offset: np.ndarray = field(default_factory=lambda: np.array([0.0, 0.0, -0.1]))
     COP_offset: np.ndarray = field(default_factory=lambda: np.array([0.0, 0.0, 0.1]))
     gimbal_offset: np.ndarray = field(default_factory=lambda: np.zeros(3))
 
-    # Aero coefficients (will be updated each step via AoA curve fit)
+    # Aero coefficients (Declared here, will be updated each step via AoA curve fit)
     Cd_x: float = 0.1
     Cd_y: float = 0.1
     Cd_z: float = 0.1
@@ -84,14 +88,14 @@ class RocketParams:
     A_y: float = 0.7
     A_z: float = 0.7
 
-    rcs_offset: float = 0.1  # m
+    rcs_offset: float = 0.05  # m
 
     air_density: float = 1.225  # kg / m³
 
     # Thrust envelope (N) and timestep (s)
-    T_max: float = 100.0
+    T_max: float = 15.0
     T_min: float = 0.0
-    dt: float = 0.01
+    dt: float = 0.1 # s. Matching with mpc.py would be good but idk what happens if they don't match.
 
     @property
     def m(self) -> float:
@@ -104,7 +108,7 @@ class RocketParams:
 
 @dataclass
 class State:
-    """Translational + rotational states."""
+    """Translational + rotational states + mass."""
     pos: np.ndarray = field(default_factory=lambda: np.zeros(3))
     vel: np.ndarray = field(default_factory=lambda: np.zeros(3))
     accel: np.ndarray = field(default_factory=lambda: np.zeros(3))
@@ -113,6 +117,7 @@ class State:
     att: R = field(default_factory=lambda: R.identity())  # body→world
     ang_vel: np.ndarray = field(default_factory=lambda: np.zeros(3))
     ang_accel: np.ndarray = field(default_factory=lambda: np.zeros(3))
+    m = m_0
 
 def state_to_vec(s: State, *, to_dm: bool = False):
     """
@@ -126,7 +131,8 @@ def state_to_vec(s: State, *, to_dm: bool = False):
         s.pos,                    # r_x, r_y, r_z
         s.vel,                    # v_x, v_y, v_z
         [psi, theta, phi],        # ψ, θ, φ
-        s.ang_vel                 # ψ̇, θ̇, φ̇
+        s.ang_vel,                 # ψ̇, θ̇, φ̇
+        s.m
     ])
     if to_dm:
         return ca.DM(x_vec).reshape((-1, 1))  # (12,1) DM column
@@ -151,6 +157,7 @@ def thrust_body(params: RocketParams, F_mag: float, thrust_gimbal_xyz: np.ndarra
     r_b = params.thrust_offset + params.gimbal_offset
     T_b = np.cross(r_b, F_b)
     T_rcs = params.rcs_offset * R1 - params.rcs_offset * R2
+    T_b += T_rcs
     return F_b, T_b
 
 
@@ -183,6 +190,8 @@ def integrate_step(params: RocketParams,
     """Advance one Euler step (explicit)."""
     dt = params.dt
 
+    mass = params.m - alpha*np.linalg.norm(T_b)*dt # mass loss due to propellant consumption
+
     # Forces: convert body‑frame thrust/drag to world
     F_w = state.att.apply(F_b)
 
@@ -210,6 +219,7 @@ def integrate_step(params: RocketParams,
         att=att_new,
         ang_vel=ang_vel_b,
         ang_accel=ang_accel_b,
+        m = mass
     )
 
 
@@ -232,6 +242,8 @@ def simulate(params: RocketParams, controller,
     state = State(att=R.from_euler("xyz", [0, 0, 0.0]))
 
     v_wind = np.zeros(3)  # no wind
+
+    # NOTE: I think i should simulate wind with an acceleration vector field.
 
     for i in range(n):
         t = i * params.dt
@@ -256,27 +268,28 @@ def simulate(params: RocketParams, controller,
         # thrust_gimbal = np.zeros(3)  # keep nozzle aligned with body Z
         # x_meas = state_to_vec(state, to_dm=False)
         
-        x_meas = np.array([state.pos[0], state.pos[1], state.pos[2], state.vel[0], state.vel[1], state.vel[2], state.att.as_euler("xyz")[0], state.att.as_euler("xyz")[1], state.att.as_euler("xyz")[2], state.ang_vel[0], state.ang_vel[1], state.ang_vel[2]])
+        x_meas = np.array([state.pos[0], state.pos[1], state.pos[2], state.vel[0], state.vel[1], state.vel[2], state.att.as_euler("xyz")[0], state.att.as_euler("xyz")[1], state.att.as_euler("xyz")[2], state.ang_vel[0], state.ang_vel[1], state.ang_vel[2], params.m])
         # print(x_meas)
         u_cmd = controller.make_step(x_meas).flatten()
         # print(u_cmd)
         F_mag = u_cmd[0]
         # thrust_gimbal = np.ndarray([float(u_cmd[1]), float(u_cmd[2])])  # gimbal angles
         thrust_gimbal = np.zeros(3)
-        thrust_gimbal[0] = u_cmd[3]  # gimbal angle A
-        thrust_gimbal[1] = u_cmd[4]  # gimbal angle B
-        R1 = u_cmd[1]  # RCS1
-        R2 = u_cmd[2]
+        thrust_gimbal[0] = u_cmd[1]  # gimbal angle A
+        thrust_gimbal[1] = u_cmd[2]  # gimbal angle B
+        R1 = u_cmd[3]  # RCS1
+        R2 = u_cmd[4]  # RCS2
 
         # Update aero coefficients based on AoA 
         # TODO: currently uses monoprop data, update to FHL data when possible.
         velocity_mag = np.linalg.norm(state.vel)
         if velocity_mag > 0.0:
+            # cosine alpha is not calculated this way in mpc.py. May cause problems later.
             cos_alpha = np.clip(np.dot(state.vel / velocity_mag, np.array([0.0, 0.0, np.sign(state.vel[2])])), -1.0, 1.0)
             AoA = np.arccos(cos_alpha)
-            # params.Cd_x = -0.449 * np.cos(3.028 * np.degrees(AoA)) + 0.463
-            # params.Cd_y = params.Cd_x
-            # params.Cd_z = -0.376 * np.cos(5.675 * np.degrees(AoA)) + 1.854
+            params.Cd_x = -0.449 * np.cos(3.028 * np.degrees(AoA)) + 0.463
+            params.Cd_y = params.Cd_x
+            params.Cd_z = -0.376 * np.cos(5.675 * np.degrees(AoA)) + 1.854
             # ignoring these curve fits for now because MPC model is not updated to this standard.
 
         # Body‑frame forces
@@ -316,11 +329,11 @@ def simulate(params: RocketParams, controller,
 # Main guard
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
-    f_sym, x_sym, u_sym = calculate_f_nonlinear_sym()
+    # f_sym, x_sym, u_sym = calculate_f_nonlinear_sym()
     params = RocketParams()
-    mpc = initialize_mpc(x_sym, u_sym, f_sym)
-    x = np.zeros(12)
+    mpc = initialize_mpc()
+    x = np.zeros(13)
     mpc.x0 = x
     mpc.set_initial_guess()
-    u = np.zeros(9)
+    u = np.zeros(5)
     simulate(params, mpc)

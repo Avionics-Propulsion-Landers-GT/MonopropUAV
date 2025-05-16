@@ -1,3 +1,7 @@
+'''THIS FILE IS BASED ON THE MPC JUPYTER NOTEBOOK. ALL CHANGES MUST BE MADE THERE FIRST.'''
+'''THIS IS INTEGRATED WITH THE FHL DYNAMICS MODEL/SIMULATOR.'''
+'''AUTHOR: JUSTIN E.'''
+
 import numpy as np
 import matplotlib.pyplot as plt
 import sympy as sp
@@ -6,421 +10,313 @@ from matplotlib import rcParams
 import casadi as ca
 import do_mpc
 
-# ------------------------------------------------------------------
-# 1. Define the dynamics symbolically in SymPy. Copied from ABSymbolicCalc.py which may become deprecated.
+'''Helpers and constants should be defined here.'''
 
-def calculate_f_nonlinear_sym():
-    # ------------------------------------------------------------------
-    # 1. State symbols (angular + translational)
-    # ------------------------------------------------------------------
-    print("Initializing state space model...")
+# Inertia Tensors (numeric, gimbals unused)
+I = np.matrix([[1.0, 0.0, 0.0],
+               [0.0, 1.0, 0.0],
+               [0.0, 0.0, 1.0]])
+I_s = np.matrix([[1.0, 0.0, 0.0],
+               [0.0, 1.0, 0.0],
+               [0.0, 0.0, 1.0]])
+I_a = np.matrix([[0.5, 0.0, 0.0],
+               [0.0, 0.5, 0.0],
+               [0.0, 0.0, 0.5]])
+I_b = np.matrix([[0.5, 0.0, 0.0],
+               [0.0, 0.5, 0.0],
+               [0.0, 0.0, 0.5]])
 
-    psi,   theta,   phi   = sp.symbols('psi theta phi', real=True)
-    psi_d, theta_d, phi_d = sp.symbols('psi_dot theta_dot phi_dot', real=True)
-    psi_dd, theta_dd, phi_dd = sp.symbols('psi_dd theta_dd phi_dd', real=True)
+# COP / COT / COM Offsets (numeric)
+# TODO: add gimbal offset, make rc and rt time dependent (since COM is moving on the rocket due to fuel consumption)
+rc = np.array([0.0, 0.0, 0.1])  # cop offset
+rt = np.array([0.0, 0.0, -0.1])  # cot offset
+r_rcs = 0.05  # rcs offset
 
-    r_x, r_y, r_z = sp.symbols('r_x r_y r_z', real=True)
-    v_x, v_y, v_z = sp.symbols('v_x v_y v_z', real=True)
-    r_rcs = sp.symbols('r_rcs', real=True)  # RCS offset
+g = 9.81  # gravity
+m_0 = 1.0  # starting mass. 
+m_min = 0.1 # minimum mass.
+rho = 1.225  # air density
+A = 0.1  # cross-sectional area
+alpha = 0.005 # mass flow rate coefficient (determine empirically, given by propulsion team)
 
-    # Inputs: thrust magnitude + two RCS thrusters + gimbal (a, b) & derivatives
-    T, R1, R2, a, b, a_d, b_d, a_dd, b_dd = sp.symbols('T R1 R2 a b a_dot b_dot a_ddot b_ddot', real=True)
+def initialize_mpc():
+    # First, create the continuous time state space model.
+    # define equations of motion
+    # x_d = f(x,u), where f is some nonlinear function. 
 
-    # Aerodynamic / physical constants
-    rho, C_d, A_ref = sp.symbols('rho cDrag areaVar', real=True)
-    m = sp.symbols('m', real=True)
-
-    # Offsets
-    r_cx, r_cy, r_cz = sp.symbols('rc_x rc_y rc_z', real=True)
-    r_tx, r_ty, r_tz = sp.symbols('rt_x rt_y rt_z', real=True)
-
-    # Inertia tensor components
-    Ixx,Iyy,Izz,Ixy,Ixz,Iyz = sp.symbols('Ixx Iyy Izz Ixy Ixz Iyz', real=True)
-    Ixx_s,Iyy_s,Izz_s,Ixy_s,Ixz_s,Iyz_s = sp.symbols('Ixx_s Iyy_s Izz_s Ixy_s Ixz_s Iyz_s', real=True)
-    Ixx_a,Iyy_a,Izz_a,Ixy_a,Ixz_a,Iyz_a = sp.symbols('Ixx_a Iyy_a Izz_a Ixy_a Ixz_a Iyz_a', real=True)
-    Ixx_b,Iyy_b,Izz_b,Ixy_b,Ixz_b,Iyz_b = sp.symbols('Ixx_b Iyy_b Izz_b Ixy_b Ixz_b Iyz_b', real=True)
-
-    # ------------------------------------------------------------------
-    # 2. Assemble state & input vectors
-    # ------------------------------------------------------------------
-    full_state = sp.Matrix([
-        r_x, r_y, r_z,
-        v_x, v_y, v_z,
-        psi, theta, phi,
-        psi_d, theta_d, phi_d
-    ])
-
-    velocity_wf  = sp.Matrix([v_x, v_y, v_z])
-    ang_vel_wf   = sp.Matrix([psi_d, theta_d, phi_d])
-
-    full_input = sp.Matrix([T, R1, R2, a, b])
-    # full_input = sp.Matrix([T, R1, R2, a, b])
-
-    # Offsets & inertia matrices
-    r_c = sp.Matrix([r_cx, r_cy, r_cz])
-    r_t = sp.Matrix([r_tx, r_ty, r_tz])
-
-    I      = sp.Matrix([[Ixx,  Ixy,  Ixz],
-                        [Ixy,  Iyy,  Iyz],
-                        [Ixz,  Iyz,  Izz]])
-    I_s    = sp.Matrix([[Ixx_s, Ixy_s, Ixz_s],
-                        [Ixy_s, Iyy_s, Iyz_s],
-                        [Ixz_s, Iyz_s, Izz_s]])
-    I_a    = sp.Matrix([[Ixx_a, Ixy_a, Ixz_a],
-                        [Ixy_a, Iyy_a, Iyz_a],
-                        [Ixz_a, Iyz_a, Izz_a]])
-    I_b    = sp.Matrix([[Ixx_b, Ixy_b, Ixz_b],
-                        [Ixy_b, Iyy_b, Iyz_b],
-                        [Ixz_b, Iyz_b, Izz_b]])
-
-    # placeholder subsitutions, make sure to match with dynamics model values
-    r_c = r_c.subs({r_cx: 0, r_cy: 0, r_cz: 0.1})
-    r_t = r_t.subs({r_tx: 0, r_ty: 0, r_tz: -0.1})
-    rho = rho.subs({rho: 1.225})
-    # TODO: implement 3-axis cD instead of 1D
-    C_d = C_d.subs({C_d: 0.5})
-    A_ref = A_ref.subs({A_ref: 0.7})
-    m = m.subs({m: 0.7})
-    r_rcs = r_rcs.subs({r_rcs: 0.1})
-    I = I.subs({Ixx: 1, Ixy: 0, Ixz: 0, Iyy:1, Iyz: 0, Izz:1})
-    I_s = I_s.subs({Ixx_s: 0.7, Ixy_s: 0, Ixz_s: 0, Iyy_s:0.7, Iyz_s: 0, Izz_s:0.7})
-    I_a = I_a.subs({Ixx_a: 0.1, Ixy_a: 0, Ixz_a: 0, Iyy_a:0.1, Iyz_a: 0, Izz_a:0.1})
-    I_b = I_b.subs({Ixx_b: 0.1, Ixy_b: 0, Ixz_b: 0, Iyy_b:0.1, Iyz_b: 0, Izz_b:0.1})
-
-    # ------------------------------------------------------------------
-    # 3. Rotation matrices (world→body, Z‑Y‑X extrinsic)
-    # ------------------------------------------------------------------
-    R_x = sp.Matrix([[1, 0, 0],
-                        [0, sp.cos(psi), -sp.sin(psi)],
-                        [0, sp.sin(psi),  sp.cos(psi)]])
-
-    R_y = sp.Matrix([[ sp.cos(theta), 0, sp.sin(theta)],
-                        [              0, 1,              0],
-                        [-sp.sin(theta), 0, sp.cos(theta)]])
-
-    R_z = sp.Matrix([[ sp.cos(phi), -sp.sin(phi), 0],
-                        [ sp.sin(phi),  sp.cos(phi), 0],
-                        [           0,            0, 1]])
-
-    R_bf = sp.simplify(R_z * R_y * R_x)  # body←world
-    R_wf = R_bf.T                        # world←body
-
-    # ------------------------------------------------------------------
-    # 4. Forces (body frame)
-    # ------------------------------------------------------------------
-    thrust_b = sp.Matrix([
-        T*sp.cos(b)*sp.sin(a),
-        T*sp.sin(b),
-        -T*sp.cos(b)*sp.cos(a)
-    ])
-
-    vel_b   = R_bf * velocity_wf
-    vel_mag = sp.sqrt(vel_b.dot(vel_b))
-    # Guard against a zero‑velocity singularity (sqrt'(0) is undefined)
-    eps_vel = 1e-8  # small positive constant
-    vel_mag = sp.sqrt(vel_b.dot(vel_b) + eps_vel)
-
-    Fd_b = (sp.Rational(1,2)*rho*C_d*A_ref*vel_mag) * vel_b
-
-    # ------------------------------------------------------------------
-    # 5. Torques & angular acceleration
-    # ------------------------------------------------------------------
-    aero_tau_b   = r_c.cross(Fd_b)
-    thrust_tau_b = r_t.cross(thrust_b)
-    # R1 is clockwise, R2 is counterclockwise. Only points one way.
-    rcs_tau_b = sp.Matrix([
-        0,
-        0,
-        r_rcs*R1 - r_rcs*R2,
-    ])
-    tau_net_b    = aero_tau_b + thrust_tau_b + rcs_tau_b
-
-    tau_net_w = R_wf * tau_net_b
-
-    # Gyro + TVC terms
-    I_s_w = R_wf*I_s*R_wf.T
-    I_a_w = R_wf*I_a*R_wf.T
-    I_b_w = R_wf*I_b*R_wf.T
-
-    gyro_tau_s = ang_vel_wf.cross(I_s_w*ang_vel_wf)
-
-    ang_vel_a_b = sp.Matrix([a_d, 0, 0])
-    ang_vel_b_b = sp.Matrix([0, b_d, 0])
-    # ang_vel_a_w = R_wf*ang_vel_a_b + ang_vel_wf
-    # ang_vel_b_w = R_wf*ang_vel_b_b + ang_vel_wf
-    # gyro_tau_a  = ang_vel_a_w.cross(I_a_w*ang_vel_a_w)
-    # gyro_tau_b  = ang_vel_b_w.cross(I_b_w*ang_vel_b_w)
-
-    ang_acc_a_b = sp.Matrix([a_dd, 0, 0])
-    ang_acc_b_b = sp.Matrix([0, b_dd, 0])
-    # m_tau_a_w   = R_wf * (I_a*ang_acc_a_b)
-    # m_tau_b_w   = R_wf * (I_b*ang_acc_b_b)
-
-    # tau_net_w = (tau_net_w
-    #                 - (gyro_tau_s + gyro_tau_a + gyro_tau_b)
-    #                 + m_tau_a_w + m_tau_b_w)
-    tau_net_w = (tau_net_w - gyro_tau_s)
-
-    ang_accel_w = I.inv() * tau_net_w
-
-    # Jacobians (angular part)
-    A4 = ang_accel_w.jacobian(full_state)
-    B4 = ang_accel_w.jacobian(full_input)
-
-    # ------------------------------------------------------------------
-    # 6. Translational acceleration
-    # ------------------------------------------------------------------
-    g_w = sp.Matrix([0, 0, -9.80665])
-    thrust_w = R_wf * thrust_b
-    Fd_w     = R_wf * Fd_b
-    accel_w  = (thrust_w - Fd_w)/m + g_w
-
-    # f function 
-    f_sym = sp.Matrix([
-        v_x,
-        v_y,
-        v_z,
-        accel_w[0],
-        accel_w[1],
-        accel_w[2],
-        psi_d,
-        theta_d,
-        phi_d,
-        ang_accel_w[0],
-        ang_accel_w[1],
-        ang_accel_w[2]
-    ])
-    x_sym = sp.Matrix([
-        r_x, r_y, r_z,
-        v_x, v_y, v_z,
-        psi, theta, phi,
-        psi_d, theta_d, phi_d
-    ])
-    u_sym = sp.Matrix([T, R1, R2, a, b])
-    print("State space model initialized.")
-
-    return f_sym, x_sym, u_sym
-
-def initialize_mpc(x_sym, u_sym, f_sym):
-    print("Initializing MPC...")
-    # Placeholder for the MPC initialization function
-    # pass
-    # Convert RHS to CasADi MX lambda function (needed, don't know why)
-
-    # const_subs = {}
-    # for s in param_syms:
-    #     if   str(s) == 'rho':   const_subs[s] = rho_val
-    #     elif str(s) == 'cDrag':   const_subs[s] = C_d_val
-    #     elif str(s) == 'areaVar': const_subs[s] = A_ref_val
-    #     elif str(s) == 'm':     const_subs[s] = m_val
-    # f_sym_num = f_sym.subs(const_subs)
-
-    # Mapping for SymPy functions that need explicit CasADi equivalents
-    custom_map = {
-    'Abs' : ca.fabs,
-    'sqrt': ca.sqrt,
-    'sin' : ca.sin,
-    'cos' : ca.cos,
-    'tan' : ca.tan,
-    'asin': ca.asin,
-    'acos': ca.acos,
-    'atan': ca.atan,
-    'exp' : ca.exp,
-    'log' : ca.log,
-    'sign': ca.sign,
-    'pi'  : ca.pi,     # SymPy constant → CasADi constant
-}
-    
-    
-    dt_disc = 0.01  # sampling period (s) - match with dynamics model (?)
-
-    # ------------------ Helper to build k2, k3, k4 symbolically ---------------------------
-
-    # (r_x, r_y, r_z,
-    # v_x, v_y, v_z,
-    # psi, theta, phi,
-    # psi_d, theta_d, phi_d) = x_sym
-
-    # print("Discretizing f_sym...")
-
-    # k1 = f_sym
-    # # print("k1 done.")
-    # y_half1 = x_sym + (dt_disc/2) * k1
-    # k2 = f_sym.xreplace(dict(zip(x_sym, y_half1)))
-    # # print("k2 done.")
-
-    # y_half2 = x_sym + (dt_disc/2) * k2
-    # k3 = f_sym.xreplace(dict(zip(x_sym, y_half2)))
-    # # print("k3 done.")
-
-    # y_full = x_sym + dt_disc * k3
-    # k4 = f_sym.xreplace(dict(zip(x_sym, y_full)))
-    # # print("k4 done.")
-
-    # f_rk4_sym = x_sym + (dt_disc/6) * (k1 + 2*k2 + 2*k3 + k4)
-    # # print("f_rk4_sym done.")
-
-    # CasADi callable -----------------------------------------
-    # Convert SymPy Matrix to a flat list of expressions
-    # Flatten state & input matrices into scalar symbol lists ----------------------
-    x_syms_flat = list(x_sym)
-    u_syms_flat = list(u_sym)
-    f_sym_flat = list(f_sym)  #   <‑‑ outputs as a *Python* list of SymPy exprs
-
-    # Lambdify into a regular Python function returning a list of MX scalars -------
-    f_lamb = lambdify(x_syms_flat + u_syms_flat,
-                      f_sym_flat,
-                      modules=[custom_map])
-    
-    # kept = set(x_sym) | set(u_sym)
-
-    # # symbols that should have been substituted
-    # remaining = f_sym.free_symbols - kept
-
-    # if remaining:
-    #     raise RuntimeError(
-    #         f"[initialize_mpc] These symbols still need numeric values: {remaining}"
-        # )
-
-    def f_dt_casadi(x_mx, u_mx):
-        """Return CasADi MX column vector f(x,u).  x_mx ∈ ℝ¹²×¹, u_mx ∈ ℝ⁵×¹."""
-        # Extract scalar MX components (safe – we iterate over Python ints)
-        x_list = [x_mx[i] for i in range(12)]
-        u_list = [u_mx[i] for i in range(5)]
-        f_list = f_lamb(*x_list, *u_list)  # <- list of 12 MX scalars
-        return ca.vertcat(*f_list)          # column vector (12×1 MX)
-    
-    # ------------------------------------------------------------------
-    # 3.  Continuous do‑mpc model (for now)
-    # ------------------------------------------------------------------
-
-    print("Creating do-mpc model...")
     model = do_mpc.model.Model('continuous')
 
-    x_mx = model.set_variable('_x', 'x', shape=(12,1))   # state at k
-    u_mx = model.set_variable('_u', 'u', shape=(5,1))    # control at k
+    # Linear states
+    r = model.set_variable('_x', 'r', shape=(3,1))
+    r_dot = model.set_variable('_x', 'r_dot', shape=(3,1))
+    # Angular states
+    omega = model.set_variable('_x', 'omega', shape=(3,1))
+    omega_dot = model.set_variable('_x', 'omega_dot', shape=(3,1))
+    # Mass state
+    m = model.set_variable('_x', 'm', shape=(1,1))
+    # Control inputs
+    T = model.set_variable('_u', 'T')
+    a = model.set_variable('_u', 'a')
+    b = model.set_variable('_u', 'b')
+    R1 = model.set_variable('_u', 'R1') # clockwise - positive, only one direction
+    R2 = model.set_variable('_u', 'R2') # counterclockwise - negative, only one direction
 
-    # print(x_mx)
-    # print(u_mx)
+    # Mass flow rate
+    rhs_m = -alpha*T
 
-    model.set_rhs('x', f_dt_casadi(x_mx, u_mx))
-    model.set_expression('y', x_mx)      
-    print(ca.Function('test', [x_mx, u_mx], [f_dt_casadi(x_mx, u_mx)])())               # full‑state output
-    model.setup()
+    # Rotational Motion
+    # first, create rotation matrices from euler angles
+    cphi, sphi   = ca.cos(omega[2]),   ca.sin(omega[2]) # roll
+    cth,  sth    = ca.cos(omega[0]), ca.sin(omega[0]) # pitch
+    cpsi, spsi   = ca.cos(omega[1]),   ca.sin(omega[1]) # yaw
 
-    # ------------------------------------------------------------------
-    # 4.  MPC controller 
-    # ------------------------------------------------------------------
+    R_z = ca.blockcat([[ cphi, -sphi, 0],
+                    [ sphi,  cphi, 0],
+                    [    0,     0, 1]])
 
-    print("Creating do-mpc controller...")
-    mpc = do_mpc.controller.MPC(model)
-    mpc.set_param(
-        n_horizon = 10,   # 20 steps ahead, adjust if needed. Higher -
-        t_step    = dt_disc,   # just for time axis scaling in logs/plotting
-        state_discretization = 'collocation',   # Radau collocation (default)
-        collocation_type = 'radau',
-        collocation_deg  = 3,
-        store_full_solution = True,
-        # mute Ipopt solver output (will ounly show errors)
-        nlpsolver='ipopt',
-        nlpsol_opts={
-            # ---------- Ipopt’s own options ----------
-            'ipopt': {
-                'print_level': 0,   # 0 = mute everything
-                'sb':          'yes'  # skip the decorative banner
-            },
-            # ---------- CasADi wrapper options ----------
-            'print_time': 0         # don’t show CasADi timing
-        },
+    R_y = ca.blockcat([[ cth, 0, sth],
+                    [   0, 1,   0],
+                    [-sth, 0, cth]])
+
+    R_x = ca.blockcat([[1, 0,    0],
+                    [0, cpsi, -spsi],
+                    [0, spsi,  cpsi]])
+
+    R_bf = ca.mtimes(R_z, R_y)
+    R_bf = ca.mtimes(R_bf, R_x)
+    R_wf = R_bf.T
+
+    zero_err = np.full(3, 1e-6) # small number to avoid division by zero
+
+    model.set_expression('AoA', ca.dot(r_dot+zero_err, np.array([0, 0, 1]))/ca.norm_2(r_dot+zero_err)) # angle of attack in radians
+    AoA = model.aux['AoA']
+    # C_dx = model.set_variable('_aux', 'C_dx') # drag coefficient in body x direction
+    # C_dy = model.set_variable('_aux', 'C_dy') # drag coefficient in body y direction
+    # C_dz = model.set_variable('_aux', 'C_dz') # drag coefficient in body z direction
+    model.set_expression('C_dx', -0.449*ca.fabs((ca.cos(3.028*AoA*180/np.pi))) + 0.463)
+    model.set_expression('C_dy', -0.449*ca.fabs((ca.cos(3.028*AoA*180/np.pi))) + 0.463)
+    model.set_expression('C_dz', -0.376*ca.fabs((ca.cos(5.675*AoA*180/np.pi))) + 1.854)
+    C_dx = model.aux['C_dx']
+    C_dy = model.aux['C_dy']
+    C_dz = model.aux['C_dz']
+
+    # first, calculate torques in body.
+    #v velocities in body frame, needed for drag calculation.
+    r_dot_bf = ca.mtimes(R_bf, r_dot)
+
+    # TODO: update relevant A and C_d values for each axis.
+    F_d_bf = ca.vertcat(
+        -0.5*rho*A*C_dx*(ca.fabs(r_dot_bf[0]))*r_dot_bf[0],
+        -0.5*rho*A*C_dy*(ca.fabs(r_dot_bf[1]))*r_dot_bf[1],
+        -0.5*rho*A*C_dz*(ca.fabs(r_dot_bf[2]))*r_dot_bf[2]
     )
 
-    # Reference variable
-    # x_ref = model.set_variable('_tvp','x_ref',shape=(12,1))
+    F_t_bf = ca.vertcat(
+        T*ca.cos(b)*ca.sin(a),
+        T*ca.sin(a),
+        T*ca.cos(b)*ca.cos(a)
+    )
 
-    x_ref = np.array([0,0,1,0,0,0,0,0,0,0,0,0])  # desired state at all times
-    print("Setting up cost function...")
-    # Q_vel, R_u = 10.0, 1.0
-    Q = np.diag([0.5, 0.5, 1.0, 0.5, 0.5, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])
-    R_vec = [0, 1, 1, 5, 5]
-    R_u = np.diag(R_vec)
-    # mpc.set_objective(mterm = Q_vel*(x_mx-x_ref)**2,
-    #                 lterm = Q_vel*(x_mx-x_ref)**2 + R_u*u_mx**2)
-    # quadratic cost function with vectors
-    err = x_mx - x_ref
+    F_g_wf = ca.vertcat(
+        0,
+        0,
+        -m*g
+    )
+    F_g_bf = ca.mtimes(R_wf, F_g_wf) 
 
-    mpc.set_objective(lterm=ca.mtimes([err.T, Q, err]) + (ca.mtimes([u_mx.T, R_u, u_mx])),
-                  mterm=ca.mtimes([err.T, Q, err]))
+    # Net force and linear in body frame
+    F_net_bf = F_t_bf + F_d_bf + F_g_bf
 
-    mpc.bounds['lower','_u','u'] = np.array([0.0, 0.0, 0.0, -np.pi/12, -np.pi/12])
-    mpc.bounds['upper','_u','u'] =  np.array([15.0, 1.0, 1.0, np.pi/12, np.pi/12])
-    # mpc.bounds['lower', '_u', 'T'] = 0.0
-    # mpc.bounds['lower', '_u', 'RCS1'] = 0.0
-    # mpc.bounds['lower', '_u', 'RCS2'] = 0.0
-    # mpc.bounds['lower', '_u', 'gimbal_a'] = -np.pi/12
-    # mpc.bounds['lower', '_u', 'gimbal_b'] = -np.pi/12
-    # mpc.bounds['upper', '_u', 'thrust'] = 15.0
-    # mpc.bounds['upper', '_u', 'RCS1'] = 1.0
-    # mpc.bounds['upper', '_u', 'RCS2'] = 1.0
-    # mpc.bounds['upper', '_u', 'gimbal_a'] = np.pi/12
-    # mpc.bounds['upper', '_u', 'gimbal_b'] = np.pi/12
-    mpc.set_rterm(u = np.array(R_vec)) # input penalty
+    # Acceleration in world frame
+    F_net_wf = ca.mtimes(R_wf, F_net_bf)
+    rhs_r_dot = ca.mtimes(1/m, F_net_wf)
+
+    # Net torque in body frame
+    tau_d_bf = ca.cross(rc, F_d_bf)
+    tau_t_bf = ca.cross(rt, F_t_bf)
+    tau_rcs_bf = r_rcs*(R1 - R2)
+    tau_net_bf = tau_d_bf + tau_t_bf + tau_rcs_bf
+    # Net torque in world frame
+    tau_net_wf = ca.mtimes(R_wf, tau_net_bf)
+    I_wf = ca.mtimes(R_wf, I)
+    I_wf = ca.mtimes(I_wf, R_wf.T)
+    I_wf_inv = ca.inv(I_wf)
+
+    # angular acceleration in world frame
+    rhs_omega_dot = ca.mtimes(I_wf_inv, tau_net_wf)
+
+    #Translational Velocity
+    rhs_r = ca.vertcat(
+        r_dot[0],                                                            # ẋ = v_x
+        r_dot[1],                                                            # ẏ = v_y
+        r_dot[2],                                                            # ż = v_z
+    )
+
+    # Rotational Velocity
+    rhs_omega = ca.vertcat(
+        omega[0],                                                            # φ̇ = ω_x
+        omega[1],                                                            # θ̇ = ω_y
+        omega[2],                                                            # ψ̇ = ω_z
+    )
 
 
-    # print("Time varying parameters...")
-    # Time‑varying parameter template
-    # not doing this for now
-    # _tvpt = mpc.get_tvp_template()
-    # def tvp_fun(t_now):
-    #     # change these target values to what we need (for now, targeting just hovering at 50 m)
-    #     # _tvpt['_tvp','x_ref'][:] = np.array([0.0,0.0,50.0,0.0,0.0,0.0,0.0,0.0,0.0])   # desired state at all times
+    model.set_rhs('r', rhs_r)
+    model.set_rhs('r_dot', rhs_r_dot)
+    model.set_rhs('omega', rhs_omega)
+    model.set_rhs('omega_dot', rhs_omega_dot)
+    model.set_rhs('m', rhs_m)
 
-    #     return _tvpt
+    # defining reference variables
+    r_ref = model.set_variable('_tvp', 'r_ref', shape=(3,1))
+    r_dot_ref = model.set_variable('_tvp', 'r_dot_ref', shape=(3,1))
+    omega_ref = model.set_variable('_tvp', 'omega_ref', shape=(3,1))
+    omega_dot_ref = model.set_variable('_tvp', 'omega_dot_ref', shape=(3,1))
+    m_ref = model.set_variable('_tvp', 'm_ref', shape=(1,1))
 
-    # mpc.set_tvp_fun(tvp_fun)
+    model.setup()
 
+    # 2. Create the MPC controller itself.
+    mpc = do_mpc.controller.MPC(model)
+    setup_mpc = {
+        # automatically discretized with collocation
+        'n_horizon': 5,
+        't_step': 0.1,
+        'n_robust': 0, # default to 0 if not specified. I don't know what this does.
+        'store_full_solution': True,
+    }
+    mpc.set_param(**setup_mpc)
+
+    # Define cost function.
+    # Cost Function. Will be defined as a quadratic function
+    # error between desired and actual state as well as control effort.
+    x_ref = r_ref[0]  # desired x position
+    x_dot_ref = r_dot_ref[0]  # desired x velocity
+    y_ref = r_ref[1]  # desired y position
+    y_dot_ref = r_dot_ref[1]  # desired y velocity
+    z_ref = r_ref[2]  # desired altitude
+    z_dot_ref = r_dot_ref[2]  # desired vertical velocity
+    m_ref = m_0  # desired mass (use least amount of fuel possible)
+
+    phi_ref = omega_ref[0]  # desired pitch angle
+    theta_ref = omega_ref[1]  # desired yaw angle
+    psi_ref = omega_ref[2]  # desired roll angle
+    phi_dot_ref = omega_dot_ref[0]  # desired pitch rate
+    theta_dot_ref = omega_dot_ref[1]  # desired yaw rate
+    psi_dot_ref = omega_dot_ref[2]  # desired roll rate
+
+    dx = r[0] - x_ref
+    dx_dot = r_dot[0] - x_dot_ref
+    dy = r[1] - y_ref
+    dy_dot = r_dot[1] - y_dot_ref
+    dz = r[2] - z_ref
+    dz_dot = r_dot[2] - z_dot_ref
+
+    dphi = omega[0] - phi_ref
+    dphi_dot = omega_dot[0] - phi_dot_ref
+    dtheta = omega[1] - theta_ref
+    dtheta_dot = omega_dot[1] - theta_dot_ref
+    dpsi = omega[2] - psi_ref
+    dpsi_dot = omega_dot[2] - psi_dot_ref
+
+    dm = m - m_ref
+
+    err_vec = ca.vertcat(
+        dx,
+        dx_dot,
+        dy,
+        dy_dot,
+        dz,
+        dz_dot,
+        dphi,
+        dphi_dot,
+        dtheta,
+        dtheta_dot,
+        dpsi,
+        dpsi_dot,
+        dm
+    )
+    # Cost matrix for state.
+    Q = np.diag([1.0, 1.0, 2.5, # xyz position state penalty
+                1.0, 1.0, 3.0, # xyz velocity state penalty
+                3.0, 3.0, 2.0, # pitch, yaw, roll angle penalty
+                3.0, 3.0, 2.0, # pitch, yaw, roll rate penalty
+                0.01 # mass penalty. Low because if its too high its not gonna work.
+                ])
+
+    # m_term is mayer term and l_term is lagrange term. 
+    # TODO: figure out what these are.
+    m_term = ca.mtimes(err_vec.T, Q)  # quadratic term
+    m_term = ca.mtimes(m_term, err_vec)  # quadratic term
+    l_term = m_term
+
+    mpc.set_objective(mterm=m_term, lterm=l_term)
+    mpc.set_rterm(T=0.1, a=0.2, b=0.2, R1 = 0.1, R2 = 0.1)  # control effort penalty
+
+    tvp_template = mpc.get_tvp_template()
+
+    # define general desired state(s)
+    # to be followed at (mostly) all times
+    r_dot_ref_num = np.array([0.0, 0.0, 0.0])
+    omega_ref_num = np.array([0.0, 0.0, 0.0])
+    omega_dot_ref_num = np.array([0.0, 0.0, 0.0])
+
+    # define ascent phase desired state(s)
+    r_ref_num_hi_hover = np.array([0.0, 0.0, 5.0])
+    x_ref_num_ascent = np.concatenate((r_ref_num_hi_hover, np.array([0.0,0.0,1.0]), omega_ref_num, omega_dot_ref_num, m_ref/2), axis=None)
+    # reference velocity is 1 m/s in the z direction for ascent phase.
+
+    # define hi hover phase desired state(s)
+    x_ref_num_hi_hover = np.concatenate((r_ref_num_hi_hover, r_dot_ref_num, omega_ref_num, omega_dot_ref_num, m_min), axis=None)
+
+    # define descent phase desired state(s)
+    # TAKE PRECAUTION, DO NOT SET Z VELOCITY TO BE TOO LOW, IT WILL CRASH INTO THE GROUND.
+    r_ref_num_lo_hover = np.array([0.0, 0.0, 0.1])
+    x_ref_num_descent = np.concatenate((r_ref_num_lo_hover, np.array([0.0,0.0,-0.5]), omega_ref_num, omega_dot_ref_num, m_min), axis=None)
+
+    # define lo hover phase desired state(s)
+    x_ref_num_lo_hover = np.concatenate((np.array([0.0,0.0,0.0]), r_dot_ref_num, omega_ref_num, omega_dot_ref_num, m_min), axis=None)
+
+    def tvp_fun(t_now):
+        # define the reference trajectory here
+        # Ascend for 10 seconds, hover for 5, descend in 7.5, then hover for the remainder.
+        # Simulation time should be longer than this for best results.
+        if t_now < 10:
+            x_ref_num = x_ref_num_ascent
+        elif t_now < 15:
+            x_ref_num = x_ref_num_hi_hover
+        elif t_now < 22.5:
+            x_ref_num = x_ref_num_descent
+        else:
+            x_ref_num = x_ref_num_lo_hover
+        tvp_template['_tvp', :] = x_ref_num
+        # tvp_template['_tvp', :] = x_ref_num_hi_hover
+        return tvp_template
+
+    mpc.set_tvp_fun(tvp_fun)
+
+    mpc.bounds['lower', '_x', 'r'] = -np.inf
+    mpc.bounds['upper', '_x','r'] = np.inf
+    mpc.bounds['lower', '_x', 'r_dot'] = -np.inf
+    mpc.bounds['upper', '_x', 'r_dot'] = np.inf
+    mpc.bounds['lower', '_x', 'omega'] = -np.inf
+    mpc.bounds['upper', '_x', 'omega'] = np.inf
+    mpc.bounds['lower', '_x', 'omega_dot'] = -np.inf
+    mpc.bounds['upper', '_x', 'omega_dot'] = np.inf
+    mpc.bounds['lower', '_x', 'm'] = m_min  # mass cannot be less than minimum mass (dry mass)
+    mpc.bounds['upper', '_x', 'm'] = m_0  # mass cannot be higher than initial mass (wet mass)
+    mpc.bounds['lower', '_u', 'a'] = -np.pi/12  # gimbal angle cannot be too low
+    mpc.bounds['upper', '_u', 'a'] = np.pi/12  # gimbal angle cannot be too high
+    mpc.bounds['lower', '_u', 'b'] = -np.pi/12  # gimbal angle cannot be too low
+    mpc.bounds['upper', '_u', 'b'] = np.pi/12  # gimbal angle cannot be too high
+    mpc.bounds['upper', '_u', 'T'] = 15.0  # thrust cannot be too high
+    mpc.bounds['lower', '_u', 'T'] = 0.0  # thrust cannot be lower than burnout thrust
+    mpc.bounds['lower', '_u', 'R1'] = 0  # rcs cannot be negative
+    mpc.bounds['upper', '_u', 'R1'] = 1  # max rcs1 thrust
+    mpc.bounds['lower', '_u', 'R2'] = 0  # rcs cannot be negative
+    mpc.bounds['upper', '_u', 'R2'] = 1  # max rcs2 thrust
+
+    # Scaling can be done, will not be done here because I don't know how it works or if its needed.
     mpc.setup()
 
-    print("MPC initialized.")
-
-    # return mpc
-
-    # DEBUGGING. REMOVE LATER (MAYBE)
-
-    # estimator - for debugging state space model
-    estimator = do_mpc.estimator.StateFeedback(model)
-
-    # integrated simulator - for debugging state space model 
-    simulator = do_mpc.simulator.Simulator(model)
-    simulator.set_param(t_step=dt_disc)
-    simulator.setup()
-
-    x0 = np.zeros((12,1))
-    simulator.x0 = x0
-    estimator.x0 = x0
-
-    mpc.set_initial_guess()
-
-    # %%capture - use only on jupyter notebook
-    for k in range(50):
-        u0 = mpc.make_step(x0)
-        y_next = simulator.make_step(u0)
-        x0 = estimator.make_step(y_next)
-
-    rcParams['axes.grid'] = True
-    rcParams['font.size'] = 18
-
-    import matplotlib.pyplot as plt
-    fig, ax, graphics = do_mpc.graphics.default_plot(mpc.data, figsize=(16,9))
-    graphics.plot_results()
-    graphics.reset_axes()
-    plt.show()
-
-def run_mpc(f_sym_dt, x, u):
-    print("Running MPC with f_sym_dt, debug")
-    return np.array(f_sym_dt(x.reshape(12,1), u)).flatten()
+    return mpc
     
-if __name__ == "__main__":
-    # Example usage
-    f_sym, x_sym, u_sym = calculate_f_nonlinear_sym()
-    mpc = initialize_mpc(x_sym, u_sym, f_sym)
-    print("Integrated testing completed.")
