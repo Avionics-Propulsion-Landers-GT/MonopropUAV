@@ -238,7 +238,7 @@ def initialize_mpc():
     # Cost matrix for state.
     Q = np.diag([1.0, 1.0, 2.5, # xyz position state penalty
                 1.0, 1.0, 3.0, # xyz velocity state penalty
-                3.0, 3.0, 2.0, # pitch, yaw, roll angle penalty
+                6.0, 6.0, 2.0, # pitch, yaw, roll angle penalty
                 3.0, 3.0, 2.0, # pitch, yaw, roll rate penalty
                 0.01 # mass penalty. Low because if its too high its not gonna work.
                 ])
@@ -250,7 +250,7 @@ def initialize_mpc():
     l_term = m_term
 
     mpc.set_objective(mterm=m_term, lterm=l_term)
-    mpc.set_rterm(T=0.1, a=0.2, b=0.2, R1 = 0.1, R2 = 0.1)  # control effort penalty
+    mpc.set_rterm(T=0.1, a=0.5, b=0.5, R1 = 0.1, R2 = 0.1)  # control effort penalty
 
     tvp_template = mpc.get_tvp_template()
 
@@ -315,6 +315,7 @@ def initialize_mpc():
     mpc.bounds['lower', '_u', 'R2'] = 0  # rcs cannot be negative
     mpc.bounds['upper', '_u', 'R2'] = 1  # max rcs2 thrust
 
+    mpc.settings.supress_ipopt_output()
     # Scaling can be done, will not be done here because I don't know how it works or if its needed.
     mpc.setup()
 

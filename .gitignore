@@ -12,6 +12,7 @@ Algorithms/DynamicsModel/monocopter_dynamics_model.asv
 Algorithms/DynamicsModel/FHL-DM/position_plot.html
 Algorithms/DynamicsModel/FHL-DM/velocity_plot.html
 Algorithms/DynamicsModel/FHL-DM/attitude_plot.html
+Algorithms/DynamicsModel/FHL-DM/mass_plot.html
 Algorithms/DynamicsModel/FHL-DM/command_plot.html
 Algorithms/DynamicsModel/FHL-DM/simulation_results.csv
 Sensing&Controls/AttitudeEstimation/__pycache__/ExtendedKalmanFilterAltitude.cpython-312.pyc

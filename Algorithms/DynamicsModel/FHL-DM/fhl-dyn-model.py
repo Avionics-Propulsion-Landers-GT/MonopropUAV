@@ -84,11 +84,13 @@ class RocketParams:
     Cd_x: float = 0.1
     Cd_y: float = 0.1
     Cd_z: float = 0.1
-    A_x: float = 0.7  # m²
-    A_y: float = 0.7
-    A_z: float = 0.7
+    A_x: float = 0.1  # m²
+    A_y: float = 0.1
+    A_z: float = 0.1
 
     rcs_offset: float = 0.05  # m
+
+    alpha = 0.005
 
     air_density: float = 1.225  # kg / m³
 
@@ -117,8 +119,10 @@ class State:
     att: R = field(default_factory=lambda: R.identity())  # body→world
     ang_vel: np.ndarray = field(default_factory=lambda: np.zeros(3))
     ang_accel: np.ndarray = field(default_factory=lambda: np.zeros(3))
-    m = m_0
+    m: np.float = m_0
 
+
+# I don't think we need this
 def state_to_vec(s: State, *, to_dm: bool = False):
     """
     Convert `State` → 12×1 NumPy (or CasADi DM) vector in the order
@@ -149,12 +153,17 @@ def thrust_body(params: RocketParams, F_mag: float, thrust_gimbal_xyz: np.ndarra
     * ``thrust_gimbal_xyz`` – extrinsic‑XYZ angles (rad) describing how the
       engine nozzle is pointed relative to the body *Z* axis.
     """
-    R_gimbal = extrinsic_rotation_matrix(thrust_gimbal_xyz)
-    ez = np.array([0.0, 0.0, 1.0])
-    F_b = F_mag * (R_gimbal @ ez)  # N
+    # R_gimbal = extrinsic_rotation_matrix(thrust_gimbal_xyz)
+    # ez = np.array([0.0, 0.0, 1.0])
+    # F_b = F_mag * (R_gimbal @ ez)  # N
+    F_b = np.array(
+        [F_mag*(np.cos(thrust_gimbal_xyz[1]))*(np.sin(thrust_gimbal_xyz[0])),
+        F_mag*(np.sin(thrust_gimbal_xyz[0])),
+        F_mag*(np.cos(thrust_gimbal_xyz[1]))*(np.cos(thrust_gimbal_xyz[0]))]
+    )
 
     # Assume torque about COM arises from gimbal and structural offset
-    r_b = params.thrust_offset + params.gimbal_offset
+    r_b = params.thrust_offset 
     T_b = np.cross(r_b, F_b)
     T_rcs = params.rcs_offset * R1 - params.rcs_offset * R2
     T_b += T_rcs
@@ -186,29 +195,33 @@ def integrate_step(params: RocketParams,
                    state: State,
                    F_b: np.ndarray,
                    T_b: np.ndarray,
-                   v_wind_wf: np.ndarray = np.zeros(3)) -> State:
+                   F_mag: np.float,
+                   v_wind_wf: np.ndarray = np.zeros(3),) -> State:
     """Advance one Euler step (explicit)."""
     dt = params.dt
 
-    mass = params.m - alpha*np.linalg.norm(T_b)*dt # mass loss due to propellant consumption
-
+    
     # Forces: convert body‑frame thrust/drag to world
     F_w = state.att.apply(F_b)
 
     # Gravity in world frame
-    F_grav = np.array([0.0, 0.0, -params.m * 9.80665])
+    F_grav = np.array([0.0, 0.0, -state.m * 9.80665])
 
     # --- Translational dynamics -------------------------------------------------
-    accel_w = (F_grav + F_w) / params.m
+    accel_w = (F_grav + F_w) / state.m
     vel_w = state.vel + accel_w * dt
     pos_w = state.pos + vel_w * dt
 
     # --- Rotational dynamics ----------------------------------------------------
     ang_accel_b = params.inv_I @ T_b
-    ang_vel_b = state.ang_vel + ang_accel_b * dt
+    ang_accel_w = state.att.apply(ang_accel_b)
+    ang_vel_w = state.ang_vel + ang_accel_w * dt
+
+    # --- Mass Reduction ------------------
+    mass = state.m - params.alpha*F_mag*dt # mass loss due to propellant consumption
 
     # Propagate orientation via incremental rotation vector (Rodrigues/exp‑map)
-    dR = R.from_rotvec(ang_vel_b * dt)  # body→body'
+    dR = R.from_rotvec(ang_vel_w * dt)  # body→body'
     att_new = state.att * dR  # body→world update
 
     # Pack new state -------------------------------------------------------------
@@ -217,8 +230,8 @@ def integrate_step(params: RocketParams,
         vel=vel_w,
         accel=accel_w,
         att=att_new,
-        ang_vel=ang_vel_b,
-        ang_accel=ang_accel_b,
+        ang_vel=ang_vel_w,
+        ang_accel=ang_accel_w,
         m = mass
     )
 
@@ -228,13 +241,14 @@ def integrate_step(params: RocketParams,
 # -----------------------------------------------------------------------------
 
 def simulate(params: RocketParams, controller,
-             t_end: float = 5.0,
+             t_end: float = 40.0,
              out_csv: str | Path = "simulation_results.csv") -> None:
     """Run an open‑loop ascent/hover/descent profile and dump CSV."""
     n = int(np.round(t_end / params.dt)) + 1
     times: List[float] = []
     poses: List[np.ndarray] = []
     vels: List[np.ndarray] = []
+    mass: List[float] = []
     attitude: List[np.ndarray] = []
     command: List[np.ndarray] = []
 
@@ -259,7 +273,7 @@ def simulate(params: RocketParams, controller,
         # if t < 10.0:
         #     F_mag = 15.0
         # elif t < 20.0:
-        #     F_mag = params.m * 9.80665
+        #     F_mag = state.m * 9.80665
         # elif t < 30.0:
         #     F_mag = 0.0
         # else:
@@ -268,15 +282,15 @@ def simulate(params: RocketParams, controller,
         # thrust_gimbal = np.zeros(3)  # keep nozzle aligned with body Z
         # x_meas = state_to_vec(state, to_dm=False)
         
-        x_meas = np.array([state.pos[0], state.pos[1], state.pos[2], state.vel[0], state.vel[1], state.vel[2], state.att.as_euler("xyz")[0], state.att.as_euler("xyz")[1], state.att.as_euler("xyz")[2], state.ang_vel[0], state.ang_vel[1], state.ang_vel[2], params.m])
+        x_meas = np.array([state.pos[0], state.pos[1], state.pos[2], state.vel[0], state.vel[1], state.vel[2], state.att.as_euler("xyz")[0], state.att.as_euler("xyz")[1], state.att.as_euler("xyz")[2], state.ang_vel[0], state.ang_vel[1], state.ang_vel[2], state.m])
         # print(x_meas)
         u_cmd = controller.make_step(x_meas).flatten()
         # print(u_cmd)
         F_mag = u_cmd[0]
         # thrust_gimbal = np.ndarray([float(u_cmd[1]), float(u_cmd[2])])  # gimbal angles
         thrust_gimbal = np.zeros(3)
-        thrust_gimbal[0] = u_cmd[1]  # gimbal angle A
-        thrust_gimbal[1] = u_cmd[2]  # gimbal angle B
+        thrust_gimbal[0] = 0  # gimbal angle A. Temporarily set to zero.
+        thrust_gimbal[1] = 0  # gimbal angle B. Temporarily set to zero.
         R1 = u_cmd[3]  # RCS1
         R2 = u_cmd[4]  # RCS2
 
@@ -301,12 +315,13 @@ def simulate(params: RocketParams, controller,
 
         # Integrate one step
         print("integrating step")
-        state = integrate_step(params, state, F_total_b, T_total_b)
+        state = integrate_step(params, state, F_total_b, T_total_b, F_mag)
 
         # History ---------------------------------------------------
         times.append(t)
         poses.append(state.pos.copy())
         vels.append(state.vel.copy())
+        mass.append(state.m.copy())
         attitude.append(state.att.as_euler("xyz"))
         command.append(np.array([F_mag, thrust_gimbal[0], thrust_gimbal[1]]))
 
@@ -317,10 +332,11 @@ def simulate(params: RocketParams, controller,
         np.array(times),
         np.array(poses),
         np.array(vels),
+        np.array(mass),
         np.array(attitude),
         np.array(command),
     ])
-    header = "time,x,y,z,vx,vy,vz,att_x,att_y,att_z,thrust,gimbal_a,gimbal_b"
+    header = "time,x,y,z,vx,vy,vz,m,att_x,att_y,att_z,thrust,gimbal_a,gimbal_b"
     np.savetxt(out_csv, data, delimiter=",", header=header, comments="")
     print(f"Simulation complete → {out_csv} ({len(times)} samples).")
 
@@ -332,7 +348,7 @@ if __name__ == "__main__":
     # f_sym, x_sym, u_sym = calculate_f_nonlinear_sym()
     params = RocketParams()
     mpc = initialize_mpc()
-    x = np.zeros(13)
+    x = np.array([[0,0,0,0,0,0,0,0,0,0,0,0,m_0]]).T
     mpc.x0 = x
     mpc.set_initial_guess()
     u = np.zeros(5)

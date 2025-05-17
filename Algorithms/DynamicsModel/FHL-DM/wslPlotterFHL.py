@@ -40,6 +40,17 @@ layout_vel = go.Layout(
 
 fig_vel = go.Figure(data=[trace_vx, trace_vy, trace_vz], layout=layout_vel)
 
+# --- Mass Plot ---
+trace_m = go.Scatter(x=data['time'], y=data['m'], mode='lines', name='Mass')
+
+layout_mass = go.Layout(
+    title='Mass vs Time',
+    xaxis=dict(title='Time'),
+    yaxis=dict(title='Mass (kg)')
+)
+
+fig_mass = go.Figure(data=[trace_m], layout=layout_mass)
+
 # --- Attitude Plot ---
 trace_att_x = go.Scatter(x=data['time'], y=data['att_x'], mode='lines', name='Attitude X')
 trace_att_y = go.Scatter(x=data['time'], y=data['att_y'], mode='lines', name='Attitude Y')
@@ -95,6 +106,7 @@ fig_cmd = go.Figure(data=[trace_thrust, trace_a, trace_b], layout=layout_cmd)
 position_path = os.path.join(BASE_DIR, "position_plot.html")
 velocity_path = os.path.join(BASE_DIR, "velocity_plot.html")
 attitude_path = os.path.join(BASE_DIR, "attitude_plot.html")
+mass_path = os.path.join(BASE_DIR, "mass_plot.html")
 command_path  = os.path.join(BASE_DIR, "command_plot.html")
 # pos_des_path  = os.path.join(BASE_DIR, "desired_position_plot.html")
 # vel_des_path  = os.path.join(BASE_DIR, "desired_velocity_plot.html")
@@ -102,13 +114,14 @@ command_path  = os.path.join(BASE_DIR, "command_plot.html")
 fig_pos.write_html(position_path)
 fig_vel.write_html(velocity_path)
 fig_att.write_html(attitude_path)
+fig_mass.write_html(mass_path)
 fig_cmd.write_html(command_path)
 # fig_pos_des.write_html(pos_des_path)
 # fig_vel_des.write_html(vel_des_path)
 
 # Absolute paths
 abs_paths = [os.path.abspath(p) for p in [
-    position_path, velocity_path, attitude_path, command_path
+    position_path, velocity_path, attitude_path, mass_path, command_path
 ]]
 win_paths = [to_windows_path(p) for p in abs_paths]
 
