@@ -1,3 +1,5 @@
+'''MAKE SURE YOU CD INTO THE DIRECTORY THIS FILE SITS IN AND RUN DYNAMICS MODEL BEFORE RUNNING THIS.'''
+
 import pandas as pd
 import plotly.graph_objs as go
 import os

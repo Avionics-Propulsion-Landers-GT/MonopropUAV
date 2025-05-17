@@ -40,23 +40,23 @@ from scipy.spatial.transform import Rotation as R
 
 m_0 = 1.0 # initial mass, in kg. 
 
-def extrinsic_rotation_matrix(euler_xyz: np.ndarray) -> np.ndarray:
-    """Return *world←body* rotation for extrinsic **Z‑Y‑X** (yaw‑pitch‑roll)."""
-    roll, pitch, yaw = euler_xyz  # x, y, z
-    cr, sr = np.cos(roll), np.sin(roll)
-    cp, sp = np.cos(pitch), np.sin(pitch)
-    cy, sy = np.cos(yaw), np.sin(yaw)
+# def extrinsic_rotation_matrix(euler_xyz: np.ndarray) -> np.ndarray:
+#     """Return *world←body* rotation for extrinsic **Z‑Y‑X** (yaw‑pitch‑roll)."""
+#     roll, pitch, yaw = euler_xyz  # x, y, z
+#     cr, sr = np.cos(roll), np.sin(roll)
+#     cp, sp = np.cos(pitch), np.sin(pitch)
+#     cy, sy = np.cos(yaw), np.sin(yaw)
 
-    Rx = np.array([[1, 0, 0],
-                   [0, cr, -sr],
-                   [0, sr, cr]])
-    Ry = np.array([[cp, 0, sp],
-                   [0, 1, 0],
-                   [-sp, 0, cp]])
-    Rz = np.array([[cy, -sy, 0],
-                   [sy, cy, 0],
-                   [0, 0, 1]])
-    return Rz @ Ry @ Rx
+#     Rx = np.array([[1, 0, 0],
+#                    [0, cr, -sr],
+#                    [0, sr, cr]])
+#     Ry = np.array([[cp, 0, sp],
+#                    [0, 1, 0],
+#                    [-sp, 0, cp]])
+#     Rz = np.array([[cy, -sy, 0],
+#                    [sy, cy, 0],
+#                    [0, 0, 1]])
+#     return Rz @ Ry @ Rx
 
 
 # -----------------------------------------------------------------------------
@@ -71,7 +71,9 @@ class RocketParams:
     m_static: float = 0.9  # kg
     m_gimbal_top: float = 0.05
     m_gimbal_bottom: float = 0.05
+    m_0: float = m_static + m_gimbal_top + m_gimbal_bottom 
     I_body: np.ndarray = field(default_factory=lambda: np.diag([1.0, 1.0, 1.0]))
+    # these are not used
     I_gimbal_top: np.ndarray = field(default_factory=lambda: np.diag([0.5, 0.5, 0.5]))
     I_gimbal_bottom: np.ndarray = field(default_factory=lambda: np.diag([0.5, 0.5, 0.5]))
 
@@ -123,24 +125,24 @@ class State:
 
 
 # I don't think we need this
-def state_to_vec(s: State, *, to_dm: bool = False):
-    """
-    Convert `State` → 12×1 NumPy (or CasADi DM) vector in the order
-    [ r_x, r_y, r_z,  v_x, v_y, v_z,  ψ, θ, φ,  ψ̇, θ̇, φ̇ ].
-    """
-    # Euler angles MUST match the convention in your model:
-    # R_bf = R_z(phi) * R_y(theta) * R_x(psi)  ⇒  extrinsic Z‑Y‑X
-    psi, theta, phi = s.att.as_euler('xyz', degrees=False)  # X‑Y‑Z intrinsic
-    x_vec = np.concatenate([
-        s.pos,                    # r_x, r_y, r_z
-        s.vel,                    # v_x, v_y, v_z
-        [psi, theta, phi],        # ψ, θ, φ
-        s.ang_vel,                 # ψ̇, θ̇, φ̇
-        s.m
-    ])
-    if to_dm:
-        return ca.DM(x_vec).reshape((-1, 1))  # (12,1) DM column
-    return x_vec                               # (12,) NumPy
+# def state_to_vec(s: State, *, to_dm: bool = False):
+#     """
+#     Convert `State` → 12×1 NumPy (or CasADi DM) vector in the order
+#     [ r_x, r_y, r_z,  v_x, v_y, v_z,  ψ, θ, φ,  ψ̇, θ̇, φ̇ ].
+#     """
+#     # Euler angles MUST match the convention in your model:
+#     # R_bf = R_z(phi) * R_y(theta) * R_x(psi)  ⇒  extrinsic Z‑Y‑X
+#     psi, theta, phi = s.att.as_euler('zyx', degrees=False)  
+#     x_vec = np.concatenate([
+#         s.pos,                    # r_x, r_y, r_z
+#         s.vel,                    # v_x, v_y, v_z
+#         [psi, theta, phi],        # ψ, θ, φ
+#         s.ang_vel,                 # ψ̇, θ̇, φ̇
+#         s.m
+#     ])
+#     if to_dm:
+#         return ca.DM(x_vec).reshape((-1, 1))  # (12,1) DM column
+#     return x_vec                               # (12,) NumPy
 
 
 # -----------------------------------------------------------------------------
@@ -215,13 +217,14 @@ def integrate_step(params: RocketParams,
     # --- Rotational dynamics ----------------------------------------------------
     ang_accel_b = params.inv_I @ T_b
     ang_accel_w = state.att.apply(ang_accel_b)
+    ang_vel_b = state.ang_vel + ang_accel_b * dt
     ang_vel_w = state.ang_vel + ang_accel_w * dt
 
     # --- Mass Reduction ------------------
     mass = state.m - params.alpha*F_mag*dt # mass loss due to propellant consumption
 
     # Propagate orientation via incremental rotation vector (Rodrigues/exp‑map)
-    dR = R.from_rotvec(ang_vel_w * dt)  # body→body'
+    dR = R.from_rotvec(ang_vel_b * dt)  # body→body'
     att_new = state.att * dR  # body→world update
 
     # Pack new state -------------------------------------------------------------
@@ -230,8 +233,8 @@ def integrate_step(params: RocketParams,
         vel=vel_w,
         accel=accel_w,
         att=att_new,
-        ang_vel=ang_vel_w,
-        ang_accel=ang_accel_w,
+        ang_vel=ang_vel_b,
+        ang_accel=ang_accel_b,
         m = mass
     )
 
@@ -262,25 +265,6 @@ def simulate(params: RocketParams, controller,
     for i in range(n):
         t = i * params.dt
         print(t)
-
-        # -----------------------------------
-        # Basic thrust schedule (open loop):
-        #   0–10 s  : full thrust up (15 N)
-        #   10–20 s : hover (~mg)
-        #   20–30 s : engine off, free fall
-        #   30–40 s : retro‑thrust to slow
-        # -----------------------------------
-        # if t < 10.0:
-        #     F_mag = 15.0
-        # elif t < 20.0:
-        #     F_mag = state.m * 9.80665
-        # elif t < 30.0:
-        #     F_mag = 0.0
-        # else:
-        #     F_mag = 5.0
-
-        # thrust_gimbal = np.zeros(3)  # keep nozzle aligned with body Z
-        # x_meas = state_to_vec(state, to_dm=False)
         
         x_meas = np.array([state.pos[0], state.pos[1], state.pos[2], state.vel[0], state.vel[1], state.vel[2], state.att.as_euler("xyz")[0], state.att.as_euler("xyz")[1], state.att.as_euler("xyz")[2], state.ang_vel[0], state.ang_vel[1], state.ang_vel[2], state.m])
         # print(x_meas)
@@ -299,12 +283,12 @@ def simulate(params: RocketParams, controller,
         velocity_mag = np.linalg.norm(state.vel)
         if velocity_mag > 0.0:
             # cosine alpha is not calculated this way in mpc.py. May cause problems later.
-            cos_alpha = np.clip(np.dot(state.vel / velocity_mag, np.array([0.0, 0.0, np.sign(state.vel[2])])), -1.0, 1.0)
+            cos_alpha = np.dot(state.vel / velocity_mag, np.array([0.0, 0.0, 1.0])) # switch 1 with np.sign(state.vel[2]) later
             AoA = np.arccos(cos_alpha)
             params.Cd_x = -0.449 * np.cos(3.028 * np.degrees(AoA)) + 0.463
             params.Cd_y = params.Cd_x
             params.Cd_z = -0.376 * np.cos(5.675 * np.degrees(AoA)) + 1.854
-            # ignoring these curve fits for now because MPC model is not updated to this standard.
+        
 
         # Body‑frame forces
         F_thrust_b, T_thrust_b = thrust_body(params, F_mag, thrust_gimbal, R1, R2)
@@ -314,7 +298,7 @@ def simulate(params: RocketParams, controller,
         T_total_b = T_thrust_b + T_drag_b
 
         # Integrate one step
-        print("integrating step")
+        # print("integrating step")
         state = integrate_step(params, state, F_total_b, T_total_b, F_mag)
 
         # History ---------------------------------------------------
@@ -348,7 +332,7 @@ if __name__ == "__main__":
     # f_sym, x_sym, u_sym = calculate_f_nonlinear_sym()
     params = RocketParams()
     mpc = initialize_mpc()
-    x = np.array([[0,0,0,0,0,0,0,0,0,0,0,0,m_0]]).T
+    x = np.array([[0,0,0,0,0,0,0,0,0,0,0,0,params.m_0]]).T
     mpc.x0 = x
     mpc.set_initial_guess()
     u = np.zeros(5)

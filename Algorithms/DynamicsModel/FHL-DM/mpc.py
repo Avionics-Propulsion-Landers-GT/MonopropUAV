@@ -88,14 +88,11 @@ def initialize_mpc():
 
     zero_err = np.full(3, 1e-6) # small number to avoid division by zero
 
-    model.set_expression('AoA', ca.dot(r_dot+zero_err, np.array([0, 0, 1]))/ca.norm_2(r_dot+zero_err)) # angle of attack in radians
+    model.set_expression('AoA', ca.acos(ca.dot(r_dot+zero_err, np.array([0, 0, 1]))/ca.norm_2(r_dot+zero_err))) # angle of attack in radians
     AoA = model.aux['AoA']
-    # C_dx = model.set_variable('_aux', 'C_dx') # drag coefficient in body x direction
-    # C_dy = model.set_variable('_aux', 'C_dy') # drag coefficient in body y direction
-    # C_dz = model.set_variable('_aux', 'C_dz') # drag coefficient in body z direction
-    model.set_expression('C_dx', -0.449*ca.fabs((ca.cos(3.028*AoA*180/np.pi))) + 0.463)
-    model.set_expression('C_dy', -0.449*ca.fabs((ca.cos(3.028*AoA*180/np.pi))) + 0.463)
-    model.set_expression('C_dz', -0.376*ca.fabs((ca.cos(5.675*AoA*180/np.pi))) + 1.854)
+    model.set_expression('C_dx', -0.449*(ca.cos(3.028*AoA*180/np.pi)) + 0.463)
+    model.set_expression('C_dy', -0.449*(ca.cos(3.028*AoA*180/np.pi)) + 0.463)
+    model.set_expression('C_dz', -0.376*(ca.cos(5.675*AoA*180/np.pi)) + 1.854)
     C_dx = model.aux['C_dx']
     C_dy = model.aux['C_dy']
     C_dz = model.aux['C_dz']
@@ -122,7 +119,7 @@ def initialize_mpc():
         0,
         -m*g
     )
-    F_g_bf = ca.mtimes(R_wf, F_g_wf) 
+    F_g_bf = ca.mtimes(R_bf, F_g_wf) 
 
     # Net force and linear in body frame
     F_net_bf = F_t_bf + F_d_bf + F_g_bf
@@ -250,7 +247,7 @@ def initialize_mpc():
     l_term = m_term
 
     mpc.set_objective(mterm=m_term, lterm=l_term)
-    mpc.set_rterm(T=0.1, a=0.5, b=0.5, R1 = 0.1, R2 = 0.1)  # control effort penalty
+    mpc.set_rterm(T=0.1, a=0.2, b=0.2, R1 = 0.1, R2 = 0.1)  # control effort penalty
 
     tvp_template = mpc.get_tvp_template()
 
