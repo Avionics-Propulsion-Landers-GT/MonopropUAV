@@ -315,9 +315,6 @@ def initialize_mpc():
     mpc.bounds['lower', '_u', 'R2'] = 0  # rcs cannot be negative
     mpc.bounds['upper', '_u', 'R2'] = 1  # max rcs2 thrust
 
-    # silencing solver output
-    mpc.settings.supress_ipopt_output()
-
     # Scaling can be done, will not be done here because I don't know how it works or if its needed.
     mpc.setup()
 

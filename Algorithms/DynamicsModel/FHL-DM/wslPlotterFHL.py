@@ -5,10 +5,9 @@ import subprocess
 
 # Get base directory
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-# print(BASE_DIR)
 
 # Load the simulation data
-csv_path = os.path.join(BASE_DIR, "simulation_results_new.csv")
+csv_path = os.path.join(BASE_DIR, "simulation_results.csv")
 data = pd.read_csv(csv_path)
 
 # Convert WSL path to Windows-style UNC path for Chrome
