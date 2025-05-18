@@ -37,7 +37,7 @@ m_0 = 1.0  # starting mass.
 m_min = 0.1 # minimum mass.
 rho = 1.225  # air density
 A = 0.1  # cross-sectional area
-alpha = 0.005 # mass flow rate coefficient (determine empirically, given by propulsion team)
+alpha = 0.001 # mass flow rate coefficient (determine empirically, given by propulsion team)
 
 def initialize_mpc():
     # First, create the continuous time state space model.
@@ -237,7 +237,7 @@ def initialize_mpc():
     # Cost matrix for state.
     Q = np.diag([1.0, 1.0, 4.0, # xyz position state penalty
                 1.0, 1.0, 3.0, # xyz velocity state penalty
-                6.0, 6.0, 2.0, # pitch, yaw, roll angle penalty
+                4.0, 4.0, 1.0, # pitch, yaw, roll angle penalty
                 6.0, 6.0, 2.0, # pitch, yaw, roll rate penalty
                 0.01 # mass penalty. Low because if its too high its not gonna work.
                 ])
@@ -249,7 +249,7 @@ def initialize_mpc():
     l_term = m_term
 
     mpc.set_objective(mterm=m_term, lterm=l_term)
-    mpc.set_rterm(T=0.1, a=0.8, b=0.8, R1 = 0.1, R2 = 0.1)  # control effort penalty
+    mpc.set_rterm(T=0.1, a=0.3, b=0.3, R1 = 0.4, R2 = 0.4)  # control effort penalty
 
     tvp_template = mpc.get_tvp_template()
 
@@ -261,7 +261,7 @@ def initialize_mpc():
 
     # define ascent phase desired state(s)
     r_ref_num_hi_hover = np.array([0.0, 0.0, 5.0])
-    x_ref_num_ascent = np.concatenate((r_ref_num_hi_hover, np.array([0.0,0.0,0.5]), omega_ref_num, omega_dot_ref_num, m_ref/2), axis=None)
+    x_ref_num_ascent = np.concatenate((r_ref_num_hi_hover, np.array([0.0,0.0,0.35]), omega_ref_num, omega_dot_ref_num, m_ref/2), axis=None)
     # reference velocity is 1 m/s in the z direction for ascent phase.
 
     # define hi hover phase desired state(s)
@@ -281,9 +281,9 @@ def initialize_mpc():
         # Simulation time should be longer than this for best results.
         if t_now < 10:
             x_ref_num = x_ref_num_ascent
-        elif t_now < 15:
+        elif t_now < 20:
             x_ref_num = x_ref_num_hi_hover
-        elif t_now < 22.5:
+        elif t_now < 30:
             x_ref_num = x_ref_num_descent
         else:
             x_ref_num = x_ref_num_lo_hover

@@ -38,7 +38,7 @@ from scipy.spatial.transform import Rotation as R
 # Helper functions (vector + quaternion)
 # -----------------------------------------------------------------------------
 
-m_0 = 1.0 # initial mass, in kg. 
+# m_0 = 1.0 # initial mass, in kg. 
 
 def extrinsic_rotation_matrix(euler_xyz: np.ndarray) -> np.ndarray:
     # """Return *world←body* rotation for extrinsic **Z‑Y‑X** (yaw‑pitch‑roll)."""
@@ -93,7 +93,7 @@ class RocketParams:
 
     rcs_offset: float = 0.05  # m
 
-    alpha = 0.005
+    alpha = 0.001
 
     air_density: float = 1.225  # kg / m³
 

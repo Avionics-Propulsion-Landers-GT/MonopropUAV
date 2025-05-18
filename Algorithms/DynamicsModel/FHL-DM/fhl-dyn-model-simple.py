@@ -85,7 +85,7 @@ class RocketParams:
 
     rcs_offset: float = 0.05  # m
 
-    alpha = 0.005
+    alpha = 0.001
 
     air_density: float = 1.225  # kg / m³
 
