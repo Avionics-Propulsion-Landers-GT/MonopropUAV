@@ -30,7 +30,7 @@ I_b = np.matrix([[0.5, 0.0, 0.0],
 # TODO: add gimbal offset, make rc and rt time dependent (since COM is moving on the rocket due to fuel consumption)
 rc = np.array([0.0, 0.0, 0.1])  # cop offset
 rt = np.array([0.0, 0.0, -0.1])  # cot offset
-r_rcs = 0.05  # rcs offset
+r_rcs = np.array([0.0, 0.0, 0.05])  # rcs offset
 
 g = 9.81  # gravity
 m_0 = 1.0  # starting mass. 
@@ -67,8 +67,8 @@ def initialize_mpc():
     # Rotational Motion
     # first, create rotation matrices from euler angles
     cphi, sphi   = ca.cos(omega[2]),   ca.sin(omega[2]) # roll
-    cth,  sth    = ca.cos(omega[0]), ca.sin(omega[0]) # pitch
-    cpsi, spsi   = ca.cos(omega[1]),   ca.sin(omega[1]) # yaw
+    cth,  sth    = ca.cos(omega[1]), ca.sin(omega[1]) # pitch
+    cpsi, spsi   = ca.cos(omega[0]),   ca.sin(omega[0]) # yaw
 
     R_z = ca.blockcat([[ cphi, -sphi, 0],
                     [ sphi,  cphi, 0],
@@ -122,25 +122,27 @@ def initialize_mpc():
     F_g_bf = ca.mtimes(R_bf, F_g_wf) 
 
     # Net force and linear in body frame
-    F_net_bf = F_t_bf + F_d_bf + F_g_bf
+    F_net_bf = F_t_bf + F_d_bf
 
     # Acceleration in world frame
-    F_net_wf = ca.mtimes(R_wf, F_net_bf)
+    F_net_wf = ca.mtimes(R_wf, F_net_bf + F_g_wf)
     rhs_r_dot = ca.mtimes(1/m, F_net_wf)
 
     # Net torque in body frame
     tau_d_bf = ca.cross(rc, F_d_bf)
     tau_t_bf = ca.cross(rt, F_t_bf)
     tau_rcs_bf = r_rcs*(R1 - R2)
-    tau_net_bf = tau_d_bf + tau_t_bf + tau_rcs_bf
+    tau_net_bf = tau_d_bf + tau_t_bf + tau_rcs_bf - ca.cross(omega, ca.mtimes(I, omega))
     # Net torque in world frame
-    tau_net_wf = ca.mtimes(R_wf, tau_net_bf)
-    I_wf = ca.mtimes(R_wf, I)
-    I_wf = ca.mtimes(I_wf, R_wf.T)
-    I_wf_inv = ca.inv(I_wf)
+    # tau_net_wf = ca.mtimes(R_wf, tau_net_bf)
+    # I_wf = ca.mtimes(R_wf, I)
+    # I_wf = ca.mtimes(I_wf, R_wf.T)
+    # I_wf_inv = ca.inv(I_wf)
 
+    I_inv = ca.inv(I)
+    ang_accel_bf = ca.mtimes(I_inv, tau_net_bf)
     # angular acceleration in world frame
-    rhs_omega_dot = ca.mtimes(I_wf_inv, tau_net_wf)
+    rhs_omega_dot = ca.mtimes(R_wf, ang_accel_bf)
 
     #Translational Velocity
     rhs_r = ca.vertcat(
@@ -233,10 +235,10 @@ def initialize_mpc():
         dm
     )
     # Cost matrix for state.
-    Q = np.diag([1.0, 1.0, 2.5, # xyz position state penalty
+    Q = np.diag([1.0, 1.0, 4.0, # xyz position state penalty
                 1.0, 1.0, 3.0, # xyz velocity state penalty
                 6.0, 6.0, 2.0, # pitch, yaw, roll angle penalty
-                3.0, 3.0, 2.0, # pitch, yaw, roll rate penalty
+                6.0, 6.0, 2.0, # pitch, yaw, roll rate penalty
                 0.01 # mass penalty. Low because if its too high its not gonna work.
                 ])
 
@@ -247,7 +249,7 @@ def initialize_mpc():
     l_term = m_term
 
     mpc.set_objective(mterm=m_term, lterm=l_term)
-    mpc.set_rterm(T=0.1, a=0.2, b=0.2, R1 = 0.1, R2 = 0.1)  # control effort penalty
+    mpc.set_rterm(T=0.1, a=0.8, b=0.8, R1 = 0.1, R2 = 0.1)  # control effort penalty
 
     tvp_template = mpc.get_tvp_template()
 
@@ -259,7 +261,7 @@ def initialize_mpc():
 
     # define ascent phase desired state(s)
     r_ref_num_hi_hover = np.array([0.0, 0.0, 5.0])
-    x_ref_num_ascent = np.concatenate((r_ref_num_hi_hover, np.array([0.0,0.0,1.0]), omega_ref_num, omega_dot_ref_num, m_ref/2), axis=None)
+    x_ref_num_ascent = np.concatenate((r_ref_num_hi_hover, np.array([0.0,0.0,0.5]), omega_ref_num, omega_dot_ref_num, m_ref/2), axis=None)
     # reference velocity is 1 m/s in the z direction for ascent phase.
 
     # define hi hover phase desired state(s)
@@ -291,7 +293,7 @@ def initialize_mpc():
 
     mpc.set_tvp_fun(tvp_fun)
 
-    mpc.bounds['lower', '_x', 'r'] = -np.inf
+    mpc.bounds['lower', '_x', 'r'] = [-np.inf, -np.inf, 0.0]
     mpc.bounds['upper', '_x','r'] = np.inf
     mpc.bounds['lower', '_x', 'r_dot'] = -np.inf
     mpc.bounds['upper', '_x', 'r_dot'] = np.inf

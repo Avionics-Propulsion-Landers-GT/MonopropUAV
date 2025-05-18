@@ -78,6 +78,19 @@ layout_cmd = go.Layout(
 
 fig_cmd = go.Figure(data=[trace_thrust, trace_a, trace_b], layout=layout_cmd)
 
+# --- RCS Plot --- 
+trace_r1 = go.Scatter(x=data['time'], y=data['R1'], mode='lines', name='RC1 Thrust [N]')
+trace_r2 = go.Scatter(x=data['time'], y=data['R2'], mode='lines', name='RC2 Thrust [N]')
+
+layout_rcs = go.Layout(
+    title='RCS vs.Time',
+    xaxis=dict(title='Time'),
+    yaxis=dict(title='Commanded Values'),
+    legend_title='RCS'
+)
+
+fig_rcs = go.Figure(data=[trace_r1, trace_r2], layout=layout_rcs)
+
 # # --- Desired Position Plot ---
 # trace_xac = go.Scatter(x=data['time'], y=data['xac'], mode='lines', name='x_desired')
 # trace_yac = go.Scatter(x=data['time'], y=data['yac'], mode='lines', name='y_desired')
@@ -110,6 +123,7 @@ velocity_path = os.path.join(BASE_DIR, "velocity_plot.html")
 attitude_path = os.path.join(BASE_DIR, "attitude_plot.html")
 mass_path = os.path.join(BASE_DIR, "mass_plot.html")
 command_path  = os.path.join(BASE_DIR, "command_plot.html")
+rcs_path = os.path.join(BASE_DIR, "rcs_plot.html")
 # pos_des_path  = os.path.join(BASE_DIR, "desired_position_plot.html")
 # vel_des_path  = os.path.join(BASE_DIR, "desired_velocity_plot.html")
 
@@ -118,12 +132,13 @@ fig_vel.write_html(velocity_path)
 fig_att.write_html(attitude_path)
 fig_mass.write_html(mass_path)
 fig_cmd.write_html(command_path)
+fig_rcs.write_html(rcs_path)
 # fig_pos_des.write_html(pos_des_path)
 # fig_vel_des.write_html(vel_des_path)
 
 # Absolute paths
 abs_paths = [os.path.abspath(p) for p in [
-    position_path, velocity_path, attitude_path, mass_path, command_path
+    position_path, velocity_path, attitude_path, mass_path, command_path, rcs_path
 ]]
 win_paths = [to_windows_path(p) for p in abs_paths]
 
