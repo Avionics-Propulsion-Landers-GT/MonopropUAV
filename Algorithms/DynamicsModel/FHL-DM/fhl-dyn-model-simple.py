@@ -116,12 +116,33 @@ class State:
     ang_accel: np.ndarray = field(default_factory=lambda: np.zeros(3))
     m: np.float = 1.0 # will be overridden by the m_0 in params.
 
+# Wind dict and wind grabber function.
+wind_dict = {
+    # as of 5/18/2025 at ~10pm, this would only affect the ascent phase of our path.
+    0.0: [0.0, 0.0, 0.0],
+    1.0: [2.0, 0.0, 0.0],
+    3.0: [2.0, 1.0, 0.0],
+    5.0: [0.0, 0.0,-0.5],
+    8.0: [0.0, 0.0, 0.0],
+}
+
+t_pts  = np.fromiter(wind_dict.keys(),  dtype=float)
+uvw    = np.vstack(list(wind_dict.values()))          # shape (N,3)
+
+def wind_at(t):
+    """Piece-wise linear interpolation with NumPy only."""
+    u = np.interp(t, t_pts, uvw[:,0])
+    v = np.interp(t, t_pts, uvw[:,1])
+    w = np.interp(t, t_pts, uvw[:,2])
+    return np.array([u, v, w]) # functions expect ndarray input.
+
+
 def thrust_body(params: RocketParams, F_mag: float, thrust_gimbal_xyz: np.ndarray, R1: float, R2: float) -> Tuple[np.ndarray, np.ndarray]:
     """Return thrust force/torque in the **body** frame.
     """
     F_b = np.array(
         [F_mag*(np.cos(thrust_gimbal_xyz[1]))*(np.sin(thrust_gimbal_xyz[0])),
-        F_mag*(np.sin(thrust_gimbal_xyz[0])),
+        F_mag*(np.sin(thrust_gimbal_xyz[1])),
         # [0,
         # 0,
         F_mag*(np.cos(thrust_gimbal_xyz[1]))*(np.cos(thrust_gimbal_xyz[0]))]
@@ -178,9 +199,11 @@ def integrate_step(params: RocketParams,
     pos_w = state.pos + vel_w * dt
 
     # --- Rotational dynamics ----------------------------------------------------
-    ang_accel_b = params.inv_I @ T_b
     R_bf = extrinsic_matrix(state.att)
     R_wf = R_bf.T
+    
+    ang_accel_b = params.inv_I @ T_b - np.cross(R_bf @ state.ang_vel, params.I_body @ (R_bf @ state.ang_vel))
+    
     ang_accel_w = R_wf @ ang_accel_b
     ang_vel_b = state.ang_vel + ang_accel_b * dt
     ang_vel_w = state.ang_vel + ang_accel_w * dt
@@ -211,7 +234,7 @@ def integrate_step(params: RocketParams,
     )
 
 def simulate(params: RocketParams, controller,
-             t_end: float = 25,
+             t_end: float = 30,
              out_csv: str | Path = "simulation_results.csv") -> None:
     """Run an open‑loop ascent/hover/descent profile and dump CSV."""
     n = int(np.round(t_end / params.dt)) + 1
@@ -225,7 +248,7 @@ def simulate(params: RocketParams, controller,
     # Initial state: add slight attitude offset to see if quaternion math works
     state = State()
 
-    v_wind = np.zeros(3)  # no wind
+    # v_wind = np.zeros(3)  # no wind
 
     # NOTE: I think i should simulate wind with an acceleration vector field.
 
@@ -240,8 +263,8 @@ def simulate(params: RocketParams, controller,
         F_mag = u_cmd[0]
         # thrust_gimbal = np.ndarray([float(u_cmd[1]), float(u_cmd[2])])  # gimbal angles
         thrust_gimbal = np.zeros(3)
-        thrust_gimbal[0] = u_cmd[1] # gimbal angle A. Temporarily set to zero.
-        thrust_gimbal[1] = u_cmd[2]  # gimbal angle B. Temporarily set to zero.
+        thrust_gimbal[0] = u_cmd[1] # gimbal angle A. 
+        thrust_gimbal[1] = u_cmd[2]  # gimbal angle B. 
         R1 = u_cmd[3]  # RCS1
         R2 = u_cmd[4]  # RCS2
 
@@ -256,6 +279,9 @@ def simulate(params: RocketParams, controller,
             params.Cd_y = params.Cd_x
             params.Cd_z = -0.376 * np.cos(5.675 * np.degrees(AoA)) + 1.854
         
+        v_wind = np.zeros(3)
+
+        v_wind = wind_at(t)
 
         # Body‑frame forces
         F_thrust_b, T_thrust_b = thrust_body(params, F_mag, thrust_gimbal, R1, R2)
@@ -272,7 +298,7 @@ def simulate(params: RocketParams, controller,
         times.append(t)
         poses.append(state.pos.copy())
         vels.append(state.vel.copy())
-        mass.append(state.m.copy())
+        mass.append(state.m)
         attitude.append(state.att.copy())
         command.append(np.array([F_mag, thrust_gimbal[0], thrust_gimbal[1], R1, R2]))
 

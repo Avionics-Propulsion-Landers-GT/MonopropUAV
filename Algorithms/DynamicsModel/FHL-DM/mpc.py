@@ -13,9 +13,9 @@ import do_mpc
 '''Helpers and constants should be defined here.'''
 
 # Inertia Tensors (numeric, gimbals unused)
-I = np.matrix([[1.0, 0.0, 0.0],
-               [0.0, 1.0, 0.0],
-               [0.0, 0.0, 1.0]])
+I = np.matrix([[0.5, 0.0, 0.0],
+               [0.0, 0.5, 0.0],
+               [0.0, 0.0, 0.5]])
 I_s = np.matrix([[1.0, 0.0, 0.0],
                [0.0, 1.0, 0.0],
                [0.0, 0.0, 1.0]])
@@ -28,7 +28,7 @@ I_b = np.matrix([[0.5, 0.0, 0.0],
 
 # COP / COT / COM Offsets (numeric)
 # TODO: add gimbal offset, make rc and rt time dependent (since COM is moving on the rocket due to fuel consumption)
-rc = np.array([0.0, 0.0, 0.1])  # cop offset
+rc = np.array([0.0, 0.0, 0.05])  # cop offset
 rt = np.array([0.0, 0.0, -0.1])  # cot offset
 r_rcs = np.array([0.0, 0.0, 0.05])  # rcs offset
 
@@ -110,7 +110,7 @@ def initialize_mpc():
 
     F_t_bf = ca.vertcat(
         T*ca.cos(b)*ca.sin(a),
-        T*ca.sin(a),
+        T*ca.sin(b),
         T*ca.cos(b)*ca.cos(a)
     )
 
@@ -132,7 +132,7 @@ def initialize_mpc():
     tau_d_bf = ca.cross(rc, F_d_bf)
     tau_t_bf = ca.cross(rt, F_t_bf)
     tau_rcs_bf = r_rcs*(R1 - R2)
-    tau_net_bf = tau_d_bf + tau_t_bf + tau_rcs_bf - ca.cross(omega, ca.mtimes(I, omega))
+    tau_net_bf = tau_d_bf + tau_t_bf + tau_rcs_bf - ca.cross(omega_dot, ca.mtimes(I, omega_dot))
     # Net torque in world frame
     # tau_net_wf = ca.mtimes(R_wf, tau_net_bf)
     # I_wf = ca.mtimes(R_wf, I)
@@ -153,9 +153,9 @@ def initialize_mpc():
 
     # Rotational Velocity
     rhs_omega = ca.vertcat(
-        omega[0],                                                            # φ̇ = ω_x
-        omega[1],                                                            # θ̇ = ω_y
-        omega[2],                                                            # ψ̇ = ω_z
+        omega_dot[0],                                                            # φ̇ = ω_x
+        omega_dot[1],                                                            # θ̇ = ω_y
+        omega_dot[2],                                                            # ψ̇ = ω_z
     )
 
 
@@ -235,10 +235,10 @@ def initialize_mpc():
         dm
     )
     # Cost matrix for state.
-    Q = np.diag([1.0, 1.0, 4.0, # xyz position state penalty
-                1.0, 1.0, 3.0, # xyz velocity state penalty
+    Q = np.diag([7.0, 7.0, 2.0, # xyz position state penalty
+                12.0, 12.0, 3.0, # xyz velocity state penalty
                 4.0, 4.0, 1.0, # pitch, yaw, roll angle penalty
-                6.0, 6.0, 2.0, # pitch, yaw, roll rate penalty
+                6.0, 6.0, 1.5, # pitch, yaw, roll rate penalty
                 0.01 # mass penalty. Low because if its too high its not gonna work.
                 ])
 
@@ -249,7 +249,7 @@ def initialize_mpc():
     l_term = m_term
 
     mpc.set_objective(mterm=m_term, lterm=l_term)
-    mpc.set_rterm(T=0.1, a=0.3, b=0.3, R1 = 0.4, R2 = 0.4)  # control effort penalty
+    mpc.set_rterm(T=0.1, a=0.2, b=0.2, R1 = 0.1, R2 = 0.1)  # control effort penalty
 
     tvp_template = mpc.get_tvp_template()
 
