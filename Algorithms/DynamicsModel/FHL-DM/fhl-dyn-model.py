@@ -43,7 +43,7 @@ from scipy.spatial.transform import Rotation as R
 def extrinsic_rotation_matrix(euler_xyz: np.ndarray) -> np.ndarray:
     # """Return *world←body* rotation for extrinsic **Z‑Y‑X** (yaw‑pitch‑roll)."""
     # idk what this shit does anymore
-    pitch, yaw, roll = euler_xyz  # x, y, z
+    yaw, pitch, roll = euler_xyz  # x, y, z
     cr, sr = np.cos(roll), np.sin(roll)
     cp, sp = np.cos(pitch), np.sin(pitch)
     cy, sy = np.cos(yaw), np.sin(yaw)
@@ -154,10 +154,10 @@ class State:
 wind_dict = {
     # as of 5/18/2025 at ~10pm, this would only affect the ascent phase of our path.
     0.0: [0.0, 0.0, 0.0],
-    1.0: [2.0, 0.0, 0.0],
-    3.0: [2.0, 1.0, 0.0],
-    5.0: [0.0, 0.0,-0.5],
-    8.0: [0.0, 0.0, 0.0],
+    1.0: [5.0, 0.0, 0.0],
+    3.0: [3.0, 4.0, 0.0],
+    5.0: [3.0, 4.0,-0.5],
+    8.0: [1.0, 1.0, 0.0],
 }
 
 t_pts  = np.fromiter(wind_dict.keys(),  dtype=float)
@@ -198,7 +198,7 @@ def thrust_body(params: RocketParams, F_mag: float, thrust_gimbal_xyz: np.ndarra
 def drag_body(params: RocketParams, att: R, vel_wf: np.ndarray, v_wind_wf: np.array) -> Tuple[np.ndarray, np.ndarray]:
     """Simple axis‑aligned quadratic drag model (body frame)."""
     vel_rel_wf = vel_wf - v_wind_wf
-    vel_rel_b = att.inv().apply(vel_rel_wf)  # world → body
+    vel_rel_b = att.apply(vel_rel_wf)  # world → body
     v_mag = np.linalg.norm(vel_rel_b)
 
     if v_mag == 0.0:
@@ -239,8 +239,8 @@ def integrate_step(params: RocketParams,
     pos_w = state.pos + vel_w * dt
 
     # --- Rotational dynamics ----------------------------------------------------
-    ang_accel_b = params.inv_I @ (T_b - np.cross(state.att.inv().apply(state.ang_vel), params.I_body @ state.att.inv().apply(state.ang_vel)))
-    # ang_accel_b = params.inv_I @ (T_b - np.cross(state.ang_vel, params.I_body @ state.ang_vel))
+    # ang_accel_b = params.inv_I @ (T_b - np.cross(state.att.inv().apply(state.ang_vel), params.I_body @ state.att.inv().apply(state.ang_vel)))
+    ang_accel_b = params.inv_I @ (T_b - np.cross(state.ang_vel, params.I_body @ state.ang_vel))
     # ang_accel_b = params.inv_I @ T_b
     # R_bf = extrinsic_rotation_matrix(state.att.as_euler("xyz"))
     # R_wf = R_bf.T
@@ -250,9 +250,9 @@ def integrate_step(params: RocketParams,
     # print(R_bf)
     # print(R_bf_quat)
     ang_accel_w = state.att.inv().apply(ang_accel_b)
-    ang_vel_b = state.att.inv().apply(state.ang_vel) + ang_accel_b * dt
-    # ang_vel_b = state.ang_vel + ang_accel_b * dt
-    ang_vel_w = state.ang_vel + ang_accel_w * dt
+    # ang_vel_b = state.att.apply(state.ang_vel) + ang_accel_b * dt
+    ang_vel_b = state.ang_vel + ang_accel_b * dt
+    # ang_vel_w = state.ang_vel + ang_accel_w * dt
 
     # --- Mass Reduction ------------------
     mass = state.m - params.alpha*F_mag*dt # mass loss due to propellant consumption
@@ -267,8 +267,8 @@ def integrate_step(params: RocketParams,
         vel=vel_w,
         accel=accel_w,
         att=att_new,
-        ang_vel=ang_vel_w,
-        ang_accel=ang_accel_w,
+        ang_vel=ang_vel_b,
+        ang_accel=ang_accel_b,
         m = mass
     )
 
@@ -320,7 +320,7 @@ def simulate(params: RocketParams, controller,
         velocity_mag = np.linalg.norm(state.vel)
         if velocity_mag > 0.0:
             # cosine alpha is not calculated this way in mpc.py. May cause problems later.
-            cos_alpha = np.dot(state.vel / velocity_mag, np.array([0.0, 0.0, np.sign(state.vel[2])])) # switch 1 with np.sign(state.vel[2]) later
+            cos_alpha = np.dot(state.vel / velocity_mag, np.array([0.0, 0.0, 1.0])) # switch 1 with np.sign(state.vel[2]) later
             AoA = np.arccos(cos_alpha)
             params.Cd_x = -0.449 * np.cos(3.028 * np.degrees(AoA)) + 0.463
             params.Cd_y = params.Cd_x

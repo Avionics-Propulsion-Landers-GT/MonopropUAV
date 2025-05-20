@@ -125,14 +125,15 @@ def initialize_mpc():
     F_net_bf = F_t_bf + F_d_bf
 
     # Acceleration in world frame
-    F_net_wf = ca.mtimes(R_wf, F_net_bf + F_g_wf)
+    F_net_wf = ca.mtimes(R_wf, F_net_bf) + F_g_wf
     rhs_r_dot = ca.mtimes(1/m, F_net_wf)
 
     # Net torque in body frame
     tau_d_bf = ca.cross(rc, F_d_bf)
     tau_t_bf = ca.cross(rt, F_t_bf)
     tau_rcs_bf = r_rcs*(R1 - R2)
-    tau_net_bf = tau_d_bf + tau_t_bf + tau_rcs_bf - ca.cross(omega_dot, ca.mtimes(I, omega_dot))
+    tau_net_bf = tau_d_bf + tau_t_bf + tau_rcs_bf - ca.cross(ca.mtimes(R_bf,omega_dot), ca.mtimes(I, ca.mtimes(R_bf, omega_dot)))
+    # tau_net_bf = tau_d_bf + tau_t_bf + tau_rcs_bf
     # Net torque in world frame
     # tau_net_wf = ca.mtimes(R_wf, tau_net_bf)
     # I_wf = ca.mtimes(R_wf, I)
@@ -235,11 +236,11 @@ def initialize_mpc():
         dm
     )
     # Cost matrix for state.
-    Q = np.diag([7.0, 7.0, 2.0, # xyz position state penalty
-                12.0, 12.0, 3.0, # xyz velocity state penalty
-                4.0, 4.0, 1.0, # pitch, yaw, roll angle penalty
-                6.0, 6.0, 1.5, # pitch, yaw, roll rate penalty
-                0.01 # mass penalty. Low because if its too high its not gonna work.
+    Q = np.diag([4.0, 4.0, 2.0, # xyz position state penalty
+                4.0, 4.0, 1.0, # xyz velocity state penalty
+                3.0, 3.0, 1.0, # pitch, yaw, roll angle penalty
+                5.0, 5.0, 1.0, # pitch, yaw, roll rate penalty
+                0.1 # mass penalty. Low because if its too high its not gonna work.
                 ])
 
     # m_term is mayer term and l_term is lagrange term. 
@@ -249,7 +250,7 @@ def initialize_mpc():
     l_term = m_term
 
     mpc.set_objective(mterm=m_term, lterm=l_term)
-    mpc.set_rterm(T=0.1, a=0.2, b=0.2, R1 = 0.1, R2 = 0.1)  # control effort penalty
+    mpc.set_rterm(T=0.1, a=0.7, b=0.7, R1 = 0.1, R2 = 0.1)  # control effort penalty
 
     tvp_template = mpc.get_tvp_template()
 
@@ -261,19 +262,19 @@ def initialize_mpc():
 
     # define ascent phase desired state(s)
     r_ref_num_hi_hover = np.array([0.0, 0.0, 5.0])
-    x_ref_num_ascent = np.concatenate((r_ref_num_hi_hover, np.array([0.0,0.0,0.35]), omega_ref_num, omega_dot_ref_num, m_ref/2), axis=None)
+    x_ref_num_ascent = np.concatenate((r_ref_num_hi_hover, np.array([0.0,0.0,0.25]), omega_ref_num, omega_dot_ref_num, m_ref/2), axis=None)
     # reference velocity is 1 m/s in the z direction for ascent phase.
 
     # define hi hover phase desired state(s)
-    x_ref_num_hi_hover = np.concatenate((r_ref_num_hi_hover, r_dot_ref_num, omega_ref_num, omega_dot_ref_num, m_min), axis=None)
+    x_ref_num_hi_hover = np.concatenate((r_ref_num_hi_hover, r_dot_ref_num, omega_ref_num, omega_dot_ref_num, m_ref/2), axis=None)
 
     # define descent phase desired state(s)
     # TAKE PRECAUTION, DO NOT SET Z VELOCITY TO BE TOO LOW, IT WILL CRASH INTO THE GROUND.
     r_ref_num_lo_hover = np.array([0.0, 0.0, 0.1])
-    x_ref_num_descent = np.concatenate((r_ref_num_lo_hover, np.array([0.0,0.0,-0.5]), omega_ref_num, omega_dot_ref_num, m_min), axis=None)
+    x_ref_num_descent = np.concatenate((r_ref_num_lo_hover, np.array([0.0,0.0,-0.25]), omega_ref_num, omega_dot_ref_num, m_ref/3), axis=None)
 
     # define lo hover phase desired state(s)
-    x_ref_num_lo_hover = np.concatenate((np.array([0.0,0.0,0.0]), r_dot_ref_num, omega_ref_num, omega_dot_ref_num, m_min), axis=None)
+    x_ref_num_lo_hover = np.concatenate((np.array([0.0,0.0,0.0]), r_dot_ref_num, omega_ref_num, omega_dot_ref_num, m_ref/3), axis=None)
 
     def tvp_fun(t_now):
         # define the reference trajectory here
