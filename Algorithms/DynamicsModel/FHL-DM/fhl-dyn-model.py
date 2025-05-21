@@ -154,10 +154,10 @@ class State:
 wind_dict = {
     # as of 5/18/2025 at ~10pm, this would only affect the ascent phase of our path.
     0.0: [0.0, 0.0, 0.0],
-    1.0: [5.0, 0.0, 0.0],
-    3.0: [3.0, 4.0, 0.0],
-    5.0: [3.0, 4.0,-0.5],
-    8.0: [1.0, 1.0, 0.0],
+    1.0: [3.0, 0.0, 0.0],
+    3.0: [0.0, 3.0, 0.0],
+    5.0: [0.0, 0.0,-0.5],
+    8.0: [0.0, 0.0, 0.0],
 }
 
 t_pts  = np.fromiter(wind_dict.keys(),  dtype=float)
@@ -292,7 +292,7 @@ def simulate(params: RocketParams, controller,
     # Initial state: add slight attitude offset to see if quaternion math works
     state = State(att=R.from_euler('xyz', [0.0, 0.0, 0.0]))
 
-    t = 0.0 # initialize time, wind is a time varying velocity vector field.
+    # t = 0.0 # initialize time, wind is a time varying velocity vector field.
 
     # NOTE: I think i should simulate wind with an acceleration vector field.
 
@@ -320,7 +320,7 @@ def simulate(params: RocketParams, controller,
         velocity_mag = np.linalg.norm(state.vel)
         if velocity_mag > 0.0:
             # cosine alpha is not calculated this way in mpc.py. May cause problems later.
-            cos_alpha = np.dot(state.vel / velocity_mag, np.array([0.0, 0.0, 1.0])) # switch 1 with np.sign(state.vel[2]) later
+            cos_alpha = np.dot(state.vel / velocity_mag, np.array([0.0, 0.0, np.sign(state.vel[2])])) # switch 1 with np.sign(state.vel[2]) later
             AoA = np.arccos(cos_alpha)
             params.Cd_x = -0.449 * np.cos(3.028 * np.degrees(AoA)) + 0.463
             params.Cd_y = params.Cd_x

@@ -1,4 +1,4 @@
-'''THIS FILE IS BASED ON THE MPC JUPYTER NOTEBOOK. ALL CHANGES MUST BE MADE THERE FIRST.'''
+'''THIS FILE IS BASED ON THE MPC JUPYTER NOTEBOOK.'''
 '''THIS IS INTEGRATED WITH THE FHL DYNAMICS MODEL/SIMULATOR.'''
 '''AUTHOR: JUSTIN E.'''
 
@@ -237,20 +237,41 @@ def initialize_mpc():
     )
     # Cost matrix for state.
     Q = np.diag([4.0, 4.0, 2.0, # xyz position state penalty
-                4.0, 4.0, 1.0, # xyz velocity state penalty
-                3.0, 3.0, 1.0, # pitch, yaw, roll angle penalty
+                4.0, 4.0, 1.5, # xyz velocity state penalty
+                5.0, 5.0, 1.0, # pitch, yaw, roll angle penalty
                 5.0, 5.0, 1.0, # pitch, yaw, roll rate penalty
-                0.1 # mass penalty. Low because if its too high its not gonna work.
+                0.01 # mass penalty. Low because if its too high its not gonna work.
                 ])
+    # Lagrange control penalties
+    R = np.diag(
+        [0.1, # Thrust penalty
+        0.4, # Gimbal a penalty
+        0.4, # Gimbal b penalty
+        0.1, # RC1 penalty
+        0.1 # RC2 penalty
+    ])
+
+    # u_vec = ca.vertcat(
+    #     T,
+    #     a,
+    #     b,
+    #     R1,
+    #     R2
+    # )
 
     # m_term is mayer term and l_term is lagrange term. 
-    # TODO: figure out what these are.
+    # Lagrange - stage cost
+    # Mayer - terminal cost
     m_term = ca.mtimes(err_vec.T, Q)  # quadratic term
     m_term = ca.mtimes(m_term, err_vec)  # quadratic term
+    m_term = m_term 
+    # l_term = m_term + ca.mtimes(u_vec.T, (ca.mtimes(R, u_vec)))
     l_term = m_term
 
     mpc.set_objective(mterm=m_term, lterm=l_term)
-    mpc.set_rterm(T=0.1, a=0.7, b=0.7, R1 = 0.1, R2 = 0.1)  # control effort penalty
+
+    mpc.set_rterm(T=0.01, a=0.4, b=0.4, R1 = 0.1, R2 = 0.1)  # control effort change penalty (delta u)
+
 
     tvp_template = mpc.get_tvp_template()
 
@@ -270,7 +291,7 @@ def initialize_mpc():
 
     # define descent phase desired state(s)
     # TAKE PRECAUTION, DO NOT SET Z VELOCITY TO BE TOO LOW, IT WILL CRASH INTO THE GROUND.
-    r_ref_num_lo_hover = np.array([0.0, 0.0, 0.1])
+    r_ref_num_lo_hover = np.array([0.0, 0.0, 0.05])
     x_ref_num_descent = np.concatenate((r_ref_num_lo_hover, np.array([0.0,0.0,-0.25]), omega_ref_num, omega_dot_ref_num, m_ref/3), axis=None)
 
     # define lo hover phase desired state(s)
@@ -280,7 +301,7 @@ def initialize_mpc():
         # define the reference trajectory here
         # Ascend for 10 seconds, hover for 5, descend in 7.5, then hover for the remainder.
         # Simulation time should be longer than this for best results.
-        if t_now < 10:
+        if t_now < 4:
             x_ref_num = x_ref_num_ascent
         elif t_now < 20:
             x_ref_num = x_ref_num_hi_hover
@@ -309,7 +330,7 @@ def initialize_mpc():
     mpc.bounds['lower', '_u', 'b'] = -np.pi/12  # gimbal angle cannot be too low
     mpc.bounds['upper', '_u', 'b'] = np.pi/12  # gimbal angle cannot be too high
     mpc.bounds['upper', '_u', 'T'] = 15.0  # thrust cannot be too high
-    mpc.bounds['lower', '_u', 'T'] = 0.0  # thrust cannot be lower than burnout thrust
+    mpc.bounds['lower', '_u', 'T'] = 3.0  # thrust cannot be lower than burnout thrust
     mpc.bounds['lower', '_u', 'R1'] = 0  # rcs cannot be negative
     mpc.bounds['upper', '_u', 'R1'] = 1  # max rcs1 thrust
     mpc.bounds['lower', '_u', 'R2'] = 0  # rcs cannot be negative
