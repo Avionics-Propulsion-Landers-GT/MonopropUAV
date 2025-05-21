@@ -23,11 +23,11 @@ class ExtendedKalmanFilterXY():
     def parse_data(self, data):
 
         if not hasattr(self, 'lat0'):
-            self.lat0, self.lon0 = data[0], data[1]
+            self.lon0, self.lat0 = data[0], data[1]
     
         # Convert latitude/longitude to local x, y in meters
-        x = (data[0] - self.lat0) * np.cos(np.radians(self.lat0)) * 111320
-        y = (data[1] - self.lon0) * 111320
+        x = (data[0] - self.lon0) * np.cos(np.radians(self.lat0)) * 111320
+        y = (data[1] - self.lat0) * 111320
 
         self.previous_time = self.current_time
         self.current_time = self.current_time + self.delta_time
