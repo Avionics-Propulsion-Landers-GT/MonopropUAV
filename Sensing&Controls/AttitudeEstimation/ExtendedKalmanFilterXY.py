@@ -27,7 +27,7 @@ class ExtendedKalmanFilterXY():
     
         # Convert latitude/longitude to local x, y in meters
         x = (data[0] - self.lon0) * np.cos(np.radians(self.lat0)) * 111320
-        y = (data[1] - self.lat0) * 111320
+        y = (data[1] - self.lat0) * 111139
 
         self.previous_time = self.current_time
         self.current_time = self.current_time + self.delta_time
