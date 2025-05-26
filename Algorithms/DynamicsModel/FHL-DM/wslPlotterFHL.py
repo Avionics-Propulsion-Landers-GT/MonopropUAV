@@ -24,7 +24,6 @@ layout_pos = go.Layout(
     xaxis=dict(title='Time'),
     yaxis=dict(title='Position')
 )
-
 fig_pos = go.Figure(data=[trace_x, trace_y, trace_z], layout=layout_pos)
 
 # --- Velocity Plot ---
@@ -37,19 +36,18 @@ layout_vel = go.Layout(
     xaxis=dict(title='Time'),
     yaxis=dict(title='Velocity')
 )
-
 fig_vel = go.Figure(data=[trace_vx, trace_vy, trace_vz], layout=layout_vel)
 
-# --- Attitude Plot ---
-trace_att_x = go.Scatter(x=data['time'], y=data['att_x'], mode='lines', name='Attitude X')
-trace_att_y = go.Scatter(x=data['time'], y=data['att_y'], mode='lines', name='Attitude Y')
-trace_att_z = go.Scatter(x=data['time'], y=data['att_z'], mode='lines', name='Attitude Z')
+# --- Attitude Plot (theta, phi only) ---
+trace_att_theta = go.Scatter(x=data['time'], y=data['att_theta'], mode='lines', name='Theta')
+trace_att_phi   = go.Scatter(x=data['time'], y=data['att_phi'], mode='lines', name='Phi')
+
 layout_att = go.Layout(
-    title='Attitude vs. Time',
+    title='Attitude vs. Time (No Yaw)',
     xaxis=dict(title='Time'),
     yaxis=dict(title='Attitude [rad]')
 )
-fig_att = go.Figure(data=[trace_att_x, trace_att_y, trace_att_z], layout=layout_att)
+fig_att = go.Figure(data=[trace_att_theta, trace_att_phi], layout=layout_att)
 
 # --- Thrust & Gimbal Plot ---
 trace_thrust = go.Scatter(x=data['time'], y=data['thrust'], mode='lines', name='Thrust [N]')
@@ -62,51 +60,20 @@ layout_cmd = go.Layout(
     yaxis=dict(title='Commanded Values'),
     legend_title='Command Inputs'
 )
-
 fig_cmd = go.Figure(data=[trace_thrust, trace_a, trace_b], layout=layout_cmd)
 
-# # --- Desired Position Plot ---
-# trace_xac = go.Scatter(x=data['time'], y=data['xac'], mode='lines', name='x_desired')
-# trace_yac = go.Scatter(x=data['time'], y=data['yac'], mode='lines', name='y_desired')
-# trace_zac = go.Scatter(x=data['time'], y=data['zac'], mode='lines', name='z_desired')
-
-# layout_pos_des = go.Layout(
-#     title='Actual Position vs. Time',
-#     xaxis=dict(title='Time'),
-#     yaxis=dict(title='Desired Position')
-# )
-
-# fig_pos_des = go.Figure(data=[trace_xac, trace_yac, trace_zac], layout=layout_pos_des)
-
-# # --- Desired Velocity Plot ---
-# trace_vxac = go.Scatter(x=data['time'], y=data['vxac'], mode='lines', name='vx_desired')
-# trace_vyac = go.Scatter(x=data['time'], y=data['vyac'], mode='lines', name='vy_desired')
-# trace_vzac = go.Scatter(x=data['time'], y=data['vzac'], mode='lines', name='vz_desired')
-
-# layout_vel_des = go.Layout(
-#     title='Actual Velocity vs. Time',
-#     xaxis=dict(title='Time'),
-#     yaxis=dict(title='Desired Velocity')
-# )
-
-# fig_vel_des = go.Figure(data=[trace_vxac, trace_vyac, trace_vzac], layout=layout_vel_des)
-
-# --- Save HTML files (double write with abspath) ---
+# --- Save HTML files ---
 position_path = os.path.join(BASE_DIR, "position_plot.html")
 velocity_path = os.path.join(BASE_DIR, "velocity_plot.html")
 attitude_path = os.path.join(BASE_DIR, "attitude_plot.html")
 command_path  = os.path.join(BASE_DIR, "command_plot.html")
-# pos_des_path  = os.path.join(BASE_DIR, "desired_position_plot.html")
-# vel_des_path  = os.path.join(BASE_DIR, "desired_velocity_plot.html")
 
 fig_pos.write_html(position_path)
 fig_vel.write_html(velocity_path)
 fig_att.write_html(attitude_path)
 fig_cmd.write_html(command_path)
-# fig_pos_des.write_html(pos_des_path)
-# fig_vel_des.write_html(vel_des_path)
 
-# Absolute paths
+# Launch in Chrome
 abs_paths = [os.path.abspath(p) for p in [
     position_path, velocity_path, attitude_path, command_path
 ]]
@@ -115,4 +82,4 @@ win_paths = [to_windows_path(p) for p in abs_paths]
 print("Plots saved and opening in Chrome:")
 for path in win_paths:
     print(f"  {path}")
-    subprocess.run(["wslview", path])
+    subprocess.run(["chrome.exe", path])
