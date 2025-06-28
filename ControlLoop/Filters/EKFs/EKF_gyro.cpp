@@ -206,20 +206,20 @@ Matrix EKF_Gyro::measurementPredictionJacobian() {
         double vx = v[0], vy = v[1], vz = v[2];
         Matrix J(3, 4, 0.0); //sub Jacobian matrix
         // Fill the Jacobian matrix
-        J(0, 0) = 2 * (qw * vx + qy * vz - qz * vy);
-        J(0, 1) = 2 * (qx * vx + qy * vy + qz * vz);
-        J(0, 2) = 2 * (-qw * vz + qx * vy - qy * vx);
-        J(0, 3) = 2 * (qw * vy + qx * vz - qz * vx);
+        J(0, 0) = 2 * (-vz*qy + vy*qz);
+        J(0, 1) = 2 * (vy*qy + vz*qz);
+        J(0, 2) = 2 * (-2*vx*qy + vy*qx - vz*qw);
+        J(0, 3) = 2 * (-2*vx*qz + vy*qw + vz*qx);
 
-        J(1, 0) = 2 * (-vx * qz + vy * qw + vz * qx);
-        J(1, 1) = 2 * (vx * qy - vy * qx + vz * qw);
-        J(1, 2) = 2 * (vx * qx + vy * qy + vz * qz);
-        J(1, 3) = 2 * (-vx * qw - vy * qz + vz * qy);
+        J(1, 0) = 2 * (vz*qx - vx*qz);
+        J(1, 1) = 2 * (-2*vy*qx + vx*qy + vz*qw);
+        J(1, 2) = 2 * (vx*qx + vz*qz);
+        J(1, 3) = 2 * (-vx*qw + vz*qy - 2*vy*qz);
 
-        J(2, 0) = 2 * (vx * qy - vy * qx + vz * qw);
-        J(2, 1) = 2 * (vx * qz - vy * qw - vz * qx);
-        J(2, 2) = 2 * (vx * qw + vy * qz - vz * qy);
-        J(2, 3) = 2 * (vx * qx + vy * qy + vz * qz);
+        J(2, 0) = 2 * (-vy*qx + vx*qy);
+        J(2, 1) = 2 * (vx*qz - vy*qw - 2*vz*qx);
+        J(2, 2) = 2 * (vx*qw + vy*qz - 2*vz*qy);
+        J(2, 3) = 2 * (vx*qx + vy*qy);
 
         return J;
     };
