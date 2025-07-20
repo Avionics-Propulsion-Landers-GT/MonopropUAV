@@ -17,7 +17,7 @@ python -m pip install --upgrade pip
 
 # 4) Install your packages
 echo "Installing numpy, cvxpy…"
-python -m pip install numpy cvxpy mosek
+python -m pip install numpy cvxpy ecos scs
 
 echo "Done. To start using it, run:"
 echo "  source venv/bin/activate"

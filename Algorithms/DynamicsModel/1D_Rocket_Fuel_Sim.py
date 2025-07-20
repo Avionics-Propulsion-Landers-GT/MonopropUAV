@@ -1,31 +1,32 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-class PIDF:
-    def __init__(self, kp, ki, kd, kf, dt):
-        self.kp = kp
-        self.ki = ki
-        self.kd = kd
-        self.kf = kf
-        self.dt = dt
-        self.integral = 0
-        self.previous_error = 0
+def calculate_projected_height(position, velocity, min_thrust, mass):
+    return solve_final_position(position, velocity, 0, -9.81 + min_thrust / mass)
 
-    def update(self, goal, actual):
-        error = goal - actual
-        self.integral += error * self.dt
-        derivative = (error - self.previous_error) / self.dt
-        output = (self.kp * error +
-                  self.ki * self.integral +
-                  self.kd * derivative +
-                  self.kf)
-        self.previous_error = error
-        return output
+def solve_final_position(x0, v0, v, a):
+    """
+    Returns the final position x given initial position x0, initial velocity v0,
+    final velocity v, and constant acceleration a. Returns None if position cannot be reached.
+    """
+    if a == 0:
+        if v != v0:  # Cannot change velocity without acceleration
+            return None
+        # For zero acceleration, velocity must remain constant
+        return x0
+        
+    # Using v² = v0² + 2a(x - x0)
+    # Rearranged to solve for x
+    x = x0 + (v**2 - v0**2) / (2 * a)
+    
+    # Verify the solution is physically possible
+    if (a > 0 and v < v0) or (a < 0 and v > v0):
+        return None
+        
+    return x
 
-def calculate_projected_height(position, velocity):
-    return (-velocity**2)/(2 * 9.81) + position
 
-def simulate(mass, height, controller, pos_error_margin=0.5, vel_error_margin=0.1):
+def simulate(mass, height, pos_error_margin=0.1, vel_error_margin=0.05):
     min_thrust = 2500 * 0.4
     max_thrust = 2500
     thrust_to_m_dot = 1/(9.81 * 180)
@@ -38,10 +39,14 @@ def simulate(mass, height, controller, pos_error_margin=0.5, vel_error_margin=0.
     thrust = 0
     fuel_mass_used = 0
     dt = 0.001
+    prev_second = -1
 
-    while (not (abs(position - height) < pos_error_margin and
-            abs(velocity) < vel_error_margin)):
-        thrust = np.clip(controller.update(height, calculate_projected_height(position, velocity)), min_thrust, max_thrust)
+    while (abs(position - height) > pos_error_margin or
+            abs(velocity) > vel_error_margin):
+        if calculate_projected_height(position, velocity, min_thrust, mass) is None or calculate_projected_height(position, velocity, min_thrust, mass) > height:
+            thrust = min_thrust
+        else:
+            thrust = max_thrust
         positions.append(position)
         fuel_masses.append(fuel_mass_used)
         times.append(current_time)
@@ -49,9 +54,13 @@ def simulate(mass, height, controller, pos_error_margin=0.5, vel_error_margin=0.
         position += velocity * dt
         velocity += (thrust - mass * 9.81) / mass * dt
         fuel_mass_used += thrust_to_m_dot * thrust * dt
-        if int(current_time) % 100 == 0:
+        if int(current_time) != prev_second:
+            prev_second = int(current_time)
+            proj_pos = calculate_projected_height(position, velocity, min_thrust, mass)
+            if proj_pos is None:
+                proj_pos = -0
+            print(f"Loop 1 Time: {current_time:.2f}s, Position: {position:.2f}m, Velocity: {velocity:.2f}m/s, Projected Position: {proj_pos:.2f}m, Thrust: {thrust:.2f}N, Fuel Used: {fuel_mass_used:.2f}kg")
             pass
-            # print(f"Loop 1 Time: {current_time:.2f}s, Position: {position:.2f}m, Velocity: {velocity:.2f}m/s, Projected Position: {calculate_projected_height(position, velocity):.2f}m, Thrust: {thrust:.2f}N, Fuel Used: {fuel_mass_used:.2f}kg")
     for i in range(int(1/dt * 10)):
         thrust = mass * 9.81
         positions.append(position)
@@ -65,12 +74,19 @@ def simulate(mass, height, controller, pos_error_margin=0.5, vel_error_margin=0.
             position = 0
             velocity = 0
             break
-        if int(current_time) % 100 == 0:
+        if int(current_time) != prev_second:
+            prev_second = int(current_time)
+            proj_pos = calculate_projected_height(position, velocity, min_thrust, mass)
+            if proj_pos is None:
+                proj_pos = -0
+            print(f"Loop 2 Time: {current_time:.2f}s, Position: {position:.2f}m, Velocity: {velocity:.2f}m/s, Projected Position: {proj_pos:.2f}m, Thrust: {thrust:.2f}N, Fuel Used: {fuel_mass_used:.2f}kg")
             pass
-            # print(f"Loop 1 Time: {current_time:.2f}s, Position: {position:.2f}m, Velocity: {velocity:.2f}m/s, Projected Position: {calculate_projected_height(position, velocity):.2f}m, Thrust: {thrust:.2f}N, Fuel Used: {fuel_mass_used:.2f}kg")
-    while (not (abs(position - 0) < pos_error_margin and
-            abs(velocity) < vel_error_margin)):
-        thrust = np.clip(controller.update(0, calculate_projected_height(position, velocity)), min_thrust, max_thrust)
+    while (abs(position - 0) > pos_error_margin or
+            abs(velocity) > vel_error_margin):
+        if calculate_projected_height(position, velocity, max_thrust, mass) is None or calculate_projected_height(position, velocity, max_thrust, mass) > 0:
+            thrust = min_thrust
+        else:
+            thrust = max_thrust
         positions.append(position)
         fuel_masses.append(fuel_mass_used)
         times.append(current_time)
@@ -80,11 +96,15 @@ def simulate(mass, height, controller, pos_error_margin=0.5, vel_error_margin=0.
         fuel_mass_used += thrust_to_m_dot * thrust * dt
         if (position < 0):
             position = 0
-            velocity = 0
+            # velocity = 0
             break
-        if int(current_time) % 100 == 0:
+        if int(current_time) != prev_second:
+            prev_second = int(current_time)
+            proj_pos = calculate_projected_height(position, velocity, max_thrust, mass)
+            if proj_pos is None:
+                proj_pos = -0
+            print(f"Loop 3 Time: {current_time:.2f}s, Position: {position:.2f}m, Velocity: {velocity:.2f}m/s, Projected Position: {proj_pos:.2f}m, Thrust: {thrust:.2f}N, Fuel Used: {fuel_mass_used:.2f}kg")
             pass
-            # print(f"Loop 2 Time: {current_time:.2f}s, Position: {position:.2f}m, Velocity: {velocity:.2f}m/s, Projected Position: {calculate_projected_height(position, velocity):.2f}m, Thrust: {thrust:.2f}N, Fuel Used: {fuel_mass_used:.2f}kg")
 
     print("Final Time:", current_time)
     print("Final Position:", position)
@@ -97,7 +117,7 @@ if __name__ == "__main__":
     dt = 0.001
     mass = 135
     height = 50
-    positions, fuel_masses, times = simulate(mass, height, PIDF(80, 0.0, 1775, mass * 9.81, dt))
+    positions, fuel_masses, times = simulate(mass, height)
     # mass = 155
     # height = 50
     # positions, fuel_masses, times = simulate(mass, height, PIDF(240, 0.0, 1775, mass * 9.81, dt))
