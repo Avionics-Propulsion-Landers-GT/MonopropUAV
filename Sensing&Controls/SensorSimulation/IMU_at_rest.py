@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-def create_imu_rest_data(rest_gyro = [0, 0, 0], rest_accel = [0, 0, -9.81], rest_mag = [0, 0, 0], gyro_noise_sd = 0.001, accel_noise_sd = 0.0001, mag_noise_sd = 0.0000005, gyro_drift = 0.01, gyro_drift_sd = 0.0001, num_samples = 1000):
+def create_imu_rest_data(rest_gyro = [0, 0, 0], rest_accel = [0, 0, -9.81], rest_mag = [1, 1, 0], gyro_noise_sd = 0.001, accel_noise_sd = 0.0001, mag_noise_sd = 0.0000005, gyro_drift = 0.01, gyro_drift_sd = 0.0001, num_samples = 10000):
     data = []
     delta_time = 0.001
     current_gyro_drift = np.random.choice([-1, 1], size=3).tolist()
