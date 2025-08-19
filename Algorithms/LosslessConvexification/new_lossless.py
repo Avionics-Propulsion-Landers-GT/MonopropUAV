@@ -44,9 +44,6 @@ class LosslessConvexTaylorSolver:
         sigma_min = self.lower_thrust_bound / m0
         sigma_max = self.upper_thrust_bound / m_dry
 
-        # Taylor series correction factor (using sigma_max for convexity)
-        taylor_corr = 1.0 + 0.5 * self.alpha * self.delta_t * sigma_max
-
         # Decision variables
         x = cp.Variable((3, self.N + 1))
         v = cp.Variable((3, self.N + 1))
@@ -78,16 +75,20 @@ class LosslessConvexTaylorSolver:
                 v[:, k + 1] == v[:, k] + self.delta_t * (u[:, k] + self.g),
                 w[k + 1] == w[k] - self.delta_t * self.alpha * sigma[k]
             ]
-            # Thrust magnitude and bounds (Taylor-corrected, convex upper bound)
+
+            # np.log(m0 + αρ2t)
+            
+            # Thrust magnitude constraints
             constraints += [
-                cp.norm(u[:, k], 2) <= sigma[k] * taylor_corr,
+                cp.norm(u[:, k], 2) <= sigma[k],  # Removes taylor_corr
                 sigma_min <= sigma[k],
                 sigma[k] <= sigma_max
             ]
-            # Thrust pointing constraint (Taylor-corrected, convex upper bound)
+
+            # Thrust pointing constraint
             constraints += [
                 cp.norm(u[:, k] - sigma[k] * self.pointing_direction, 2)
-                <= sigma[k] * np.tan(self.tvc_range) * taylor_corr
+                <= sigma[k] * np.sin(self.tvc_range)  # Uses sin instead of tan
             ]
             # Max velocity constraint (optional)
             constraints += [
@@ -119,7 +120,7 @@ if __name__ == "__main__":
     solver = LosslessConvexTaylorSolver(
         landing_point=np.array([0, 0, 0]),
         initial_position=np.array([0, 40, 30]),
-        initial_velocity=np.array([0, 0, 0]),
+        initial_velocity=np.array([0, -8, -10]),
         glide_slope=0.05,
         max_velocity=100,
         dry_mass=100,
