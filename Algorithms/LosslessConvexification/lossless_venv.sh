@@ -43,7 +43,7 @@ source venv/bin/activate
 #    e.g. upgrade pip, install requirements, etc.
 echo "[+] Upgrading pip & installing your packages"
 python -m pip install --upgrade pip
-python -m pip install numpy cvxpy ecos scs
+python -m pip install numpy cvxpy ecos scs matplotlib imageio
 
 echo "✅ Done! venv is ready."
 echo "   To use it in _this_ shell: you’re already in it."

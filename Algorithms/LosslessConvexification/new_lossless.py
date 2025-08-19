@@ -1,5 +1,7 @@
 import numpy as np
 import cvxpy as cp
+import glob
+import os
 import matplotlib.pyplot as plt
 
 class LosslessConvexTaylorSolver:
@@ -79,10 +81,11 @@ class LosslessConvexTaylorSolver:
             # np.log(m0 + αρ2t)
             
             # Thrust magnitude constraints
+            z_0 = np.log(m0 + self.alpha * self.upper_thrust_bound * self.delta_t * k)
             constraints += [
-                cp.norm(u[:, k], 2) <= sigma[k],  # Removes taylor_corr
-                sigma_min <= sigma[k],
-                sigma[k] <= sigma_max
+                cp.norm(u[:, k], 2) <= sigma[k],
+                self.lower_thrust_bound * np.exp(-z_0) * (1 - (w[k] - z_0) + ((w[k] - z_0**2)/2)) <= sigma[k],
+                sigma[k] <= self.upper_thrust_bound * np.exp(-z_0) * (1 - (w[k] - z_0))
             ]
 
             # Thrust pointing constraint
@@ -185,7 +188,21 @@ if __name__ == "__main__":
         plt.grid()
         plt.tight_layout()
         plt.savefig("trajectory.png", dpi=150, bbox_inches="tight")
-
+        # Save view from multiple angles
+        angles = [
+            (45, 45),   # Corner view
+            (45, 135),  # Another corner
+            (45, 225),  # Another corner 
+            (45, 315),  # Another corner
+            (0, 0),     # Side view
+            (0, 90),    # Front view
+            (90, 0),    # Top view
+        ]
+        
+        for elevation, azimuth in angles:
+            ax.view_init(elev=elevation, azim=azimuth)
+            plt.savefig(f"trajectory_elev{elevation}_azim{azimuth}.png", 
+                   dpi=150, bbox_inches="tight")
         # # Plot velocity trajectory
         # plt.figure(figsize=(10, 6))
         # plt.plot(time, v[0, :], label="vx (East)")

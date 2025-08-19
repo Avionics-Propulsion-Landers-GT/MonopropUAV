@@ -90,33 +90,46 @@ class LosslessSolver:
 
             constraints = []
 
-            # Initial state constraint
-            constraints.append(x[:, 0] == np.hstack((self.initial_state, self.dry_mass + self.fuel_mass)))
+            # Initial state constraints
+            initial_full_state = np.hstack((self.initial_state, self.dry_mass + self.fuel_mass))
+            constraints.append(x[:, 0] == initial_full_state)
 
-            # Dynamics constraints
+            # Dynamics constraints (state propagation)
             for k in range(N):
                 constraints.append(x[:, k + 1] == A @ x[:, k] + B @ u[:, k])
 
-            # Thrust constraints
-            for k in range(N):
-                constraints.append(cp.norm(u[:3, k], 2) <= u[3, k])  # Thrust vector magnitude
-                constraints.append(self.lower_thrust_bound <= u[3, k])  # Lower bound
-                constraints.append(u[3, k] <= self.upper_thrust_bound)  # Upper bound
+            # Mass constraints
+            constraints.append(x[6, :] >= self.dry_mass)  # Mass must stay above dry mass
+            constraints.append(x[6, -1] >= self.dry_mass)  # Final mass above dry mass
 
-            # Pointing constraints
+            # Control constraints
             for k in range(N):
-                constraints.append(cp.norm(u[:3, k] - u[3, k] * self.pointing_constraint, 2) <= u[3, k] * np.tan(self.tvc_range))
-            
-            # Glide slope constraint: keeps position within upward-opening cone
-            # for k in range(N + 1):
-            #     constraints.append(-x[2, k] <= self.glide_slope * cp.norm(x[:2, k], 2))
+                # Thrust magnitude constraints
+                constraints.append(cp.SOC(u[3, k], u[:3, k]))  # ||T|| <= sigma
+                constraints.append(self.lower_thrust_bound <= u[3, k])  # Minimum thrust
+                constraints.append(u[3, k] <= self.upper_thrust_bound)  # Maximum thrust
+
+                # Thrust pointing constraints (using relaxed cone constraint)
+                constraints.append(cp.SOC(
+                    u[3, k] * np.cos(self.tvc_range),
+                    cp.vstack([u[:3, k] - u[3, k] * self.pointing_constraint])
+                ))
+
+            # State constraints
             for k in range(N + 1):
-                constraints.append(cp.norm(x[:2, k], 2) <= (1 / self.glide_slope) * x[2, k])
+                # Velocity magnitude constraint
+                constraints.append(cp.SOC(self.max_velocity, x[3:6, k]))
+                
+                # Glide slope constraint (keep position within cone)
+                position = x[:3, k] - self.landing_point
+                constraints.append(cp.SOC(
+                    position[2],  # vertical distance
+                    position[:2] * self.glide_slope  # scaled horizontal distance
+                ))
 
-            # Final state constraints
-            constraints.append(x[:3, -1] == self.landing_point)  # Position
-            constraints.append(x[3:6, -1] == 0)  # Velocity
-            constraints.append(x[6, -1] >= self.dry_mass)  # Mass
+            # Terminal constraints
+            constraints.append(x[:3, -1] == self.landing_point)  # Final position
+            constraints.append(x[3:6, -1] == 0)  # Final velocity
 
             # Objective: Minimize fuel usage
             objective = cp.Minimize(cp.sum(u[3, :]) * self.delta_t)
