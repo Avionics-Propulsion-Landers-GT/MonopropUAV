@@ -1,5 +1,6 @@
 import numpy as np
 import cvxpy as cp
+import matplotlib.pyplot as plt
 
 class LosslessConvexTaylorSolver:
     def __init__(
@@ -117,9 +118,9 @@ class LosslessConvexTaylorSolver:
 if __name__ == "__main__":
     solver = LosslessConvexTaylorSolver(
         landing_point=np.array([0, 0, 0]),
-        initial_position=np.array([0, 0, 10]),
+        initial_position=np.array([0, 40, 30]),
         initial_velocity=np.array([0, 0, 0]),
-        glide_slope=0.1,
+        glide_slope=0.05,
         max_velocity=100,
         dry_mass=100,
         fuel_mass=60,
@@ -166,3 +167,54 @@ if __name__ == "__main__":
     print("Optimal normalized thrust magnitudes:\n", best_solution[4])
     print("Total fuel used:", total_fuel_used)
     print(N, "time steps computed.")
+
+    if best_solution is not None:
+        x, v, m, u, sigma = best_solution
+        time = np.linspace(0, solver.N * solver.delta_t, solver.N)
+
+        # Plot position trajectory in 3D
+        fig = plt.figure(figsize=(10, 6))
+        ax = fig.add_subplot(111, projection='3d')
+        ax.plot(x[0], x[1], x[2], '-o', color='C0', lw=2, markersize=4)
+        ax.set_title("Position Trajectory")
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        ax.set_zlabel("z")
+        ax.legend()
+        plt.grid()
+        plt.tight_layout()
+        plt.savefig("trajectory.png", dpi=150, bbox_inches="tight")
+
+        # # Plot velocity trajectory
+        # plt.figure(figsize=(10, 6))
+        # plt.plot(time, v[0, :], label="vx (East)")
+        # plt.plot(time, v[1, :], label="vy (North)")
+        # plt.plot(time, v[2, :], label="vz (Vertical)")
+        # plt.title("Velocity Trajectory")
+        # plt.xlabel("Time (s)")
+        # plt.ylabel("Velocity (m/s)")
+        # plt.legend()
+        # plt.grid()
+
+        # # Plot mass profile
+        # plt.figure(figsize=(10, 6))
+        # plt.plot(time, m, label="Mass")
+        # plt.title("Mass Profile")
+        # plt.xlabel("Time (s)")
+        # plt.ylabel("Mass (kg)")
+        # plt.legend()
+        # plt.grid()
+
+        # # Plot thrust magnitudes
+        # thrust_time = np.linspace(0, solver.N * solver.delta_t, solver.N)
+        # plt.figure(figsize=(10, 6))
+        # plt.plot(thrust_time, sigma, label="Normalized Thrust Magnitude")
+        # plt.title("Thrust Magnitude Profile")
+        # plt.xlabel("Time (s)")
+        # plt.ylabel("Normalized Thrust")
+        # plt.legend()
+        # plt.grid()
+
+        # plt.show()
+    else:
+        print("No solution found to graph.")
