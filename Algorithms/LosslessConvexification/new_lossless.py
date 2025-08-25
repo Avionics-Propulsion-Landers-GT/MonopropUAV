@@ -77,8 +77,6 @@ class LosslessConvexTaylorSolver:
                 v[:, k + 1] == v[:, k] + self.delta_t * (u[:, k] + self.g),
                 w[k + 1] == w[k] - self.delta_t * self.alpha * sigma[k]
             ]
-
-            # np.log(m0 + αρ2t)
             
             # Thrust magnitude constraints
             z_0 = np.log(m0 + self.alpha * self.upper_thrust_bound * self.delta_t * k)
@@ -98,11 +96,11 @@ class LosslessConvexTaylorSolver:
                 cp.norm(v[:, k], 2) <= self.max_velocity
             ]
 
-        # Glide slope constraint (cone)
-        for k in range(self.N + 1):
-            constraints += [
-                cp.norm(x[:2, k], 2) <= (1.0 / self.glide_slope) * x[2, k]
-            ]
+        # # Glide slope constraint (cone)
+        # for k in range(self.N + 1):
+        #     constraints += [
+        #         cp.norm(x[:2, k], 2) <= (1.0 / self.glide_slope) * x[2, k]
+        #     ]
 
         # Objective: minimize total fuel used (equivalent to maximizing final mass)
         objective = cp.Minimize(cp.sum(sigma) * self.delta_t)
@@ -121,10 +119,13 @@ class LosslessConvexTaylorSolver:
 
 if __name__ == "__main__":
     solver = LosslessConvexTaylorSolver(
-        landing_point=np.array([0, 0, 0]),
-        initial_position=np.array([0, 40, 30]),
-        initial_velocity=np.array([0, -8, -10]),
-        glide_slope=0.05,
+        # landing_point=np.array([0, 0, 0]),
+        # initial_position=np.array([0, 40, 30]),
+        # initial_velocity=np.array([0, -8, -10]),
+        landing_point=np.array([0, 0, 10]),
+        initial_position=np.array([0, 0, 0]),
+        initial_velocity=np.array([0, 0, 0]),
+        glide_slope=-0.05,
         max_velocity=100,
         dry_mass=100,
         fuel_mass=60,
