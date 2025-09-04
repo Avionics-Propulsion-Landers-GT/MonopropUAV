@@ -1,7 +1,7 @@
 # The NONLINEAR MPC Algorithm 
 
 # A python implementation of NONLINEAR Model Predictive Control purposed for active real time control.
-# Written from scratch since libraries are too big
+# Written from scratch since most solver libraries are not available in Rust.
 # Algorithm to be translated to Rust
 # Hansel Zhang
 
@@ -19,78 +19,109 @@ import matplotlib.pyplot as plt
 
 # ---  DYNAMICS --- #
 
-# To change the dynamics to represent a TVC rocket. For now it is just quadcopter dynamics as an example.
-def dynamics(x, u):
-    # 3D Quadcopter (6DOF) simplified nonlinear MIMO system
-    # x = [x, y, z, phi, theta, psi, x_dot, y_dot, z_dot, p, q, r]
-    # u = [u1, u2, u3, u4] (thrusts from 4 rotors)
-    m = 1.0      # mass (kg)
+# Aerodynamic forces
+def wind_force():
+    # Random gaussian wind disturbance with some constant direction
+    # Define a constant wind direction (unit vector)
+    wind_direction = np.array([0.02, 0.05, 0.0])
+    wind_direction = wind_direction / np.linalg.norm(wind_direction)
+    # Random wind magnitude (Gaussian)
+    wind_magnitude = np.random.normal(0, 0.1)
+    force = wind_direction * wind_magnitude
+    return force
+
+def drag(v):
+    # Simple quadratic drag model
+    drag_coefficient = 0.1  # drag coefficient (kg/m)
+    mag_v = np.linalg.norm(v)
+    return -drag_coefficient * mag_v * v
+
+
+# Internal dynamics of the rocket
+def dynamics(x, u, aero_forces=False):
+    # 3D TVC Rocket Dynamics with Quaternion Attitude
+    # x = [x, y, z, qx, qy, qz, qw, x_dot, y_dot, z_dot, wx, wy, wz]
+    # u = [gimbal_theta, gimbal_phi, thrust]
+    m = 1      # mass (kg)
     g = 9.81     # gravity (m/s^2)
-    l = 0.25     # arm length (m)
-    Ixx = 0.02   # moment of inertia x (kg*m^2)
-    Iyy = 0.02   # moment of inertia y (kg*m^2)
-    Izz = 0.04   # moment of inertia z (kg*m^2)
-    dt = 0.05    # integration step
+    Ixx = 0.2    # moment of inertia x (kg*m^2)
+    Iyy = 0.2    # moment of inertia y (kg*m^2)
+    Izz = 0.4    # moment of inertia z (kg*m^2)
+    I = np.diag([Ixx, Iyy, Izz])
+    I_inv = np.linalg.inv(I)
+    dt = 0.1    # integration step
 
-    # Unpacking states
-    x_pos, y_pos, z_pos, phi, theta, psi, x_dot, y_dot, z_dot, p, q, r = x
-    u1, u2, u3, u4 = u
+    # Unpack state
+    x_pos, y_pos, z_pos, qx, qy, qz, qw, x_dot, y_dot, z_dot, wx, wy, wz = x
+    gimbal_theta, gimbal_phi, thrust = u
 
-    # Clamp thrusts to be non-negative
-    u1 = np.maximum(u1, 0.0)
-    u2 = np.maximum(u2, 0.0)
-    u3 = np.maximum(u3, 0.0)
-    u4 = np.maximum(u4, 0.0)
+    # Clamp thrust to be non-negative
+    thrust = np.maximum(thrust, 0.0)
 
-    # Total thrust and torques (standard quadcopter configuration)
-    thrust = u1 + u2 + u3 + u4
-    tau_phi   = l * (u2 - u4)
-    tau_theta = l * (u3 - u1)
-    tau_psi   = 0.01 * (u1 - u2 + u3 - u4)  # simplified yaw moment
+    # Compute thrust direction in body frame (gimbal angles)
+    # theta: pitch (up/down), phi: yaw (left/right)
+    # Thrust vector in body frame
+    tx = np.sin(gimbal_theta) * np.cos(gimbal_phi)
+    ty = np.sin(gimbal_phi)
+    tz = np.cos(gimbal_theta) * np.cos(gimbal_phi)
+    thrust_b = thrust * np.array([tx, ty, tz])
 
-    # Rotation matrix from body to world
-    cphi = np.cos(phi); sphi = np.sin(phi)
-    cth = np.cos(theta); sth = np.sin(theta)
-    cpsi = np.cos(psi); spsi = np.sin(psi)
+    # Quaternion to rotation matrix
+    q = np.array([qx, qy, qz, qw])
+    q_norm = np.linalg.norm(q)
+    if q_norm < 1e-8:
+        q = np.array([0, 0, 0, 1])
+    else:
+        q = q / q_norm
+    qx, qy, qz, qw = q
     R = np.array([
-        [cth * cpsi, sphi * sth * cpsi - cphi * spsi, cphi * sth * cpsi + sphi * spsi],
-        [cth * spsi, sphi * sth * spsi + cphi * cpsi, cphi * sth * spsi - sphi * cpsi],
-        [-sth,       sphi * cth,                      cphi * cth]
+        [1 - 2*qy**2 - 2*qz**2,     2*qx*qy - 2*qz*qw,     2*qx*qz + 2*qy*qw],
+        [2*qx*qy + 2*qz*qw,     1 - 2*qx**2 - 2*qz**2,     2*qy*qz - 2*qx*qw],
+        [2*qx*qz - 2*qy*qw,         2*qy*qz + 2*qx*qw, 1 - 2*qx**2 - 2*qy**2]
     ])
 
     # Acceleration in world frame
-    acc = (R @ np.array([0, 0, thrust / m])) - np.array([0, 0, g])
+    # difficult to model aerodynamic forces because we don't know direction and it depends on weather conditions. 
+    acc = (R @ thrust_b) / m - np.array([0, 0, g]) if not aero_forces else (R @ thrust_b) / m - np.array([0, 0, g]) + drag(np.array([x_dot, y_dot, z_dot])) / m + wind_force() / m
     x_ddot, y_ddot, z_ddot = acc
 
-    # Angular rates derivatives (Euler angles, small angle approx for simplicity)
-    p_dot = (tau_phi - (Izz - Iyy) * q * r) / Ixx
-    q_dot = (tau_theta - (Ixx - Izz) * p * r) / Iyy
-    r_dot = (tau_psi - (Iyy - Ixx) * p * q) / Izz
+    # Assume thrust vector offset from center of mass by lever arm d along z_b (for TVC torque)
+    d = 1.0  # lever arm (meters)
+    r_cp = np.array([0, 0, -d])
+    torque_b = np.cross(r_cp, thrust_b)
 
-    # Euler angle derivatives
-    phi_dot = p + sphi * np.tan(theta) * q + cphi * np.tan(theta) * r
-    theta_dot = cphi * q - sphi * r
-    psi_dot = sphi / cth * q + cphi / cth * r
+    # Angular velocity
+    omega = np.array([wx, wy, wz])
+    omega_dot = I_inv @ (torque_b - np.cross(omega, I @ omega))
+
+    # Quaternion derivative
+    # dq/dt = 0.5 * quat_mult(q, [wx, wy, wz, 0])
+    omega_quat = np.array([wx, wy, wz, 0.0])
+    dqdt = 0.5 * np.array([
+        qw * wx + qy * wz - qz * wy,
+        qw * wy + qz * wx - qx * wz,
+        qw * wz + qx * wy - qy * wx,
+        -qx * wx - qy * wy - qz * wz
+    ])
 
     # Euler integration
     x_pos_new = x_pos + dt * x_dot
     y_pos_new = y_pos + dt * y_dot
     z_pos_new = z_pos + dt * z_dot
-    phi_new = phi + dt * phi_dot
-    theta_new = theta + dt * theta_dot
-    psi_new = psi + dt * psi_dot
+    q_new = q + dt * dqdt
+    q_new = q_new / np.linalg.norm(q_new)  # normalize quaternion
     x_dot_new = x_dot + dt * x_ddot
     y_dot_new = y_dot + dt * y_ddot
     z_dot_new = z_dot + dt * z_ddot
-    p_new = p + dt * p_dot
-    q_new = q + dt * q_dot
-    r_new = r + dt * r_dot
+    wx_new = wx + dt * omega_dot[0]
+    wy_new = wy + dt * omega_dot[1]
+    wz_new = wz + dt * omega_dot[2]
 
     x_new = np.array([
         x_pos_new, y_pos_new, z_pos_new,
-        phi_new, theta_new, psi_new,
+        q_new[0], q_new[1], q_new[2], q_new[3],
         x_dot_new, y_dot_new, z_dot_new,
-        p_new, q_new, r_new
+        wx_new, wy_new, wz_new
     ])
 
     return x_new
@@ -229,7 +260,7 @@ def solve_qp_box(H, f, u_min, u_max, N, u_init=None, max_iter=50, alpha=0.01):
 
     for _ in range(max_iter):
         grad = H @ U + f
-        print("Gradient Norm:", np.linalg.norm(grad))
+        # print("Gradient Norm:", np.linalg.norm(grad))
         alpha_ls = alpha
         cost_old = 0.5 * U.T @ H @ U + f.T @ U
         while alpha_ls > 1e-6:
@@ -317,10 +348,11 @@ def true_cost(x0, U, xref_traj, Q, R, QN):
     # terminal
     eN = xs_try[-1] - xref_traj[-1]
     cost += eN.T @ QN @ eN
+
     return float(cost)
 
 # NMPC STEP
-def nmpc_step(x0, U_init, xref_traj, Q, R, QN, u_min, u_max, sqp_iters=3, alpha_pgd=0.1):
+def nmpc_step(x0, U_init, xref_traj, Q, R, QN, u_min, u_max, sqp_iters=1, alpha_pgd=0.1):
     N = len(U_init)
     m = U_init.shape[1] if U_init.ndim==2 else 1
     # flatten warm start into shape (N, m)
@@ -356,49 +388,75 @@ def nmpc_step(x0, U_init, xref_traj, Q, R, QN, u_min, u_max, sqp_iters=3, alpha_
 # --- MAIN MPC FUNCTION --- #
 if __name__ == "__main__":
     
-    # QUADCOPTER PROBLEM SETUP
+    # TVC ROCKET PROBLEM SETUP
     # problem sizes
-    n = 12  # [x, y, z, phi, theta, psi, x_dot, y_dot, z_dot, p, q, r]
-    m = 4   # [u1, u2, u3, u4] (thrusts from 4 rotors)
-    N = 15
-    T = 30
+    n = 13  # [x, y, z, qx, qy, qz, qw, x_dot, y_dot, z_dot, wx, wy, wz]
+    m = 3   # [gimbal_theta, gimbal_phi, thrust]
+    N = 10
+    T = 60
     dt = 0.1
     iters = int(T / dt)
 
-    # initial state: at origin, level, stationary
+    # initial state: at origin, level, stationary, quaternion [0,0,0,1]
     x = np.zeros(n)
+    x[6] = 1.0  # qw = 1 (unit quaternion)
 
     # hover at set point
     xref = np.zeros(n)
-    xref[0] = np.random.uniform(-4, 4) 
-    xref[1] = np.random.uniform(-4, 4)   
-    xref[2] = np.random.uniform(-4, 4)  
+    xref[0] = 0
+    xref[1] = 0
+    xref[2] = 10
+    xref[6] = 1.0  # reference orientation: level (unit quaternion)
+    # Create a reference trajectory that changes halfway through the simulation
     xref_traj = np.tile(xref, (N+1, 1))
 
-    # warm start: hover thrust (each rotor supports 1/4 of weight)
-    m_quadcopter = 1.0
+    # warm start: hover thrust (thrust = mass * gravity, gimbal angles = 0)
+    m_rocket = 1.0
     g = 9.81
-    hover_thrust = m_quadcopter * g / 4.0
-    U_warm = np.ones((N, m)) * hover_thrust
+    hover_thrust = m_rocket * g
+    U_warm = np.zeros((N, m))
+    U_warm[:, 2] = hover_thrust  # thrust
+    # gimbal_theta and gimbal_phi are zero (upright)
 
-    # costs: penalize position, angles, velocities
-    Q = np.diag([100.0, 100.0, 200.0, 10.0, 10.0, 10.0, 5.0, 5.0, 10.0, 1.0, 1.0, 1.0])
-    R = np.eye(m) * 0.1
+    # costs: penalize position, orientation, velocities, angular rates
+    Q = np.diag([
+        70.0, 70.0, 200.0,   # position x, y, z
+        200.0, 200.0, 200.0, 200.0, # quaternion qx, qy, qz, qw
+        50.0, 50.0, 100.0,        # linear velocities x_dot, y_dot, z_dot
+        5.0, 5.0, 5.0          # angular velocities wx, wy, wz
+    ])
+    R = np.diag([400.0, 400.0, 0.1])  # penalize gimbal angles and thrust
     QN = Q * 1.0
 
-    # bounds on thrusts (N)
-    u_min = np.zeros(m)
-    u_max = np.ones(m) * 20.0
+    # bounds on control inputs
+    gimbal_limit = np.deg2rad(10)  # +/- 10 degrees
+    thrust_min = 0.0
+    thrust_max = 20.0
+    u_min = np.array([-gimbal_limit, -gimbal_limit, thrust_min])
+    u_max = np.array([gimbal_limit, gimbal_limit, thrust_max])
 
     xs_hist = []
     us_hist = []
 
+    t_switch = 20  # time step to switch reference
+
     for k in range(iters):
-        # sqp iterations typically 2 or 3. Has been reduced to 1 for speed.
+        if k*dt > t_switch:  # t_switch is the time you want to change reference
+            xref[2] = 0
+            xref_traj = np.tile(xref, (N+1, 1))
+            # change costs. Thrust has to be weaker to allow for descent, whilst it had to be greater than weight force for ascent, so the penalty scheme must change.
+            Q = np.diag([
+                40.0, 40.0, 150.0,   # position x, y, z
+                350.0, 350.0, 350.0, 350.0, # quaternion qx, qy, qz, qw
+                30.0, 30.0, 300.0,        # linear velocities x_dot, y_dot, z_dot
+                10.0, 10.0, 10.0          # angular velocities wx, wy, wz
+            ])
+            R = np.diag([500.0, 500.0, 0.1])  # penalize gimbal angles and thrust
+        # sqp iterations typically 2 or 3. Has been reduced to 1 for speed (sacrificing accuracy).
         U_opt, xs = nmpc_step(x, U_warm, xref_traj, Q, R, QN, u_min, u_max, sqp_iters=1, alpha_pgd=0.05)
         u_apply = U_opt[0].copy()
         # apply first control
-        x = dynamics(x, u_apply)
+        x = dynamics(x, u_apply, aero_forces=True)
         # warm start shift
         U_warm = np.vstack([U_opt[1:], U_opt[-1:]])
         xs_hist.append(x.copy())
@@ -413,37 +471,133 @@ if __name__ == "__main__":
     time = np.arange(xs_hist.shape[0]) * dt
 
     # Plot positions
-    plt.figure(figsize=(12, 8))
-    plt.subplot(3, 1, 1)
+    plt.figure(figsize=(12, 10))
+    plt.subplot(4, 1, 1)
     plt.plot(time, xs_hist[:, 0], label='x (m)')
     plt.plot(time, xs_hist[:, 1], label='y (m)')
     plt.plot(time, xs_hist[:, 2], label='z (m)')
     plt.legend()
     plt.grid()
-    plt.title("Quadcopter Position")
+    plt.title("Rocket Position")
     plt.xlabel("Time (s)")
     plt.ylabel("Position (m)")
 
-    # Plot angles (convert to degrees)
-    plt.subplot(3, 1, 2)
-    plt.plot(time, np.rad2deg(xs_hist[:, 3]), label='phi (deg)')
-    plt.plot(time, np.rad2deg(xs_hist[:, 4]), label='theta (deg)')
-    plt.plot(time, np.rad2deg(xs_hist[:, 5]), label='psi (deg)')
+    # Plot quaternion components
+    plt.subplot(4, 1, 2)
+    plt.plot(time, xs_hist[:, 3], label='qx')
+    plt.plot(time, xs_hist[:, 4], label='qy')
+    plt.plot(time, xs_hist[:, 5], label='qz')
+    plt.plot(time, xs_hist[:, 6], label='qw')
     plt.legend()
     plt.grid()
-    plt.title("Quadcopter Angles")
+    plt.title("Rocket Quaternion (Attitude)")
     plt.xlabel("Time (s)")
-    plt.ylabel("Angle (deg)")
+    plt.ylabel("Quaternion")
 
-    # Plot control inputs (thrusts)
-    plt.subplot(3, 1, 3)
-    for i in range(us_hist.shape[1]):
-        plt.plot(time, us_hist[:, i], label=f'u{i+1} (thrust)')
+    # Plot linear and angular velocities
+    plt.subplot(4, 1, 3)
+    plt.plot(time, xs_hist[:, 7], label='x_dot (m/s)')
+    plt.plot(time, xs_hist[:, 8], label='y_dot (m/s)')
+    plt.plot(time, xs_hist[:, 9], label='z_dot (m/s)')
+    plt.plot(time, xs_hist[:, 10], label='wx (rad/s)')
+    plt.plot(time, xs_hist[:, 11], label='wy (rad/s)')
+    plt.plot(time, xs_hist[:, 12], label='wz (rad/s)')
     plt.legend()
     plt.grid()
-    plt.title("Control Inputs (Rotor Thrusts)")
+    plt.title("Rocket Velocities")
     plt.xlabel("Time (s)")
-    plt.ylabel("Thrust (N)")
+    plt.ylabel("Velocity")
+
+    # Plot control inputs: gimbal angles and thrust
+    plt.subplot(4, 1, 4)
+    plt.plot(time, np.rad2deg(us_hist[:, 0]), label='Gimbal Theta (deg)')
+    plt.plot(time, np.rad2deg(us_hist[:, 1]), label='Gimbal Phi (deg)')
+    plt.plot(time, us_hist[:, 2], label='Thrust (N)')
+    plt.legend()
+    plt.grid()
+    plt.title("Control Inputs")
+    plt.xlabel("Time (s)")
+    plt.ylabel("Input")
 
     plt.tight_layout()
+    plt.show()
+
+    # --- ANIMATION --- #
+    import matplotlib.animation as animation
+
+    def quaternion_to_rotation_matrix(q):
+        qx, qy, qz, qw = q
+        R = np.array([
+            [1 - 2*qy**2 - 2*qz**2,     2*qx*qy - 2*qz*qw,     2*qx*qz + 2*qy*qw],
+            [2*qx*qy + 2*qz*qw,     1 - 2*qx**2 - 2*qz**2,     2*qy*qz - 2*qx*qw],
+            [2*qx*qz - 2*qy*qw,         2*qy*qz + 2*qx*qw, 1 - 2*qx**2 - 2*qy**2]
+        ])
+        return R
+
+    fig = plt.figure(figsize=(8, 8))
+    ax = fig.add_subplot(111, projection='3d')
+    ax.set_xlim([-10, 10])
+    ax.set_ylim([-10, 10])
+    ax.set_zlim([0, 25])
+    ax.set_xlabel('X (m)')
+    ax.set_ylabel('Y (m)')
+    ax.set_zlabel('Z (m)')
+    ax.set_title('Rocket Animation')
+    ax.set_box_aspect([1,1,1])
+
+    rocket_body, = ax.plot([], [], [], 'o-', lw=3, color='blue', label='Rocket')
+    setpoint, = ax.plot([], [], [], 'rx', markersize=12, label='Setpoint')
+    traj, = ax.plot([], [], [], 'g--', lw=1, label='Trajectory')
+
+    def set_axes_equal(ax):
+        '''Set 3D plot axes to equal scale.'''
+        x_limits = ax.get_xlim3d()
+        y_limits = ax.get_ylim3d()
+        z_limits = ax.get_zlim3d()
+        x_range = abs(x_limits[1] - x_limits[0])
+        x_middle = np.mean(x_limits)
+        y_range = abs(y_limits[1] - y_limits[0])
+        y_middle = np.mean(y_limits)
+        z_range = abs(z_limits[1] - z_limits[0])
+        z_middle = np.mean(z_limits)
+        plot_radius = 0.5 * max([x_range, y_range, z_range])
+        ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
+        ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
+        ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
+
+    def init():
+        rocket_body.set_data([], [])
+        rocket_body.set_3d_properties([])
+        setpoint.set_data([], [])
+        setpoint.set_3d_properties([])
+        traj.set_data([], [])
+        traj.set_3d_properties([])
+        return rocket_body, setpoint, traj
+
+    def draw_rocket(pos, quat, length=2.0):
+        # Draw a line from pos in the direction of the rocket's body z-axis
+        R = quaternion_to_rotation_matrix(quat)
+        z_axis = R @ np.array([0, 0, 1])
+        start = pos
+        end = pos + z_axis * length
+        return np.vstack([start, end])
+
+    def animate(i):
+        pos = xs_hist[i, 0:3]
+        quat = xs_hist[i, 3:7]
+        rocket_line = draw_rocket(pos, quat)
+        rocket_body.set_data(rocket_line[:, 0], rocket_line[:, 1])
+        rocket_body.set_3d_properties(rocket_line[:, 2])
+        setpoint.set_data([xref[0]], [xref[1]])
+        setpoint.set_3d_properties([xref[2]])
+        traj.set_data(xs_hist[:i+1, 0], xs_hist[:i+1, 1])
+        traj.set_3d_properties(xs_hist[:i+1, 2])
+        plt.draw()
+        return rocket_body, setpoint, traj
+
+    ani = animation.FuncAnimation(
+        fig, animate, frames=len(xs_hist), interval=dt * 1000, blit=False, init_func=init
+    )
+
+    ax.legend()
     plt.show()
