@@ -9,7 +9,7 @@ To use the Rust implementation of NMPC (Nonlinear Model Predictive Control), fol
 
 ### 2. Dependencies
 
-- The `Cargo.toml` includes and dependencies and is the configuration file for the Rust project.
+- The `Cargo.toml` includes dependencies and is the configuration file for the Rust project.
 - Make sure any dependencies are included here
 
 ### 3. Build and Run
