@@ -1,0 +1,9 @@
+[package]
+name = "MPC"
+version = "1.0"
+edition = "2025"
+
+[dependencies]
+plotters = "0.3"
+ndarray = "0.15"
+ndarray-linalg = { version = "0.16", features = ["intel-mkl"] }
