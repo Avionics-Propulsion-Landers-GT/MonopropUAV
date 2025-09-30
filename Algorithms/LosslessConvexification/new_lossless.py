@@ -119,21 +119,23 @@ class LosslessConvexTaylorSolver:
 
 if __name__ == "__main__":
     solver = LosslessConvexTaylorSolver(
-        # landing_point=np.array([0, 0, 0]),
-        # initial_position=np.array([0, 40, 30]),
-        # initial_velocity=np.array([0, -8, -10]),
-        landing_point=np.array([0, 0, 10]),
-        initial_position=np.array([0, 0, 0]),
+        landing_point=np.array([0, 0, 0]),
+        initial_position=np.array([0, 0, 50]),
         initial_velocity=np.array([0, 0, 0]),
+        # landing_point=np.array([0, 0, 50]),
+        # initial_position=np.array([0, 0, 0]),
+        # initial_velocity=np.array([0, 0, 0]),
         glide_slope=-0.05,
         max_velocity=100,
         dry_mass=100,
-        fuel_mass=60,
+        # fuel_mass=60,
+        fuel_mass=46.756,
         alpha=1/(9.81 * 180),
         lower_thrust_bound=2500 * 0.4,
         upper_thrust_bound=2500,
         tvc_range_rad=np.radians(10),
-        delta_t=0.1,
+        #delta_t=0.05,
+        delta_t=0.5,
         pointing_direction=np.array([0, 0, 1]),
         N=100
     )
@@ -164,6 +166,93 @@ if __name__ == "__main__":
         except RuntimeError as e:
             print(f"Failed with N = {N}: {e}")
             continue
+
+    # print("Optimal trajectory (positions):\n", best_solution[0])
+    # print("Optimal velocities:\n", best_solution[1])
+    # print("Optimal mass profile:\n", best_solution[2])
+    # print("Optimal specific thrusts:\n", best_solution[3])
+    # print("Optimal normalized thrust magnitudes:\n", best_solution[4])
+    # print("Total fuel used:", total_fuel_used)
+    # print(N, "time steps computed.")
+
+    # if best_solution is not None:
+    #     x, v, m, u, sigma = best_solution
+    #     time = np.linspace(0, solver.N * solver.delta_t, solver.N)
+
+    #     # Plot position trajectory in 3D
+    #     fig = plt.figure(figsize=(10, 6))
+    #     ax = fig.add_subplot(111, projection='3d')
+    #     ax.plot(x[0], x[1], x[2], '-o', color='C0', lw=2, markersize=4)
+    #     ax.set_title("Position Trajectory")
+    #     ax.set_xlabel("x")
+    #     ax.set_ylabel("y")
+    #     ax.set_zlabel("z")
+    #     ax.legend()
+    #     plt.grid()
+    #     plt.tight_layout()
+    #     plt.savefig("trajectory.png", dpi=150, bbox_inches="tight")
+    #     # Save view from multiple angles
+    #     angles = [
+    #         (45, 45),   # Corner view
+    #         (45, 135),  # Another corner
+    #         (45, 225),  # Another corner 
+    #         (45, 315),  # Another corner
+    #         (0, 0),     # Side view
+    #         (0, 90),    # Front view
+    #         (90, 0),    # Top view
+    #     ]
+        
+    #     for elevation, azimuth in angles:
+    #         ax.view_init(elev=elevation, azim=azimuth)
+    #         plt.savefig(f"trajectory_elev{elevation}_azim{azimuth}.png", 
+    #                dpi=150, bbox_inches="tight")
+    #     # # Plot velocity trajectory
+    #     # plt.figure(figsize=(10, 6))
+    #     # plt.plot(time, v[0, :], label="vx (East)")
+    #     # plt.plot(time, v[1, :], label="vy (North)")
+    #     # plt.plot(time, v[2, :], label="vz (Vertical)")
+    #     # plt.title("Velocity Trajectory")
+    #     # plt.xlabel("Time (s)")
+    #     # plt.ylabel("Velocity (m/s)")
+    #     # plt.legend()
+    #     # plt.grid()
+
+    #     # # Plot mass profile
+    #     # plt.figure(figsize=(10, 6))
+    #     # plt.plot(time, m, label="Mass")
+    #     # plt.title("Mass Profile")
+    #     # plt.xlabel("Time (s)")
+    #     # plt.ylabel("Mass (kg)")
+    #     # plt.legend()
+    #     # plt.grid()
+
+    #     # # Plot thrust magnitudes
+    #     # thrust_time = np.linspace(0, solver.N * solver.delta_t, solver.N)
+    #     # plt.figure(figsize=(10, 6))
+    #     # plt.plot(thrust_time, sigma, label="Normalized Thrust Magnitude")
+    #     # plt.title("Thrust Magnitude Profile")
+    #     # plt.xlabel("Time (s)")
+    #     # plt.ylabel("Normalized Thrust")
+    #     # plt.legend()
+    #     # plt.grid()
+
+    #     # plt.show()
+    # else:
+    #     print("No solution found to graph.")
+
+    print("Calculating optimal trajectory with finer resolution...")
+    
+    previous_solver_delta_t = solver.delta_t
+    solver.delta_t = 0.05
+    solver.N = N * int(previous_solver_delta_t / solver.delta_t)
+        
+    try:
+        x, v, m, u, sigma = solver.solve()
+        total_fuel_used = m[0] - m[-1]
+        min_fuel_used = total_fuel_used
+        best_solution = (x, v, m, u, sigma)
+    except RuntimeError as e:
+        print(f"Failed with N = {N}: {e}")
 
     print("Optimal trajectory (positions):\n", best_solution[0])
     print("Optimal velocities:\n", best_solution[1])
