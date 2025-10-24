@@ -1,0 +1,8 @@
+[package]
+name = "rust_lossless"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clarabel = "0.7"
+nalgebra = "0.32"

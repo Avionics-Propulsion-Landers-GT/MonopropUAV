@@ -1,0 +1,1 @@
+/home/brotherhobo/MonopropUAV/Algorithms/LosslessConvexification/rust_lossless/target/debug/rust_lossless: /home/brotherhobo/MonopropUAV/Algorithms/LosslessConvexification/rust_lossless/src/lossless.rs /home/brotherhobo/MonopropUAV/Algorithms/LosslessConvexification/rust_lossless/src/main.rs
