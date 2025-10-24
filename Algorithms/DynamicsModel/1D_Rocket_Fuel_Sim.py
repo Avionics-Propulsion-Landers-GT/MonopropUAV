@@ -33,6 +33,7 @@ def simulate(mass, height, pos_error_margin=0.1, vel_error_margin=0.05):
     positions = []
     fuel_masses = []
     times = []
+    thrust_magnitudes = []
     position = 0
     velocity = 0
     current_time = 0
@@ -50,6 +51,7 @@ def simulate(mass, height, pos_error_margin=0.1, vel_error_margin=0.05):
         positions.append(position)
         fuel_masses.append(fuel_mass_used)
         times.append(current_time)
+        thrust_magnitudes.append(thrust)
         current_time += dt
         position += velocity * dt
         velocity += (thrust - mass * 9.81) / mass * dt
@@ -66,6 +68,7 @@ def simulate(mass, height, pos_error_margin=0.1, vel_error_margin=0.05):
         positions.append(position)
         fuel_masses.append(fuel_mass_used)
         times.append(current_time)
+        thrust_magnitudes.append(thrust)
         current_time += dt
         position += velocity * dt
         velocity += (thrust - mass * 9.81) / mass * dt
@@ -90,6 +93,7 @@ def simulate(mass, height, pos_error_margin=0.1, vel_error_margin=0.05):
         positions.append(position)
         fuel_masses.append(fuel_mass_used)
         times.append(current_time)
+        thrust_magnitudes.append(thrust)
         current_time += dt
         position += velocity * dt
         velocity += (thrust - mass * 9.81) / mass * dt
@@ -110,6 +114,9 @@ def simulate(mass, height, pos_error_margin=0.1, vel_error_margin=0.05):
     print("Final Position:", position)
     print("Final Velocity:", velocity)
     print("Final Fuel Mass Used:", fuel_mass_used)
+    # Write thrust magnitudes to a file
+    with open('thrust_profile.txt', 'w') as f:
+        f.write(str(thrust_magnitudes))
 
     return positions, fuel_masses, times
 
