@@ -50,8 +50,8 @@ class Madgwick():
 
         # Calculates Attitude in euler angles using quaternion conversion formulas
         # Source: https://madecalculators.com/quaternion-to-euler-calculator/
-        roll = np.arctan2(2*(self.q[0]*self.q[1] + self.q[2]*self.q[3]), 1 - 2*(self.q[1]**2 + self.q[2]**2)) * -1
-        pitch = np.arcsin(2*(self.q[0]*self.q[2] - self.q[3]*self.q[1])) * -1
+        roll = np.arctan2(2*(self.q[0]*self.q[1] + self.q[2]*self.q[3]), 1 - 2*(self.q[1]**2 + self.q[2]**2))
+        pitch = np.arcsin(2*(self.q[0]*self.q[2] - self.q[3]*self.q[1]))
         yaw = np.arctan2(2*(self.q[0]*self.q[3] + self.q[1]*self.q[2]), 1 - 2*(self.q[2]**2 + self.q[3]**2))
 
         self.attitude_estimation = np.array([roll, pitch, yaw])
@@ -133,3 +133,4 @@ class Madgwick():
         y = w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2
         z = w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2
         return np.array([w, x, y, z])
+
