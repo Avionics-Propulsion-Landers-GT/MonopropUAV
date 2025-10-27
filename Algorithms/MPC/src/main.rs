@@ -64,8 +64,8 @@ fn main() {
     let mut x_history = Vec::with_capacity(iters);
     let mut u_history = Vec::with_capacity(iters);
 
-    let tolerance = 1e-6;
-    let lbfgs_memory = 10;
+    let tolerance = 5e-4;
+    let lbfgs_memory = 20;
     let max_iter = 1;
     let n_dim_u = m * n_steps;
     let mut panoc_cache = optimization_engine::panoc::PANOCCache::new(n_dim_u, tolerance, lbfgs_memory);
@@ -79,7 +79,7 @@ fn main() {
         // let mut u_warm_vec: Vec<Array1<f64>> = u_warm.axis_iter(ndarray::Axis(0)).map(|row| row.to_owned()).collect();
         // let (u_warm_vec, x_new, u_apply) = mpc_main(&x, &mut u_warm_vec, &xref_traj_vec, &q, &r, &qn, &u_min, &u_max, 2, 0.05);
         
-        // solve using OpEn
+        // OR we solve using OpEn
         let (u_apply, u_warm) = mpc_crate::OpEnSolve(&x, &u_warm.axis_iter(ndarray::Axis(0)).map(|row| row.to_owned()).collect(), &xref_traj_vec, &q, &r, &qn, &mut panoc_cache);
         
         u_history.push(u_apply.clone());

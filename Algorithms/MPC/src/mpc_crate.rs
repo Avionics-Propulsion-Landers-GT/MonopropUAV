@@ -5,7 +5,9 @@ use ndarray::{Array1, Array2};
 use ndarray::s;
 use ndarray_linalg::Inverse;
 use ndarray_linalg::Norm;
+use ndarray::ArrayView1;
 use optimization_engine::{panoc::*, *};
+use std::time::Instant;
 
 pub fn dynamics(x: &Array1<f64>, u: &Array1<f64>) -> Array1<f64> {
     // let mut x_next = Array1::<f64>::zeros(x.len());
@@ -354,12 +356,13 @@ fn nmpc_step(x0: &Array1<f64>, U_init: &Vec<Array1<f64>>, xref_traj: &Vec<Array1
     // initialize xs trajectory
     let mut xs = vec![Array1::<f64>::zeros(x0.len()); N + 1];
     let mut U = U_init.clone();
+    let start_time = Instant::now();
     for _ in 0..sqp_iters {
         xs = rollout(x0, &U);
         let (A_seq, B_seq) = linearize_trajectory(&xs, &U);
         let (H, g, dU_min, dU_max, _Su, _Q_bar, _R_bar) = assemble_qp_increment(&xs, &U, &xref_traj, &A_seq, &B_seq, &Q, &R, &QN, &u_min, &u_max);
         let dU0 = Array1::<f64>::zeros(m * N);
-        let dU = solve_qp_pgd(&H, &g, &dU_min, &dU_max, &dU0, 30, alpha_pgd);
+        let dU = solve_qp_pgd(&H, &g, &dU_min, &dU_max, &dU0, 20, alpha_pgd);
         let mut flatU = Array1::<f64>::zeros(m * N);
         // flatten U
         // Flatten U into flatU
@@ -391,120 +394,82 @@ fn nmpc_step(x0: &Array1<f64>, U_init: &Vec<Array1<f64>>, xref_traj: &Vec<Array1
         // test for convergence ?
         
     }
+    // print time taken
+    let duration = start_time.elapsed();
+    println!("PGD solve frequency {:?}Hz", 1.0 / duration.as_secs_f64());
 
     (U, xs)
 }
 
 // Using OpEn to solve
 
-// create cost function (essentialy the same as true_cost)
-pub fn trajectory_cost(x0: &Array1<f64>, U: &Vec<Array1<f64>>, xref_traj: &Vec<Array1<f64>>, Q: &Array2<f64>, R: &Array2<f64>, QN: &Array2<f64>) -> f64 {
-    let xs = rollout(x0, U);
-    let N = U.len();
-    let mut cost = 0.0;
-
-    // add up stage costs
-    for k in 0..N {
-        let x_diff = &xs[k+1] - &xref_traj[k+1];
-        cost += x_diff.t().dot(Q).dot(&x_diff);
-        cost += U[k].t().dot(R).dot(&U[k]);
-    }
-
-    // add terminal cost
-    let xN_diff = &xs[N] - &xref_traj[N];
-    cost += xN_diff.t().dot(QN).dot(&xN_diff);
-
+pub fn QP_cost(H: &Array2<f64>, g: &Array1<f64>, U: &Array1<f64>) -> f64 {
+    let cost = 0.5 * U.t().dot(H).dot(U) + g.t().dot(U);
     cost
 }
-
-pub fn trajectory_cost_gradient(x0: &Array1<f64>, U: &Vec<Array1<f64>>, xref_traj: &Vec<Array1<f64>>, Q: &Array2<f64>, R: &Array2<f64>, QN: &Array2<f64>, grad_U: &mut Vec<Array1<f64>>) {
-    let N = U.len();
-    let m = U[0].len();
-    let eps = 1e-6;
-
-    // compute Jacobian via central difference
-    for k in 0..N {
-        for i in 0..m {
-            let mut u_plus = U[k].clone();
-            let mut u_minus = U[k].clone();
-            u_plus[i] += eps;
-            u_minus[i] -= eps;
-            let mut U_plus = U.clone();
-            let mut U_minus = U.clone();
-            U_plus[k] = u_plus;
-            U_minus[k] = u_minus;
-            let cost_plus = trajectory_cost(x0, &U_plus, xref_traj, Q, R, QN);
-            let cost_minus = trajectory_cost(x0, &U_minus, xref_traj, Q, R, QN);
-            grad_U[k][i] = (cost_plus - cost_minus) / (2.0 * eps);
-        }
-    }
-
-    // tbh i think we can just take matrix derivative of trajectory cost... will need to look into it
+pub fn QP_gradient(H: &Array2<f64>, g: &Array1<f64>, U_flat: &Array1<f64>, grad_U_flat: &mut Array1<f64>) {
+    let grad = H.dot(U_flat) + g;
+    grad_U_flat.assign(&grad);
 }
 
-pub fn OpEnSolve(x0: &Array1<f64>, U: &Vec<Array1<f64>>, xref_traj: &Vec<Array1<f64>>, Q: &Array2<f64>, R: &Array2<f64>, QN: &Array2<f64>, panoc_cache: &mut PANOCCache) -> (Array1<f64>, Array2<f64>) {
+pub fn OpEnSolve(
+    x0: &Array1<f64>,
+    U: &Vec<Array1<f64>>,
+    xref_traj: &Vec<Array1<f64>>,
+    Q: &Array2<f64>,
+    R: &Array2<f64>,
+    QN: &Array2<f64>,
+    panoc_cache: &mut PANOCCache,
+) -> (Array1<f64>, Array2<f64>) {
+    use ndarray::ArrayView1;
 
-    let max_iter = 5;
-    // Dimensions from U
+    // Dimensions
     let N = U.len();
     let m = U[0].len();
     let n_dim_u = N * m;
 
+    // Linearize about current rollout, assemble quadratic program
+    let xs = rollout(x0, U);
+    let (A_seq, B_seq) = linearize_trajectory(&xs, U);
+    // dU bounds are unused for OpEn; pass zeros
+    let (H, g, _dU_min, _dU_max, _Su, _Q_bar, _R_bar) =
+        assemble_qp_increment(&xs, U, xref_traj, &A_seq, &B_seq, Q, R, QN,
+                              &Array1::zeros(m), &Array1::zeros(m));
 
-    // Helpers to reshape flattened vectors
-    let unflatten = |u_slice: &[f64]| -> Vec<Array1<f64>> {
-        let mut out = Vec::with_capacity(N);
-        for k in 0..N {
-            let start = k * m;
-            let end = start + m;
-            out.push(Array1::from(u_slice[start..end].to_vec()));
-        }
-        out
-    };
-    let write_flat = |vecs: &Vec<Array1<f64>>, out: &mut [f64]| {
-        for k in 0..N {
-            let start = k * m;
-            out[start..start + m].copy_from_slice(vecs[k].as_slice().unwrap());
-        }
-    };
-
-    // Gradient closure over slices
+    // Gradient (H u + g) and cost (0.5 u^T H u + g^T u) on flat slices
     let df = |u_slice: &[f64], grad_slice: &mut [f64]| -> Result<(), SolverError> {
-        let Uv = unflatten(u_slice);
-        let mut grad_vec: Vec<Array1<f64>> = vec![Array1::<f64>::zeros(m); N];
-        trajectory_cost_gradient(x0, &Uv, xref_traj, Q, R, QN, &mut grad_vec);
-        write_flat(&grad_vec, grad_slice);
+        let u_view = ArrayView1::from(u_slice);
+        let grad = H.dot(&u_view) + &g;
+        grad_slice.copy_from_slice(grad.as_slice().unwrap());
         Ok(())
     };
-
-    // Cost closure over slices
     let f = |u_slice: &[f64], cost: &mut f64| -> Result<(), SolverError> {
-        let Uv = unflatten(u_slice);
-        *cost = trajectory_cost(x0, &Uv, xref_traj, Q, R, QN);
+        let u_view = ArrayView1::from(u_slice);
+        let Hu = H.dot(&u_view);
+        *cost = 0.5 * u_view.dot(&Hu) + g.dot(&u_view);
         Ok(())
     };
 
-    // Box bounds (must live long enough)
+    // Box bounds on U (same per stage here)
     let mut u_min_flat: Vec<f64> = Vec::with_capacity(n_dim_u);
     let mut u_max_flat: Vec<f64> = Vec::with_capacity(n_dim_u);
-    for i in 0..n_dim_u {
-        if i % 3 == 2 {
-            // thrust
-            u_min_flat.push(0.0);
-            u_max_flat.push(20.0);
-        } else {
-            // gimbals (rad)
-            u_min_flat.push((-10.0_f64).to_radians());
-            u_max_flat.push(( 10.0_f64).to_radians());
-        }
+    for _k in 0..N {
+        // [gimbal_theta, gimbal_phi, thrust]
+        u_min_flat.push((-10.0_f64).to_radians());
+        u_max_flat.push(( 10.0_f64).to_radians());
+        u_min_flat.push((-10.0_f64).to_radians());
+        u_max_flat.push(( 10.0_f64).to_radians());
+        u_min_flat.push(0.0);
+        u_max_flat.push(20.0);
     }
     let bounds = constraints::Rectangle::new(
-        Some(&u_min_flat),
-        Some(&u_max_flat),
+        Some(&u_min_flat[..]),
+        Some(&u_max_flat[..]),
     );
 
+    // Problem and optimizer (reuse cache)
     let problem = Problem::new(&bounds, df, f);
-    let mut panoc = PANOCOptimizer::new(problem, panoc_cache).with_max_iter(max_iter);
+    let mut panoc = PANOCOptimizer::new(problem, panoc_cache).with_max_iter(150);
 
     // Initial guess flattened from U
     let mut u_init_flat: Vec<f64> = Vec::with_capacity(n_dim_u);
@@ -512,13 +477,16 @@ pub fn OpEnSolve(x0: &Array1<f64>, U: &Vec<Array1<f64>>, xref_traj: &Vec<Array1<
         u_init_flat.extend_from_slice(U[k].as_slice().unwrap());
     }
 
-    let status = panoc.solve(&mut u_init_flat).unwrap();
-    // println!("Solver status: {:?}", status);
+    // Solve
+    let _status = panoc.solve(&mut u_init_flat).unwrap();
+    println!("OpEn QP solve frequency: {:?}Hz, After {:?} iterations", 1.0 / _status.solve_time().as_secs_f64(), _status.iterations());
 
-    // First control to apply
+    // Return first control and full sequence reshaped
     let u_seq = Array1::from(u_init_flat);
-    let u_apply = u_seq.slice(s![0..3]).to_owned();
-    (u_apply, Array2::from_shape_vec((N, m), u_seq.to_vec()).unwrap())
+    let u_apply = u_seq.slice(s![0..m]).to_owned();
+    let U_seq = Array2::from_shape_vec((N, m), u_seq.to_vec()).unwrap();
+
+    (u_apply, U_seq)
 }
 
 // Main MPC function to be called externally
