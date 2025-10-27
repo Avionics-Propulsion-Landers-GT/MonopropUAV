@@ -24,9 +24,9 @@ fn main() {
 
     // Hover at set point
     let mut xref = Array1::<f64>::zeros(n);
-    xref[0] = -4.0;
-    xref[1] = 4.0;
-    xref[2] = 10.0;
+    xref[0] = 3.0;
+    xref[1] = -2.0;
+    xref[2] = 8.0;
     xref[6] = 1.0; // reference orientation: level (unit quaternion)
 
     // Reference trajectory
@@ -50,7 +50,7 @@ fn main() {
         5.0, 5.0, 5.0          // angular velocities wx, wy, wz
     ];
     let q = Array2::<f64>::from_diag(&Array1::from(q_vec.clone()));
-    let r = Array2::<f64>::from_diag(&Array1::from(vec![400.0, 400.0, 0.1]));
+    let r = Array2::<f64>::from_diag(&Array1::from(vec![4000.0, 4000.0, 0.1]));
     let qn = q.clone();
 
     // Bounds on control inputs
@@ -64,15 +64,24 @@ fn main() {
     let mut x_history = Vec::with_capacity(iters);
     let mut u_history = Vec::with_capacity(iters);
 
+    let tolerance = 1e-6;
+    let lbfgs_memory = 10;
+    let max_iter = 1;
+    let n_dim_u = m * n_steps;
+    let mut panoc_cache = optimization_engine::panoc::PANOCCache::new(n_dim_u, tolerance, lbfgs_memory);
+
     for _ in 0..iters {
         // display progress
-        println!("Time step: {}/{}", x_history.len(), iters);
+        println!("Time step: {}/{}", x_history.len() + 1, iters);
         // Solve MPC to get optimal control sequence
-        // 3 sqp iter
-        let mut u_warm_vec: Vec<Array1<f64>> = u_warm.axis_iter(ndarray::Axis(0)).map(|row| row.to_owned()).collect();
-        //let (u_warm, x_new, u_apply) = mpc_main(&x, &xref_traj, &u_warm, &q, &r, &qn, &u_min, &u_max, 3, 0.1);
-        let (u_warm_out, x_new, u_apply) = mpc_main(&x, &mut u_warm_vec, &xref_traj_vec, &q, &r, &qn, &u_min, &u_max, 2, 0.05);
-        // Apply first control input
+
+        // solve using mpc_main
+        // let mut u_warm_vec: Vec<Array1<f64>> = u_warm.axis_iter(ndarray::Axis(0)).map(|row| row.to_owned()).collect();
+        // let (u_warm_vec, x_new, u_apply) = mpc_main(&x, &mut u_warm_vec, &xref_traj_vec, &q, &r, &qn, &u_min, &u_max, 2, 0.05);
+        
+        // solve using OpEn
+        let (u_apply, u_warm) = mpc_crate::OpEnSolve(&x, &u_warm.axis_iter(ndarray::Axis(0)).map(|row| row.to_owned()).collect(), &xref_traj_vec, &q, &r, &qn, &mut panoc_cache);
+        
         u_history.push(u_apply.clone());
 
         // Simulate dynamics for one time step
@@ -152,8 +161,8 @@ fn main() {
         let thrust_data: Vec<f64> = u_history.iter().map(|u| u[2]).collect();
         chart.draw_series(LineSeries::new(
             x_data.iter().cloned().zip(thrust_data.iter().cloned()),
-            &GREEN,
-        )).unwrap().label("Thrust").legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &GREEN));
+            &BLACK,
+        )).unwrap().label("Thrust").legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &BLACK));
         chart.configure_series_labels()
             .background_style(&WHITE.mix(0.8))
             .border_style(&BLACK)
@@ -182,12 +191,12 @@ fn main() {
         let gimbal_phi_data: Vec<f64> = u_history.iter().map(|u| u[1].to_degrees()).collect();
         chart.draw_series(LineSeries::new(
             x_data.iter().cloned().zip(gimbal_theta_data.iter().cloned()),
-            &MAGENTA,
-        )).unwrap().label("Gimbal Theta (deg)").legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &MAGENTA));
+            &RED,
+        )).unwrap().label("Gimbal Theta (deg)").legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
         chart.draw_series(LineSeries::new(
             x_data.iter().cloned().zip(gimbal_phi_data.iter().cloned()),
-            &CYAN,
-        )).unwrap().label("Gimbal Phi (deg)").legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &CYAN));
+            &BLUE,
+        )).unwrap().label("Gimbal Phi (deg)").legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &BLUE));
         chart.configure_series_labels()
             .background_style(&WHITE.mix(0.8))
             .border_style(&BLACK)

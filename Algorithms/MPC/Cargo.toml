@@ -1,9 +1,10 @@
 [package]
 name = "MPC"
-version = "1.0"
-edition = "2025"
+version = "1.0.0"
+edition = "2024"
 
 [dependencies]
 plotters = "0.3"
 ndarray = "0.15"
+optimization_engine = "0.6.0"
 ndarray-linalg = { version = "0.16", features = ["intel-mkl"] }

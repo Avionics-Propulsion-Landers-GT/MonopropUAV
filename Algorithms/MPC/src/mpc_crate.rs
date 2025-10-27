@@ -5,6 +5,7 @@ use ndarray::{Array1, Array2};
 use ndarray::s;
 use ndarray_linalg::Inverse;
 use ndarray_linalg::Norm;
+use optimization_engine::{panoc::*, *};
 
 pub fn dynamics(x: &Array1<f64>, u: &Array1<f64>) -> Array1<f64> {
     // let mut x_next = Array1::<f64>::zeros(x.len());
@@ -257,72 +258,6 @@ fn assemble_qp_increment(xs: &Vec<Array1<f64>>, U: &Vec<Array1<f64>>, xref_traj:
     (H, g, dU_min, dU_max, Su, Q_bar, R_bar)
 }
 
-// Solve QP using projected gradient descent for control increment dU
-// Note that all arguments for U sequences for this function are flattened into a single vector
-/*
-fn solve_qp_pgd(H: &Array2<f64>, g: &Array1<f64>, U_min: &Array1<f64>, U_max: &Array1<f64>, U_init: &Array1<f64>, max_iters: usize, alpha: f64) -> Array1<f64> {
-    // let n = g.len();
-    let mut dU = U_init.clone();
-    //let mut cost_old = 0.0;
-    //let mut cost_new = 0.0;
-
-    // project to bounds
-    let m = U_min.len();
-    for i in 0..m {
-        if dU[i] < U_min[i] {
-            dU[i] = U_min[i];
-        } else if dU[i] > U_max[i] {
-            dU[i] = U_max[i];
-        }
-    }
-
-    for _ in 0..max_iters {
-        let grad = H.dot(&dU) + g;
-        println!("Gradient norm: {}", grad.norm());
-
-        let mut alpha_ls = alpha;
-        let cost_old = 0.5 * dU.t().dot(H).dot(&dU) + g.t().dot(&dU);
-        dU = &dU - &(alpha * &grad);
-
-        // project to bounds before line search
-        for i in 0..m {
-            if dU[i] < U_min[i] {
-                dU[i] = U_min[i];
-            } else if dU[i] > U_max[i] {
-                dU[i] = U_max[i];
-            }
-        }
-
-        while alpha_ls > 1e-6 {
-            let mut U_new = &dU - &(alpha_ls * &grad);
-            for i in 0..m {
-                if U_new[i] < U_min[i] {
-                    U_new[i] = U_min[i];
-                } else if U_new[i] > U_max[i] {
-                    U_new[i] = U_max[i];
-                }
-            }
-            let cost_new = 0.5 * U_new.t().dot(H).dot(&U_new) + g.t().dot(&U_new);
-            if cost_new < cost_old {
-                dU = U_new;
-                break;
-            } else {
-                alpha_ls *= 0.5;
-            }
-        }
-
-        
-        // check for convergence
-        if *&grad.norm() < 1e-6 {
-            break;
-        }
-
-    }
-
-    dU
-}
-
-*/
 fn solve_qp_pgd(H: &Array2<f64>, g: &Array1<f64>, dU_min: &Array1<f64>, dU_max: &Array1<f64>, dU_init: &Array1<f64>, max_iters: usize, alpha: f64) -> Array1<f64> {
     let mut dU = dU_init.clone();
     let n = dU.len();
@@ -460,10 +395,137 @@ fn nmpc_step(x0: &Array1<f64>, U_init: &Vec<Array1<f64>>, xref_traj: &Vec<Array1
     (U, xs)
 }
 
+// Using OpEn to solve
+
+// create cost function (essentialy the same as true_cost)
+pub fn trajectory_cost(x0: &Array1<f64>, U: &Vec<Array1<f64>>, xref_traj: &Vec<Array1<f64>>, Q: &Array2<f64>, R: &Array2<f64>, QN: &Array2<f64>) -> f64 {
+    let xs = rollout(x0, U);
+    let N = U.len();
+    let mut cost = 0.0;
+
+    // add up stage costs
+    for k in 0..N {
+        let x_diff = &xs[k+1] - &xref_traj[k+1];
+        cost += x_diff.t().dot(Q).dot(&x_diff);
+        cost += U[k].t().dot(R).dot(&U[k]);
+    }
+
+    // add terminal cost
+    let xN_diff = &xs[N] - &xref_traj[N];
+    cost += xN_diff.t().dot(QN).dot(&xN_diff);
+
+    cost
+}
+
+pub fn trajectory_cost_gradient(x0: &Array1<f64>, U: &Vec<Array1<f64>>, xref_traj: &Vec<Array1<f64>>, Q: &Array2<f64>, R: &Array2<f64>, QN: &Array2<f64>, grad_U: &mut Vec<Array1<f64>>) {
+    let N = U.len();
+    let m = U[0].len();
+    let eps = 1e-6;
+
+    // compute Jacobian via central difference
+    for k in 0..N {
+        for i in 0..m {
+            let mut u_plus = U[k].clone();
+            let mut u_minus = U[k].clone();
+            u_plus[i] += eps;
+            u_minus[i] -= eps;
+            let mut U_plus = U.clone();
+            let mut U_minus = U.clone();
+            U_plus[k] = u_plus;
+            U_minus[k] = u_minus;
+            let cost_plus = trajectory_cost(x0, &U_plus, xref_traj, Q, R, QN);
+            let cost_minus = trajectory_cost(x0, &U_minus, xref_traj, Q, R, QN);
+            grad_U[k][i] = (cost_plus - cost_minus) / (2.0 * eps);
+        }
+    }
+
+    // tbh i think we can just take matrix derivative of trajectory cost... will need to look into it
+}
+
+pub fn OpEnSolve(x0: &Array1<f64>, U: &Vec<Array1<f64>>, xref_traj: &Vec<Array1<f64>>, Q: &Array2<f64>, R: &Array2<f64>, QN: &Array2<f64>, panoc_cache: &mut PANOCCache) -> (Array1<f64>, Array2<f64>) {
+
+    let max_iter = 5;
+    // Dimensions from U
+    let N = U.len();
+    let m = U[0].len();
+    let n_dim_u = N * m;
+
+
+    // Helpers to reshape flattened vectors
+    let unflatten = |u_slice: &[f64]| -> Vec<Array1<f64>> {
+        let mut out = Vec::with_capacity(N);
+        for k in 0..N {
+            let start = k * m;
+            let end = start + m;
+            out.push(Array1::from(u_slice[start..end].to_vec()));
+        }
+        out
+    };
+    let write_flat = |vecs: &Vec<Array1<f64>>, out: &mut [f64]| {
+        for k in 0..N {
+            let start = k * m;
+            out[start..start + m].copy_from_slice(vecs[k].as_slice().unwrap());
+        }
+    };
+
+    // Gradient closure over slices
+    let df = |u_slice: &[f64], grad_slice: &mut [f64]| -> Result<(), SolverError> {
+        let Uv = unflatten(u_slice);
+        let mut grad_vec: Vec<Array1<f64>> = vec![Array1::<f64>::zeros(m); N];
+        trajectory_cost_gradient(x0, &Uv, xref_traj, Q, R, QN, &mut grad_vec);
+        write_flat(&grad_vec, grad_slice);
+        Ok(())
+    };
+
+    // Cost closure over slices
+    let f = |u_slice: &[f64], cost: &mut f64| -> Result<(), SolverError> {
+        let Uv = unflatten(u_slice);
+        *cost = trajectory_cost(x0, &Uv, xref_traj, Q, R, QN);
+        Ok(())
+    };
+
+    // Box bounds (must live long enough)
+    let mut u_min_flat: Vec<f64> = Vec::with_capacity(n_dim_u);
+    let mut u_max_flat: Vec<f64> = Vec::with_capacity(n_dim_u);
+    for i in 0..n_dim_u {
+        if i % 3 == 2 {
+            // thrust
+            u_min_flat.push(0.0);
+            u_max_flat.push(20.0);
+        } else {
+            // gimbals (rad)
+            u_min_flat.push((-10.0_f64).to_radians());
+            u_max_flat.push(( 10.0_f64).to_radians());
+        }
+    }
+    let bounds = constraints::Rectangle::new(
+        Some(&u_min_flat),
+        Some(&u_max_flat),
+    );
+
+    let problem = Problem::new(&bounds, df, f);
+    let mut panoc = PANOCOptimizer::new(problem, panoc_cache).with_max_iter(max_iter);
+
+    // Initial guess flattened from U
+    let mut u_init_flat: Vec<f64> = Vec::with_capacity(n_dim_u);
+    for k in 0..N {
+        u_init_flat.extend_from_slice(U[k].as_slice().unwrap());
+    }
+
+    let status = panoc.solve(&mut u_init_flat).unwrap();
+    // println!("Solver status: {:?}", status);
+
+    // First control to apply
+    let u_seq = Array1::from(u_init_flat);
+    let u_apply = u_seq.slice(s![0..3]).to_owned();
+    (u_apply, Array2::from_shape_vec((N, m), u_seq.to_vec()).unwrap())
+}
+
 // Main MPC function to be called externally
 pub fn mpc_main(x: &Array1<f64>, U_warm: &mut Vec<Array1<f64>>, xref_traj: &Vec<Array1<f64>>, Q: &Array2<f64>, R: &Array2<f64>, QN: &Array2<f64>, u_min: &Array1<f64>, u_max: &Array1<f64>, sqp_iters: usize, alpha_pgd: f64) -> (Vec<Array1<f64>>, Array1<f64>, Array1<f64>) {
     let (U, _xs) = nmpc_step(x, &U_warm, &xref_traj, &Q, &R, &QN, &u_min, &u_max, sqp_iters, alpha_pgd);
     let u_apply = U[0].clone(); // apply first control
+
     let x_new = dynamics(x, &u_apply);
     *U_warm = U[1..].to_vec(); // shift warm start
     U_warm.push(U_warm.last().unwrap().clone()); // repeat last control for warm start
