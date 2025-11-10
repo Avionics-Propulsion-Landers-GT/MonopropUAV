@@ -249,6 +249,20 @@ impl lossless_solver {
             h.push(-self.pointing_direction[1]);
             h.push(-self.pointing_direction[2]);
             socp_row_counter += 4;
+
+            // TODO: add glide slope constraints (ts gpt rn)
+            // if (self.use_glide_slope) {
+            //     // ---------- Glide slope SOC: ||x_k[:2]|| <= x_k[2] / glide_slope ----------
+            //     let x_offset = idx_x + 3 * k;
+            //     socp_rows.push(socp_row_counter + 0); socp_cols.push(x_offset + 2); socp_vals.push(1.0); // x_k[2]
+            //     socp_rows.push(socp_row_counter + 1); socp_cols.push(x_offset + 0); socp_vals.push(-1.0); // -x_k[0]
+            //     socp_rows.push(socp_row_counter + 2); socp_cols.push(x_offset + 1); socp_vals.push(-1.0); // -x_k[1]
+            //     cones.push(SupportedCone::SecondOrderCone { dim: 3 });
+            //     h.push(0.0);
+            //     h.push(0.0);
+            //     h.push(0.0);
+            //     socp_row_counter += 3;
+            // }
         }
 
         // ---------- End mass SOC: w_N >= log(m_dry) ----------
@@ -283,9 +297,13 @@ impl lossless_solver {
 
         let options = SolverOptions::default(); // can tweak tolerances here
 
-        let result = clarabel::solver::solve(&problem, &options).expect("Solver failed");
-
-        Ok(result)
+        match solver::solve(&problem, &options) {
+            Ok(sol) => Ok(sol),
+            Err(err) => {
+                eprintln!("Clarabel failed on timestep {}: {:?}", k, err);
+                Err(err)
+            }
+        }
     }
 
     pub fn solve(&self) {
@@ -300,7 +318,28 @@ impl lossless_solver {
         let n_min = (t_min / self.delta_t).ceil() as i64;
         let n_max = (t_max / self.delta_t).floor() as i64;
 
+        let mut results = Vec::new();
 
+        for k in n_min..n_max {
+            println!("Solving step {}...", k);
 
+            match self.solve_timestep(k) {
+                Ok(sol) => {
+                    // Check if result is “satisfactory”
+                    if self.is_solution_satisfactory(&sol) {
+                        println!("✅ Step {} converged successfully.", k);
+                        results.push(sol);
+                    } else {
+                        println!("⚠️ Step {} converged but unsatisfactory, skipping.", k);
+                    }
+                }
+                Err(_) => {
+                    println!("❌ Step {} failed, moving on.", k);
+                    continue;
+                }
+            }
+        }
+
+        results
     }
 }
