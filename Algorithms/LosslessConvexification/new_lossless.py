@@ -2,6 +2,7 @@ import numpy as np
 import cvxpy as cp
 import glob
 import os
+import csv
 import matplotlib.pyplot as plt
 
 class LosslessConvexTaylorSolver:
@@ -126,14 +127,14 @@ if __name__ == "__main__":
         # initial_position=np.array([0, 0, 0]),
         # initial_velocity=np.array([0, 0, 0]),
         glide_slope=-0.05,
-        max_velocity=100,
-        dry_mass=100,
+        max_velocity=5,
+        dry_mass=50,
         # fuel_mass=60,
-        fuel_mass=46.756,
+        fuel_mass=22.59,
         alpha=1/(9.81 * 180),
-        lower_thrust_bound=2500 * 0.4,
-        upper_thrust_bound=2500,
-        tvc_range_rad=np.radians(10),
+        lower_thrust_bound=1000 * 0.4,
+        upper_thrust_bound=1000,
+        tvc_range_rad=np.radians(15),
         #delta_t=0.05,
         delta_t=0.5,
         pointing_direction=np.array([0, 0, 1]),
@@ -264,7 +265,38 @@ if __name__ == "__main__":
 
     if best_solution is not None:
         x, v, m, u, sigma = best_solution
-        time = np.linspace(0, solver.N * solver.delta_t, solver.N)
+        time = np.linspace(0, solver.N * solver.delta_t, solver.N + 1)
+        
+        # Save trajectory data to CSV (including actual thrust = mass * u)
+        traj_filename = "trajectory_data.csv"
+
+        # Compute actual thrust vector (N) at each timestep: thrust = mass * u
+        # u has length N, while time/m has length N+1. Set thrust at final time to zero.
+        thrust_vec = np.zeros((3, len(time)))
+        for k in range(len(time) - 1):
+            thrust_vec[:, k] = (u[:, k] * m[k])  # elementwise: accel * mass = force
+        thrust_mag = np.linalg.norm(thrust_vec, axis=0)
+
+        with open(traj_filename, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow([
+            "Time", "X", "Y", "Z",
+            "Vx", "Vy", "Vz",
+            "Mass",
+            "Thrust_X", "Thrust_Y", "Thrust_Z", "Thrust_Mag"
+            ])
+            for i in range(len(time)):
+                writer.writerow([
+                    float(time[i]),
+                    float(x[0, i]), float(x[1, i]), float(x[2, i]),
+                    float(v[0, i]), float(v[1, i]), float(v[2, i]),
+                    float(m[i]),
+                    float(thrust_vec[0, i]), float(thrust_vec[1, i]), float(thrust_vec[2, i]),
+                    float(thrust_mag[i])
+                ])
+
+        print(f"Trajectory data saved to {traj_filename}")
+
 
         # Plot position trajectory in 3D
         fig = plt.figure(figsize=(10, 6))

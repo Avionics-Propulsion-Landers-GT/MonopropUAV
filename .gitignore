@@ -24,3 +24,4 @@ ControlLoop/latency.csv
 *.o
 ControlLoop/IntegratedDynModel/*.html
 .vscode
+Algorithms/LosslessConvexification/rust_lossless/target/

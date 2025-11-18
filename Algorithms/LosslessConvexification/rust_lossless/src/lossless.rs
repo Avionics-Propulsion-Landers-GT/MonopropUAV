@@ -56,7 +56,7 @@ impl LosslessSolver {
         LosslessSolver::default()
     }
 
-    pub fn solve_at_time(&self, N: i64) -> Result<clarabel::solver::DefaultSolution<f64>, String> {
+    pub fn solve_at_current_time(&mut self) -> Result<clarabel::solver::DefaultSolution<f64>, String> {
         let m0 = self.dry_mass + self.fuel_mass;
         
         let n_vars = 3 * (self.N + 1) // x
@@ -111,7 +111,7 @@ impl LosslessSolver {
 
         
         // vehicle kinematics constraints
-        for k in 0..N {
+        for k in 0..self.N {
             let curr_x_offset = idx_x + 3 * k;
             let next_x_offset = idx_x + 3 * (k + 1);
             let curr_v_offset = idx_v + 3 * k;
@@ -181,7 +181,7 @@ impl LosslessSolver {
         // x_N = landing_point
         for i in 0..3 {
             rows.push(row_counter as usize);
-            cols.push((idx_x + 3 * N + i) as usize);
+            cols.push((idx_x + 3 * self.N + i) as usize);
             vals.push(1.0);
             b.push(self.landing_point[i as usize]);
             row_counter += 1;
@@ -190,7 +190,7 @@ impl LosslessSolver {
         // v_N = 0
         for i in 0..3 {
             rows.push(row_counter as usize);
-            cols.push((idx_v + 3 * N + i) as usize);
+            cols.push((idx_v + 3 * self.N + i) as usize);
             vals.push(1.0);
             b.push(0.0);
             row_counter += 1;
@@ -210,7 +210,7 @@ impl LosslessSolver {
 
         let sin_theta = self.tvc_range_rad.sin();
 
-        for k in 0..N {
+        for k in 0..self.N {
             let w_offset = idx_w + k;
             let u_offset = idx_u + 3 * k;
             let sigma_offset = idx_sigma + k;
@@ -275,7 +275,7 @@ impl LosslessSolver {
 
         // ---------- End mass SOC: w_N >= log(m_dry) ----------
         socp_rows.push(socp_row_counter as usize);
-        socp_cols.push((idx_w + N) as usize);
+        socp_cols.push((idx_w + self.N) as usize);
         socp_vals.push(1.0);
         cones.push(SupportedConeT::SecondOrderConeT(1));
         h.push(self.dry_mass.ln());
@@ -289,7 +289,7 @@ impl LosslessSolver {
 
         let mut c = vec![0.0; n_vars as usize];
         // sigma variables start at idx_sigma
-        for k in 0..N {
+        for k in 0..self.N {
             c[(idx_sigma + k) as usize] = self.delta_t; // weight = delta_t for discretization
         }
 
@@ -412,7 +412,7 @@ impl LosslessSolver {
         }
     }
 
-    pub fn solve(&self) -> Option<TrajectoryResult> {
+    pub fn solve(&mut self) -> Option<TrajectoryResult> {
         let vel_norm = self.initial_velocity.iter()
             .map(|v| v * v)
             .sum::<f64>()
@@ -428,8 +428,8 @@ impl LosslessSolver {
 
         for k in n_min..n_max {
             println!("Solving step {}...", k);
-
-            match self.solve_at_time(k) {
+            self.N = k;
+            match self.solve_at_current_time() {
                 Ok(sol) => {
                         println!("✅ Step {} converged successfully.", k);
                         result = Some(sol);
