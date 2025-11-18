@@ -24,9 +24,9 @@ fn main() {
 
     // Hover at set point
     let mut xref = Array1::<f64>::zeros(n);
-    xref[0] = 3.0;
-    xref[1] = -2.0;
-    xref[2] = 8.0;
+    xref[0] = 1.0;
+    xref[1] = -1.0;
+    xref[2] = 10.0;
     xref[6] = 1.0; // reference orientation: level (unit quaternion)
 
     // Reference trajectory
@@ -34,7 +34,7 @@ fn main() {
     let xref_traj_vec: Vec<Array1<f64>> = xref_traj.axis_iter(ndarray::Axis(0)).map(|row| row.to_owned()).collect();
 
     // Warm start: hover thrust (thrust = mass * gravity, gimbal angles = 0)
-    let m_rocket = 1.0;
+    let m_rocket = 80.0;
     let g = 9.81;
     let hover_thrust = m_rocket * g;
     let mut u_warm = Array2::<f64>::zeros((n_steps, m));
@@ -44,19 +44,25 @@ fn main() {
 
     // Costs: penalize position, orientation, velocities, angular rates
     let q_vec = vec![
-        70.0, 70.0, 200.0,   // position x, y, z
-        200.0, 200.0, 200.0, 200.0, // quaternion qx, qy, qz, qw
-        50.0, 50.0, 100.0,        // linear velocities x_dot, y_dot, z_dot
-        5.0, 5.0, 5.0          // angular velocities wx, wy, wz
+        20.0, 20.0, 200.0,   // position x, y, z
+        0.0, 0.0, 0.0, 0.0, // quaternion qx, qy, qz, qw
+        3.0, 3.0, 1.0,        // linear velocities x_dot, y_dot, z_dot
+        1.0, 1.0, 1.0          // angular velocities wx, wy, wz
     ];
     let q = Array2::<f64>::from_diag(&Array1::from(q_vec.clone()));
-    let r = Array2::<f64>::from_diag(&Array1::from(vec![4000.0, 4000.0, 0.1]));
-    let qn = q.clone();
+    let r = Array2::<f64>::from_diag(&Array1::from(vec![000.0, 000.0, 0.00]));
+    // let qn = q.clone();
+    let qn = Array2::<f64>::from_diag(&Array1::from(vec![
+        200.0, 200.0, 5000.0,   // position x, y, z
+        10.0, 10.0, 10.0, 10.0, // quaternion qx, qy, qz, qw
+        10.0, 10.0, 10.0,        // linear velocities x_dot, y_dot, z_dot
+        5.0, 5.0, 5.0          // angular velocities wx, wy, wz
+    ]));
 
     // Bounds on control inputs
-    let gimbal_limit = 10.0 * PI / 180.0; // +/- 10 degrees
-    let thrust_min = 0.0;
-    let thrust_max = 20.0;
+    let gimbal_limit = 15.0 * PI / 180.0; // +/- 15 degrees
+    let thrust_min = 300.0;
+    let thrust_max = 1000.0;
     let u_min = Array1::from(vec![-gimbal_limit, -gimbal_limit, thrust_min]);
     let u_max = Array1::from(vec![gimbal_limit, gimbal_limit, thrust_max]);
 
@@ -64,11 +70,14 @@ fn main() {
     let mut x_history = Vec::with_capacity(iters);
     let mut u_history = Vec::with_capacity(iters);
 
-    let tolerance = 5e-4;
+    let tolerance = 1e-4;
     let lbfgs_memory = 20;
-    let max_iter = 1;
+    let max_iter = 200;
     let n_dim_u = m * n_steps;
     let mut panoc_cache = optimization_engine::panoc::PANOCCache::new(n_dim_u, tolerance, lbfgs_memory);
+
+    // smoothing weight vector (for gimbal_theta, gimbal_phi, thrust)
+    let smoothing_weight = Array1::from(vec![500.0, 500.0, 0.02]);
 
     for _ in 0..iters {
         // display progress
@@ -80,7 +89,7 @@ fn main() {
         // let (u_warm_vec, x_new, u_apply) = mpc_main(&x, &mut u_warm_vec, &xref_traj_vec, &q, &r, &qn, &u_min, &u_max, 2, 0.05);
         
         // OR we solve using OpEn
-        let (u_apply, u_warm) = mpc_crate::OpEnSolve(&x, &u_warm.axis_iter(ndarray::Axis(0)).map(|row| row.to_owned()).collect(), &xref_traj_vec, &q, &r, &qn, &mut panoc_cache);
+        let (u_apply, u_warm) = mpc_crate::OpEnSolve(&x, &u_warm.axis_iter(ndarray::Axis(0)).map(|row| row.to_owned()).collect(), &xref_traj_vec, &q, &r, &qn, &smoothing_weight, &mut panoc_cache);
         
         u_history.push(u_apply.clone());
 
@@ -105,7 +114,7 @@ fn main() {
             .margin(10)
             .x_label_area_size(40)
             .y_label_area_size(80)
-            .build_cartesian_2d(0f64..t_total, -5f64..15f64)
+            .build_cartesian_2d(0f64..t_total, -30f64..30f64)
             .unwrap();
 
         chart.configure_mesh()
@@ -121,18 +130,18 @@ fn main() {
 
         chart.draw_series(LineSeries::new(
             x_data.iter().cloned().zip(y_data.iter().cloned()),
-            &RED,
-        )).unwrap().label("X Position").legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
+            RED.stroke_width(5),
+        )).unwrap().label("X Position").legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], RED.stroke_width(3)));
 
         chart.draw_series(LineSeries::new(
             x_data.iter().cloned().zip(z_data.iter().cloned()),
-            &BLUE,
-        )).unwrap().label("Y Position").legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &BLUE));
+            BLUE.stroke_width(5),
+        )).unwrap().label("Y Position").legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], BLUE.stroke_width(3)));
 
         chart.draw_series(LineSeries::new(
             x_data.iter().cloned().zip(z_pos_data.iter().cloned()),
-            &GREEN,
-        )).unwrap().label("Z Position").legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &GREEN));
+            GREEN.stroke_width(5),
+        )).unwrap().label("Z Position").legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], GREEN.stroke_width(3)));
 
         chart.configure_series_labels()
             .background_style(&WHITE.mix(0.8))
