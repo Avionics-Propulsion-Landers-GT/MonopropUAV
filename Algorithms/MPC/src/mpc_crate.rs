@@ -12,11 +12,11 @@ use std::time::Instant;
 pub fn dynamics(x: &Array1<f64>, u: &Array1<f64>) -> Array1<f64> {
     // let mut x_next = Array1::<f64>::zeros(x.len());
     // Constants
-    let m = 1.0;
+    let m = 80.0;
     let g = 9.81;
-    let ixx = 0.2;
-    let iyy = 0.2;
-    let izz = 0.4;
+    let ixx = 20.0;
+    let iyy = 20.0;
+    let izz = 10.0;
     let dt = 0.1;
 
     // Inertia matrix and inverse
@@ -407,9 +407,53 @@ pub fn QP_cost(H: &Array2<f64>, g: &Array1<f64>, U: &Array1<f64>) -> f64 {
     let cost = 0.5 * U.t().dot(H).dot(U) + g.t().dot(U);
     cost
 }
-pub fn QP_gradient(H: &Array2<f64>, g: &Array1<f64>, U_flat: &Array1<f64>, grad_U_flat: &mut Array1<f64>) {
+pub fn QP_gradient(H: &Array2<f64>, g: &Array1<f64>, U_flat: &Array1<f64>) -> Array1<f64> {
     let grad = H.dot(U_flat) + g;
-    grad_U_flat.assign(&grad);
+    grad
+}
+
+// control smoothing cost
+pub fn calculate_delta_U(U: &Array1<f64>, m: usize) -> Array1<f64> {
+    let N = U.len() / m; // number of control steps
+    let mut delta_U = Array1::<f64>::zeros((N-1) * m);
+
+    for k in 0..(N-1) {
+        for i in 0..m {
+            delta_U[k*m + i] = U[(k+1)*m + i] - U[k*m + i];
+        }
+    }
+    
+    delta_U
+}
+
+pub fn smoothing_cost(U: &Array1<f64>, weight: &Array1<f64>, m: usize) -> f64 {
+    let delta_U = calculate_delta_U(U, m);
+    let N_delta = delta_U.len() / m; // number of delta steps (N-1)
+    
+    let mut cost = 0.0;
+    for k in 0..N_delta {
+        for i in 0..m {
+            let delta_u_ki = delta_U[k*m + i];
+            cost += weight[i] * delta_u_ki * delta_u_ki;
+        }
+    }
+    
+    cost
+}
+
+pub fn smoothing_cost_grad(U: &Array1<f64>, weight: &Array1<f64>, m: usize) -> Array1<f64> {
+    let N = U.len() / m; // number of control steps
+    let mut grad = Array1::<f64>::zeros(U.len());
+
+    for k in 0..(N-1) {
+        for i in 0..m {
+            let delta_u_ki = U[(k+1)*m + i] - U[k*m + i];
+            grad[k*m + i] -= 2.0 * weight[i] * delta_u_ki;
+            grad[(k+1)*m + i] += 2.0 * weight[i] * delta_u_ki;
+        }
+    }
+
+    grad
 }
 
 pub fn OpEnSolve(
@@ -419,6 +463,7 @@ pub fn OpEnSolve(
     Q: &Array2<f64>,
     R: &Array2<f64>,
     QN: &Array2<f64>,
+    smoothing_weight: &Array1<f64>,
     panoc_cache: &mut PANOCCache,
 ) -> (Array1<f64>, Array2<f64>) {
     use ndarray::ArrayView1;
@@ -439,28 +484,32 @@ pub fn OpEnSolve(
     // Gradient (H u + g) and cost (0.5 u^T H u + g^T u) on flat slices
     let df = |u_slice: &[f64], grad_slice: &mut [f64]| -> Result<(), SolverError> {
         let u_view = ArrayView1::from(u_slice);
-        let grad = H.dot(&u_view) + &g;
-        grad_slice.copy_from_slice(grad.as_slice().unwrap());
+        let grad = QP_gradient(&H, &g, &u_view.to_owned());
+        let smooth_grad = smoothing_cost_grad(&u_view.to_owned(), smoothing_weight, m);
+        let total_grad = &grad + &smooth_grad;
+        grad_slice.copy_from_slice(total_grad.as_slice().unwrap());
         Ok(())
     };
+    
     let f = |u_slice: &[f64], cost: &mut f64| -> Result<(), SolverError> {
         let u_view = ArrayView1::from(u_slice);
-        let Hu = H.dot(&u_view);
-        *cost = 0.5 * u_view.dot(&Hu) + g.dot(&u_view);
+        let smooth_cost = smoothing_cost(&u_view.to_owned(), smoothing_weight, m);
+        *cost = QP_cost(&H, &g, &u_view.to_owned()) + smooth_cost;
         Ok(())
     };
+
 
     // Box bounds on U (same per stage here)
     let mut u_min_flat: Vec<f64> = Vec::with_capacity(n_dim_u);
     let mut u_max_flat: Vec<f64> = Vec::with_capacity(n_dim_u);
     for _k in 0..N {
         // [gimbal_theta, gimbal_phi, thrust]
-        u_min_flat.push((-10.0_f64).to_radians());
-        u_max_flat.push(( 10.0_f64).to_radians());
-        u_min_flat.push((-10.0_f64).to_radians());
-        u_max_flat.push(( 10.0_f64).to_radians());
-        u_min_flat.push(0.0);
-        u_max_flat.push(20.0);
+        u_min_flat.push((-15.0_f64).to_radians());
+        u_max_flat.push(( 15.0_f64).to_radians());
+        u_min_flat.push((-15.0_f64).to_radians());
+        u_max_flat.push(( 15.0_f64).to_radians());
+        u_min_flat.push(300.0);
+        u_max_flat.push(1000.0);
     }
     let bounds = constraints::Rectangle::new(
         Some(&u_min_flat[..]),
