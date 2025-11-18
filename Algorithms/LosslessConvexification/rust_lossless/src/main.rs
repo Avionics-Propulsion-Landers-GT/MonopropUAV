@@ -1,34 +1,34 @@
 use clarabel::algebra::*;
 use clarabel::solver::*;
 mod lossless;
+use crate::lossless::LosslessSolver;
 
 fn main() {
-    // Problem dimensions
-    let n = 2; // number of variables
-    let m = 2; // dimension of SOC constraint
+    let solver = LosslessSolver {
+        landing_point: [0.0, 0.0, 0.0],
+        initial_position: [0.0, 0.0, 50.0],
+        initial_velocity: [0.0, 0.0, 0.0],
+        dry_mass: 100.0,
+        fuel_mass: 60.0,
+        alpha: 1.0/(9.81 * 180.0),
+        lower_thrust_bound: 2500.0 * 0.4,
+        upper_thrust_bound: 2500.0,
+        tvc_range_rad: 15_f64.to_radians(),
+        N: 20,
+        ..Default::default()
+    };
+    
+    let traj_result = solver.solve();
 
-    // Objective: (1/2)xᵀ P x + qᵀ x
-    let P = CscMatrix::identity(n);
-    let q = vec![0.0, 0.0];
-
-    // Constraint: A x + s = b
-    // Here, A = I and b = 0 ⇒ s = x ∈ SOC
-    let A = CscMatrix::identity(m);
-    let b = vec![0.0, 0.0];
-
-    // Define the cone(s)
-    // Note: SupportedConeT::SecondOrderConeT takes a single usize (dimension)
-    let cones = [SupportedConeT::SecondOrderConeT(m)];
-
-    // Default solver settings
-    let settings = DefaultSettings::default();
-
-    // Build and solve problem
-    let mut solver = DefaultSolver::new(&P, &q, &A, &b, &cones, settings);
-    solver.solve();
-
-    // Retrieve and print solution
-    let x = &solver.solution.x;
-    println!("Solution x = {:?}", x);
-    println!("Solver status: {:?}", solver.info.status);
+    match traj_result {
+        Some(result) => {
+            println!("Final position: {:?}", result.positions.last().unwrap());
+            println!("Final velocity: {:?}", result.velocities.last().unwrap());
+            println!("Final mass: {:?}", result.masses.last().unwrap());
+            println!("Final thrust: {:?}", result.thrusts.last().unwrap());
+        }
+        None => {
+            eprintln!("Solve failed!");
+        }
+    }
 }
