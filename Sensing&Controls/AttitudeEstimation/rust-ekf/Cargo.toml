@@ -1,0 +1,9 @@
+[package]
+name = "rust-ekf"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ndarray = "0.15"
+ndarray-linalg = "0.16"
+nalgebra = "0.32"
