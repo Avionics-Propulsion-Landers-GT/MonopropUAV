@@ -25,3 +25,5 @@ ControlLoop/latency.csv
 ControlLoop/IntegratedDynModel/*.html
 .vscode
 Algorithms/LosslessConvexification/rust_lossless/target/
+**/target/*
+Cargo.lock
