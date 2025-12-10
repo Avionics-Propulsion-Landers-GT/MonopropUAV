@@ -195,15 +195,15 @@ impl LosslessSolver {
         }
         cones.push(SupportedConeT::ZeroConeT(3));
 
-        // // v_N = 0
-        // for i in 0..3 {
-        //     rows.push(row_counter as usize);
-        //     cols.push((idx_v + 3 * self.N + i) as usize);
-        //     vals.push(1.0);
-        //     b.push(0.0);
-        //     row_counter += 1;
-        // }
-        // cones.push(SupportedConeT::ZeroConeT(3));
+        // v_N = 0
+        for i in 0..3 {
+            rows.push(row_counter as usize);
+            cols.push((idx_v + 3 * self.N + i) as usize);
+            vals.push(1.0);
+            b.push(0.0);
+            row_counter += 1;
+        }
+        cones.push(SupportedConeT::ZeroConeT(3));
 
         /*
         SOCP constraints
@@ -216,13 +216,13 @@ impl LosslessSolver {
             let u_offset = idx_u + 3 * k;
             let sigma_offset = idx_sigma + k;
 
-            // // One change I did make is to make the lower bound only a linear Taylor approximation instead of a quadratic one.
-            // let z_0 = (m0 + self.alpha * self.upper_thrust_bound * self.delta_t * (k as f64)).ln();
-            // let z_0_exp = z_0.exp();
-            // let sigma_min_coefficient = self.lower_thrust_bound * z_0_exp;
-            // let sigma_min_h_val = sigma_min_coefficient * (1.0 + z_0);
-            // let sigma_max_coefficient = self.upper_thrust_bound * z_0_exp;
-            // let sigma_max_h_val = sigma_max_coefficient * (1.0 + z_0);
+            // One change I did make is to make the lower bound only a linear Taylor approximation instead of a quadratic one.
+            let z_0 = (m0 + self.alpha * self.upper_thrust_bound * self.delta_t * (k as f64)).ln();
+            let exp_neg_z_0 = (-z_0).exp();
+            let sigma_min_coefficient = self.lower_thrust_bound * exp_neg_z_0;
+            let sigma_min_h_val = sigma_min_coefficient * (1.0 + z_0);
+            let sigma_max_coefficient = self.upper_thrust_bound * exp_neg_z_0;
+            let sigma_max_h_val = sigma_max_coefficient * (1.0 + z_0);
 
             // // thrust bounds
             // cones.push(SupportedConeT::NonnegativeConeT(1));
@@ -231,17 +231,17 @@ impl LosslessSolver {
             // b.push(sigma_min_h_val);
             // row_counter += 1;
             
-            // cones.push(SupportedConeT::NonnegativeConeT(1));
-            // rows.push(row_counter as usize); cols.push(sigma_offset as usize); vals.push(-1.0); // -sigma_k + sigma_max
-            // rows.push(row_counter as usize); cols.push(w_offset as usize); vals.push(sigma_max_coefficient);
-            // b.push(-sigma_max_h_val);
-            // row_counter += 1;
+            cones.push(SupportedConeT::NonnegativeConeT(1));
+            rows.push(row_counter as usize); cols.push(sigma_offset as usize); vals.push(-1.0); // -sigma_k + sigma_max
+            rows.push(row_counter as usize); cols.push(w_offset as usize); vals.push(sigma_max_coefficient);
+            b.push(-sigma_max_h_val);
+            row_counter += 1;
 
             // // ---------- Thrust magnitude SOC: ||u_k|| <= sigma_k ----------
-            // rows.push((row_counter as usize) + 0); cols.push(sigma_offset as usize); vals.push(1.0); // -sigma_k
-            // rows.push((row_counter as usize) + 1); cols.push(u_offset as usize);     vals.push(1.0); // -u0
-            // rows.push((row_counter as usize) + 2); cols.push((u_offset as usize) + 1);   vals.push(1.0); // -u1
-            // rows.push((row_counter as usize) + 3); cols.push((u_offset as usize) + 2);   vals.push(1.0); // -u2
+            // rows.push((row_counter as usize) + 0); cols.push(sigma_offset as usize); vals.push(-1.0); // -sigma_k
+            // rows.push((row_counter as usize) + 1); cols.push(u_offset as usize);     vals.push(-1.0); // -u0
+            // rows.push((row_counter as usize) + 2); cols.push((u_offset as usize) + 1);   vals.push(-1.0); // -u1
+            // rows.push((row_counter as usize) + 3); cols.push((u_offset as usize) + 2);   vals.push(-1.0); // -u2
             // cones.push(SupportedConeT::SecondOrderConeT(4));
             // b.push(0.0);
             // b.push(0.0);
@@ -281,13 +281,13 @@ impl LosslessSolver {
             // TODO: add max velocity constraints
         }
 
-        // // ---------- End mass SOC: w_N >= log(m_dry) ----------
-        // rows.push(row_counter as usize);
-        // cols.push((idx_w + self.N) as usize);
-        // vals.push(1.0);
-        // cones.push(SupportedConeT::NonnegativeConeT(1));
-        // b.push(self.dry_mass.ln());
-        // row_counter += 1;
+        // ---------- End mass SOC: w_N >= log(m_dry) ----------
+        rows.push(row_counter as usize);
+        cols.push((idx_w + self.N) as usize);
+        vals.push(1.0);
+        cones.push(SupportedConeT::NonnegativeConeT(1));
+        b.push(self.dry_mass.ln());
+        row_counter += 1;
         
         let A = Self::csc_from_triplets(row_counter as usize, n_vars as usize, &rows, &cols, &vals);
 
@@ -298,11 +298,20 @@ impl LosslessSolver {
         let mut c = vec![0.0; n_vars as usize];
         // sigma variables start at idx_sigma
         for k in 0..self.N {
-            c[(idx_sigma + k) as usize] = self.delta_t; // weight = delta_t for discretization
+            c[(idx_sigma + k) as usize] = self.delta_t; // weight = delta_t for discretization  
         }
 
-        // Create a zero matrix for P (linear problem)
-        let P = CscMatrix::zeros((n_vars as usize, n_vars as usize)); // note the tuple
+        // Small regularization term to help with solver stability
+        let eps = 1e-6_f64;
+        let mut prow = Vec::new();
+        let mut pcol = Vec::new();
+        let mut pval = Vec::new();
+        for i in 0..(n_vars as usize) {
+            prow.push(i);
+            pcol.push(i);
+            pval.push(eps);
+        }
+        let P = Self::csc_from_triplets(n_vars as usize, n_vars as usize, &prow, &pcol, &pval);
 
         let mut settings = DefaultSettings::default();
         settings.verbose = true;
@@ -459,10 +468,6 @@ impl LosslessSolver {
             None => return None,
         };
         let traj_result = self.extract_result(&unpacked_result);
-        println!("Final position: {:?}", traj_result.positions.last().unwrap());
-        println!("Final velocity: {:?}", traj_result.velocities.last().unwrap());
-        println!("Final mass: {:.3} kg", traj_result.masses.last().unwrap());
-        println!("Final thrust: {:?}", traj_result.thrusts.last().unwrap());
 
         Some(traj_result)
     }
