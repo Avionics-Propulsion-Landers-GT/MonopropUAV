@@ -56,7 +56,8 @@ impl LosslessSolver {
         LosslessSolver::default()
     }
 
-    pub fn solve_at_current_time(&mut self) -> Result<clarabel::solver::DefaultSolution<f64>, String> {
+    // pub fn solve_at_current_time(&mut self) -> Result<clarabel::solver::DefaultSolution<f64>, String> {
+    pub fn solve_at_current_time(&mut self) -> Option<TrajectoryResult> {
         let m0 = self.dry_mass + self.fuel_mass;
         
         let n_vars = 3 * (self.N + 1) // x
@@ -212,6 +213,7 @@ impl LosslessSolver {
         let sin_theta = self.tvc_range_rad.sin();
 
         for k in 0..self.N {
+            let v_offset = idx_v + 3 * k;
             let w_offset = idx_w + k;
             let u_offset = idx_u + 3 * k;
             let sigma_offset = idx_sigma + k;
@@ -224,47 +226,49 @@ impl LosslessSolver {
             let sigma_max_coefficient = self.upper_thrust_bound * exp_neg_z_0;
             let sigma_max_h_val = sigma_max_coefficient * (1.0 + z_0);
 
-            // // thrust bounds
-            // cones.push(SupportedConeT::NonnegativeConeT(1));
-            // rows.push(row_counter as usize); cols.push(sigma_offset as usize); vals.push(1.0); // sigma_k - sigma_min
-            // rows.push(row_counter as usize); cols.push(w_offset as usize); vals.push(-sigma_min_coefficient);
-            // b.push(sigma_min_h_val);
-            // row_counter += 1;
-            
+            // thrust bounds
+            // min bound
             cones.push(SupportedConeT::NonnegativeConeT(1));
-            rows.push(row_counter as usize); cols.push(sigma_offset as usize); vals.push(-1.0); // -sigma_k + sigma_max
+            rows.push(row_counter as usize); cols.push(sigma_offset as usize); vals.push(-1.0); // sigma_k - sigma_min
+            rows.push(row_counter as usize); cols.push(w_offset as usize); vals.push(-sigma_min_coefficient);
+            b.push(-sigma_min_h_val);
+            row_counter += 1;
+            
+            // max bound
+            cones.push(SupportedConeT::NonnegativeConeT(1));
+            rows.push(row_counter as usize); cols.push(sigma_offset as usize); vals.push(1.0); // -sigma_k + sigma_max
             rows.push(row_counter as usize); cols.push(w_offset as usize); vals.push(sigma_max_coefficient);
-            b.push(-sigma_max_h_val);
+            b.push(sigma_max_h_val);
             row_counter += 1;
 
-            // // ---------- Thrust magnitude SOC: ||u_k|| <= sigma_k ----------
-            // rows.push((row_counter as usize) + 0); cols.push(sigma_offset as usize); vals.push(-1.0); // -sigma_k
-            // rows.push((row_counter as usize) + 1); cols.push(u_offset as usize);     vals.push(-1.0); // -u0
-            // rows.push((row_counter as usize) + 2); cols.push((u_offset as usize) + 1);   vals.push(-1.0); // -u1
-            // rows.push((row_counter as usize) + 3); cols.push((u_offset as usize) + 2);   vals.push(-1.0); // -u2
-            // cones.push(SupportedConeT::SecondOrderConeT(4));
-            // b.push(0.0);
-            // b.push(0.0);
-            // b.push(0.0);
-            // b.push(0.0);
-            // row_counter += 4;
+            // ---------- Thrust magnitude SOC: ||u_k|| <= sigma_k ----------
+            rows.push((row_counter as usize) + 0); cols.push(sigma_offset as usize); vals.push(-1.0); // -sigma_k
+            rows.push((row_counter as usize) + 1); cols.push(u_offset as usize);     vals.push(-1.0); // -u0
+            rows.push((row_counter as usize) + 2); cols.push((u_offset as usize) + 1);   vals.push(-1.0); // -u1
+            rows.push((row_counter as usize) + 3); cols.push((u_offset as usize) + 2);   vals.push(-1.0); // -u2
+            cones.push(SupportedConeT::SecondOrderConeT(4));
+            b.push(0.0);
+            b.push(0.0);
+            b.push(0.0);
+            b.push(0.0);
+            row_counter += 4;
 
-            // // ---------- Thrust pointing SOC: ||u_k - sigma_k*d|| <= sigma_k*sin(theta) ----------
-            // rows.push((row_counter as usize) + 0); cols.push(sigma_offset as usize); vals.push(sin_theta); // top of SOC
-            // rows.push((row_counter as usize) + 1); cols.push(u_offset as usize);     vals.push(1.0);
-            // rows.push((row_counter as usize) + 1); cols.push(sigma_offset as usize);     vals.push(-self.pointing_direction[0]);
-            // rows.push((row_counter as usize) + 2); cols.push((u_offset as usize) + 1);   vals.push(1.0);
-            // rows.push((row_counter as usize) + 2); cols.push(sigma_offset as usize);     vals.push(-self.pointing_direction[1]);
-            // rows.push((row_counter as usize) + 3); cols.push((u_offset as usize) + 2);   vals.push(1.0);
-            // rows.push((row_counter as usize) + 3); cols.push(sigma_offset as usize);     vals.push(-self.pointing_direction[2]);
-            // cones.push(SupportedConeT::SecondOrderConeT(4));
-            // b.push(0.0);
-            // b.push(0.0);
-            // b.push(0.0);
-            // b.push(0.0);
-            // row_counter += 4;
+            // ---------- Thrust pointing SOC: ||u_k - sigma_k*d|| <= sigma_k*sin(theta) ----------
+            rows.push((row_counter as usize) + 0); cols.push(sigma_offset as usize); vals.push(-sin_theta); // top of SOC
+            rows.push((row_counter as usize) + 1); cols.push(u_offset as usize);     vals.push(1.0);
+            rows.push((row_counter as usize) + 1); cols.push(sigma_offset as usize);     vals.push(-self.pointing_direction[0]);
+            rows.push((row_counter as usize) + 2); cols.push((u_offset as usize) + 1);   vals.push(1.0);
+            rows.push((row_counter as usize) + 2); cols.push(sigma_offset as usize);     vals.push(-self.pointing_direction[1]);
+            rows.push((row_counter as usize) + 3); cols.push((u_offset as usize) + 2);   vals.push(1.0);
+            rows.push((row_counter as usize) + 3); cols.push(sigma_offset as usize);     vals.push(-self.pointing_direction[2]);
+            cones.push(SupportedConeT::SecondOrderConeT(4));
+            b.push(0.0);
+            b.push(0.0);
+            b.push(0.0);
+            b.push(0.0);
+            row_counter += 4;
 
-            // TODO: add glide slope constraints (ts gpt rn)
+            // // TODO: add glide slope constraints (ts gpt rn)
             // if (self.use_glide_slope) {
             //     // ---------- Glide slope SOC: ||x_k[:2]|| <= x_k[2] / glide_slope ----------
             //     let x_offset = idx_x + 3 * k;
@@ -279,14 +283,27 @@ impl LosslessSolver {
             // }
 
             // TODO: add max velocity constraints
+            
+            // ---------- Max velocity SOC: ||v_k|| <= max_velocity ----------
+            rows.push((row_counter as usize) + 0); cols.push(v_offset as usize);     vals.push(0.0); // -v0
+            rows.push((row_counter as usize) + 1); cols.push(v_offset as usize);     vals.push(-1.0); // -v0
+            rows.push((row_counter as usize) + 2); cols.push((v_offset as usize) + 1);   vals.push(-1.0); // -v1
+            rows.push((row_counter as usize) + 3); cols.push((v_offset as usize) + 2);   vals.push(-1.0); // -v2
+            cones.push(SupportedConeT::SecondOrderConeT(4));
+            b.push(self.max_velocity);
+            b.push(0.0);
+            b.push(0.0);
+            b.push(0.0);
+            row_counter += 4;
+
         }
 
         // ---------- End mass SOC: w_N >= log(m_dry) ----------
         rows.push(row_counter as usize);
         cols.push((idx_w + self.N) as usize);
-        vals.push(1.0);
+        vals.push(-1.0);
         cones.push(SupportedConeT::NonnegativeConeT(1));
-        b.push(self.dry_mass.ln());
+        b.push(-self.dry_mass.ln());
         row_counter += 1;
         
         let A = Self::csc_from_triplets(row_counter as usize, n_vars as usize, &rows, &cols, &vals);
@@ -301,20 +318,15 @@ impl LosslessSolver {
             c[(idx_sigma + k) as usize] = self.delta_t; // weight = delta_t for discretization  
         }
 
-        // Small regularization term to help with solver stability
-        let eps = 1e-6_f64;
+
         let mut prow = Vec::new();
         let mut pcol = Vec::new();
         let mut pval = Vec::new();
-        for i in 0..(n_vars as usize) {
-            prow.push(i);
-            pcol.push(i);
-            pval.push(eps);
-        }
-        let P = Self::csc_from_triplets(n_vars as usize, n_vars as usize, &prow, &pcol, &pval);
+        let P = LosslessSolver::csc_from_triplets(n_vars as usize, n_vars as usize, &prow, &pcol, &pval);
 
         let mut settings = DefaultSettings::default();
         settings.verbose = true;
+        // settings.verbose = false;
 
         // Build the solver
         let mut solver = DefaultSolver::new(
@@ -329,9 +341,12 @@ impl LosslessSolver {
         solver.solve();
 
         if solver.solution.status == SolverStatus::Solved || solver.solution.status == SolverStatus::AlmostSolved {
-            Ok(solver.solution) // <- no semicolon here
+            let traj_result = self.extract_result(&solver.solution);
+            Some(traj_result)
+            
         } else {
-            Err(format!("Solver failed with status {:?}", solver.solution.status)) // <- also no semicolon here
+            println!("{}", format!("Solver failed with status {:?}", solver.solution.status));
+            return None
         }
     }
 
@@ -441,34 +456,26 @@ impl LosslessSolver {
         let n_min = (t_min / self.delta_t).ceil() as i64;
         let n_max = (t_max / self.delta_t).floor() as i64;
 
-        let mut result: Option<DefaultSolution<f64>> = None;
+        let mut traj_result: Option<TrajectoryResult> = None;
 
         for k in n_min..n_max {
             println!("Solving step {}...", k);
             self.N = k;
             match self.solve_at_current_time() {
-                Ok(sol) => {
+                Some(sol) => {
                         println!("✅ Step {} converged successfully.", k);
-                        result = Some(sol);
+                        traj_result = Some(sol);
                         break;
-                }
-                Err(_) => {
-                    println!("❌ Step {} failed, moving on.", k);
-                }
+                },
+                None => println!(""),
             }
         }
 
-        if result.is_none() {
+        if traj_result.is_none() {
             println!("No successful solve found in the given time bounds.");
             return None;
         }
 
-        let unpacked_result = match result {
-            Some(ref r) => r,
-            None => return None,
-        };
-        let traj_result = self.extract_result(&unpacked_result);
-
-        Some(traj_result)
+        return traj_result
     }
 }
