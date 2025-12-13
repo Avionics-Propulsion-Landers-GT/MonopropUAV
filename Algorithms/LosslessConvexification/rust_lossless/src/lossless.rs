@@ -16,6 +16,8 @@ pub struct LosslessSolver {
     pub lower_thrust_bound: f64,
     pub upper_thrust_bound: f64,
     pub tvc_range_rad: f64,
+    pub coarse_delta_t: f64,
+    pub fine_delta_t: f64,
     pub delta_t: f64,
     pub pointing_direction: [f64; 3],
     pub N: i64,
@@ -44,6 +46,8 @@ impl Default for LosslessSolver {
             lower_thrust_bound: 0.0,
             upper_thrust_bound: 0.0,
             tvc_range_rad: (15.0_f64).to_radians(),
+            coarse_delta_t: 1.0,
+            fine_delta_t: 1.0,
             delta_t: 1.0,
             pointing_direction: [0.0, 0.0, 1.0],
             N: 1
@@ -268,19 +272,19 @@ impl LosslessSolver {
             b.push(0.0);
             row_counter += 4;
 
-            // // TODO: add glide slope constraints (ts gpt rn)
-            // if (self.use_glide_slope) {
-            //     // ---------- Glide slope SOC: ||x_k[:2]|| <= x_k[2] / glide_slope ----------
-            //     let x_offset = idx_x + 3 * k;
-            //     rows.push((row_counter as usize) + 0); cols.push((x_offset as usize) + 2); vals.push(1.0); // x_k[2]
-            //     rows.push((row_counter as usize) + 1); cols.push((x_offset as usize) + 0); vals.push(-1.0); // -x_k[0]
-            //     rows.push((row_counter as usize) + 2); cols.push((x_offset as usize) + 1); vals.push(-1.0); // -x_k[1]
-            //     cones.push(SupportedConeT::SecondOrderConeT(3));
-            //     b.push(0.0);
-            //     b.push(0.0);
-            //     b.push(0.0);
-            //     row_counter += 3;
-            // }
+            // TODO: add glide slope constraints (ts gpt rn)
+            if self.use_glide_slope {
+                // ---------- Glide slope SOC: ||x_k[:2]|| <= x_k[2] / tan(glide_slope) ----------
+                let x_offset = idx_x + 3 * k;
+                rows.push((row_counter as usize) + 0); cols.push((x_offset as usize) + 2); vals.push(-1.0 / self.glide_slope.tan()); // x_k[2]
+                rows.push((row_counter as usize) + 1); cols.push((x_offset as usize) + 0); vals.push(1.0); // -x_k[0]
+                rows.push((row_counter as usize) + 2); cols.push((x_offset as usize) + 1); vals.push(1.0); // -x_k[1]
+                cones.push(SupportedConeT::SecondOrderConeT(3));
+                b.push(0.0);
+                b.push(self.landing_point[0]);
+                b.push(self.landing_point[1]);
+                row_counter += 3;
+            }
 
             // TODO: add max velocity constraints
             
@@ -319,9 +323,9 @@ impl LosslessSolver {
         }
 
 
-        let mut prow = Vec::new();
-        let mut pcol = Vec::new();
-        let mut pval = Vec::new();
+        let prow = Vec::new();
+        let pcol = Vec::new();
+        let pval = Vec::new();
         let P = LosslessSolver::csc_from_triplets(n_vars as usize, n_vars as usize, &prow, &pcol, &pval);
 
         let mut settings = DefaultSettings::default();
@@ -445,6 +449,8 @@ impl LosslessSolver {
     }
 
     pub fn solve(&mut self) -> Option<TrajectoryResult> {
+        self.delta_t = self.coarse_delta_t;
+
         let vel_norm = self.initial_velocity.iter()
             .map(|v| v * v)
             .sum::<f64>()
@@ -463,9 +469,9 @@ impl LosslessSolver {
             self.N = k;
             match self.solve_at_current_time() {
                 Some(sol) => {
-                        println!("✅ Step {} converged successfully.", k);
-                        traj_result = Some(sol);
-                        break;
+                    println!("✅ Step {} converged successfully.", k);
+                    traj_result = Some(sol);
+                    break;
                 },
                 None => println!(""),
             }
@@ -475,6 +481,21 @@ impl LosslessSolver {
             println!("No successful solve found in the given time bounds.");
             return None;
         }
+
+        self.N = ((self.N as f64) * self.coarse_delta_t / self.fine_delta_t).ceil() as i64;
+        self.delta_t = self.fine_delta_t;
+        
+        match self.solve_at_current_time() {
+            Some(sol) => {
+                println!("✅ Fine solve converged successfully.");
+                traj_result = Some(sol);
+            },
+            None => {
+                println!("No successful solve found in the given time bounds.");
+                return None;
+            },
+        }
+
 
         return traj_result
     }

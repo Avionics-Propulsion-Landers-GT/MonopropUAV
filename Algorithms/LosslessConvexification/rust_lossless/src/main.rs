@@ -6,7 +6,7 @@ use crate::lossless::LosslessSolver;
 fn main() {
     let mut solver = LosslessSolver {
         landing_point: [0.0, 0.0, 0.0],
-        initial_position: [0.0, 0.0, 50.0],
+        initial_position: [0.0, 10.0, 50.0],
         initial_velocity: [0.0, 0.0, 0.0],
         max_velocity: 5.0,
         dry_mass: 50.0,
@@ -15,40 +15,26 @@ fn main() {
         lower_thrust_bound: 1000.0 * 0.4,
         upper_thrust_bound: 1000.0,
         tvc_range_rad: 15_f64.to_radians(),
-        delta_t: 0.05,
-        use_glide_slope: true,
+        coarse_delta_t: 0.5,
+        fine_delta_t: 0.05,
+        use_glide_slope: false,
+        glide_slope: 5_f64.to_radians(),
         N: 20,
         ..Default::default()
     };
-    solver.delta_t = 0.5;
     
     let mut traj_result = solver.solve();
-    let N = solver.N;
-    println!("{}", N);
     
 
     match traj_result {
         Some(result) => {
-            println!("SOLVING AT SPECIFIED TIME STEP!\n\n\n\n\n\n");
-            let prev_delta_t = solver.delta_t;
-            solver.delta_t = 0.05;
-            solver.N = ((N as f64) * prev_delta_t / solver.delta_t) as i64;
-            traj_result = solver.solve_at_current_time();
-            match traj_result {
-                Some(result) => {
-                    println!("Final position: {:?}", result.positions.last().unwrap());
-                    println!("Final velocity: {:?}", result.velocities.last().unwrap());
-                    println!("Final mass: {:?}", result.masses.last().unwrap());
-                    println!("Final thrust: {:?}", result.thrusts.last().unwrap());
-                    
-                    write_trajectory_to_csv("trajectory.csv", &result)
-                        .expect("Failed to write CSV");
-                }
-                None => {
-                    eprintln!("Solve failed!");
-                }
-            }
-
+            println!("Final position: {:?}", result.positions.last().unwrap());
+            println!("Final velocity: {:?}", result.velocities.last().unwrap());
+            println!("Final mass: {:?}", result.masses.last().unwrap());
+            println!("Final thrust: {:?}", result.thrusts.last().unwrap());
+            
+            write_trajectory_to_csv("trajectory.csv", &result)
+                .expect("Failed to write CSV");
         }
         None => {
             eprintln!("Solve failed!");
