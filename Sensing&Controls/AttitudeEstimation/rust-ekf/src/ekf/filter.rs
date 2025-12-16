@@ -47,23 +47,23 @@ impl<T: EKFModel> ExtendedKalmanFilter<T> {
             self.model
                 .state_transition_function(&self.state, self.delta_time);
 
-        let f_jac = self
+        let transition_jacobian = self
             .model
             .state_transition_jacobian(&self.previous_state, self.delta_time);
 
-        self.error_covariance = f_jac.dot(&self.error_covariance).dot(&f_jac.t())
+        self.error_covariance = transition_jacobian.dot(&self.error_covariance).dot(&transition_jacobian.t())
             + &self.process_noise_covariance;
     }
 
     pub fn update(&mut self, data: &[f64]) {
         let measurement = self.model.parse_data(data);
 
-        let h_pred = self.model.measurement_prediction_function(&self.state);
-        let residual = &measurement - &h_pred;
+        let prediction = self.model.measurement_prediction_function(&self.state);
+        let residual = &measurement - &prediction;
 
-        let h_jac = self.model.measurement_prediction_jacobian(&self.state);
+        let prediction_jacobian = self.model.measurement_prediction_jacobian(&self.state);
 
-        let s = h_jac.dot(&self.error_covariance).dot(&h_jac.t())
+        let s = prediction_jacobian.dot(&self.error_covariance).dot(&prediction_jacobian.t())
             + &self.measurement_noise_covariance;
 
         // TODO: Make sure this error doesn't impact the filter's ability to run (Can we give some default value on error instead of returning directly)
