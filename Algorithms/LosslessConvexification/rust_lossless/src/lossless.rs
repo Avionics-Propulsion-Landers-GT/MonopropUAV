@@ -60,7 +60,6 @@ impl LosslessSolver {
         LosslessSolver::default()
     }
 
-    // pub fn solve_at_current_time(&mut self) -> Result<clarabel::solver::DefaultSolution<f64>, String> {
     pub fn solve_at_current_time(&mut self) -> Option<TrajectoryResult> {
         let m0 = self.dry_mass + self.fuel_mass;
         
