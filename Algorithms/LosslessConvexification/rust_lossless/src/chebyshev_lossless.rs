@@ -349,7 +349,7 @@ impl ChebyshevLosslessSolver {
         let prow = Vec::new();
         let pcol = Vec::new();
         let pval = Vec::new();
-        let P = LosslessSolver::csc_from_triplets(n_vars as usize, n_vars as usize, &prow, &pcol, &pval);
+        let P = Self::csc_from_triplets(n_vars as usize, n_vars as usize, &prow, &pcol, &pval);
 
 
         let mut settings = DefaultSettings::default();
@@ -424,7 +424,8 @@ impl ChebyshevLosslessSolver {
             - This would mean changing the TrajectoryResult struct as well as how main.rs parses our results
     */
     fn extract_result(&self, result: &DefaultSolution<f64>) -> TrajectoryResult {
-        let x = &result.x;
+
+        // (Step 1) extract coefficents (idk yet gang shall return after diving into papers)
 
         let idx_x = 0;
         let idx_v = idx_x + 3 * (self.N + 1);
@@ -432,50 +433,97 @@ impl ChebyshevLosslessSolver {
         let idx_u = idx_w + (self.N + 1);
         let idx_sigma = idx_u + 3 * self.N;
 
-        let mut positions = Vec::new();
-        let mut velocities = Vec::new();
-        let mut masses = Vec::new();
-        let mut thrusts = Vec::new();
-        let mut sigmas = Vec::new();
+        // Create dummy lambdas (closures) to evaluate each quantity at a normalized
+        // time tau in [0,1]. These are simple piecewise-linear & built from result.x. 
+        // They are dummies for now and should be replaced with Chebyshev polynomial evaluations.
 
-        // positions (x_k)
-        for k in 0..=self.N {
-            let start: usize = (idx_x + 3 * k) as usize;
-            positions.push([
-                x[start],
-                x[start + 1],
-                x[start + 2],
-            ]);
-        }
+        let xvec = &result.x;
+        let n_nodes = (self.N + 1) as usize;
+        let n_intervals = (self.N) as usize; // for u and sigma
 
-        // velocities (v_k)
-        for k in 0..=self.N {
-            let start: usize = (idx_v + 3 * k) as usize;
-            velocities.push([
-                x[start],
-                x[start + 1],
-                x[start + 2],
-            ]);
-        }
+        let position_fn = move |tau: f64| -> [f64; 3] {
+            let tau = if tau.is_nan() { 0.0 } else if tau < 0.0 { 0.0 } else if tau > 1.0 { 1.0 } else { tau };
+            if n_nodes == 0 { return [0.0; 3]; }
+            if n_nodes == 1 {
+                let s = idx_x as usize;
+                return [xvec[s], xvec[s + 1], xvec[s + 2]];
+            }
+            let t = tau * ((n_nodes - 1) as f64);
+            let k = t.floor() as usize;
+            let alpha = if k >= n_nodes - 1 { 1.0 } else { t - (k as f64) };
+            let s0 = (idx_x + 3 * (k as i64)) as usize;
+            let s1 = (idx_x + 3 * (if k >= n_nodes - 1 { n_nodes - 1 } else { k + 1 } as i64)) as usize;
+            [xvec[s0] * (1.0 - alpha) + xvec[s1] * alpha,
+             xvec[s0 + 1] * (1.0 - alpha) + xvec[s1 + 1] * alpha,
+             xvec[s0 + 2] * (1.0 - alpha) + xvec[s1 + 2] * alpha]
+        };
 
-        // log-masses (w_k)
-        for k in 0..=self.N {
-            masses.push(x[(idx_w + k) as usize].exp()); // convert ln(m) → m
-        }
+        let velocity_fn = move |tau: f64| -> [f64; 3] {
+            let tau = if tau.is_nan() { 0.0 } else if tau < 0.0 { 0.0 } else if tau > 1.0 { 1.0 } else { tau };
+            if n_nodes == 0 { return [0.0; 3]; }
+            if n_nodes == 1 {
+                let s = idx_v as usize;
+                return [xvec[s], xvec[s + 1], xvec[s + 2]];
+            }
+            let t = tau * ((n_nodes - 1) as f64);
+            let k = t.floor() as usize;
+            let alpha = if k >= n_nodes - 1 { 1.0 } else { t - (k as f64) };
+            let s0 = (idx_v + 3 * (k as i64)) as usize;
+            let s1 = (idx_v + 3 * (if k >= n_nodes - 1 { n_nodes - 1 } else { k + 1 } as i64)) as usize;
+            [xvec[s0] * (1.0 - alpha) + xvec[s1] * alpha,
+             xvec[s0 + 1] * (1.0 - alpha) + xvec[s1 + 1] * alpha,
+             xvec[s0 + 2] * (1.0 - alpha) + xvec[s1 + 2] * alpha]
+        };
 
-        // thrusts (u_k)
-        for k in 0..self.N {
-            let start: usize = (idx_u + 3 * k) as usize;
-            thrusts.push([
-                x[start],
-                x[start + 1],
-                x[start + 2],
-            ]);
-        }
+        let mass_fn = move |tau: f64| -> f64 {
+            let tau = if tau.is_nan() { 0.0 } else if tau < 0.0 { 0.0 } else if tau > 1.0 { 1.0 } else { tau };
+            if n_nodes == 0 { return 0.0; }
+            if n_nodes == 1 {
+                return xvec[idx_w as usize].exp();
+            }
+            let t = tau * ((n_nodes - 1) as f64);
+            let k = t.floor() as usize;
+            let alpha = if k >= n_nodes - 1 { 1.0 } else { t - (k as f64) };
+            let w0 = xvec[(idx_w + (k as i64)) as usize].exp();
+            let w1 = xvec[(idx_w + (if k >= n_nodes - 1 { n_nodes - 1 } else { k + 1 } as i64)) as usize].exp();
+            w0 * (1.0 - alpha) + w1 * alpha
+        };
 
-        // sigmas (σ_k)
-        for k in 0..self.N {
-            sigmas.push(x[(idx_sigma + k) as usize]);
+        let thrust_fn = move |tau: f64| -> [f64; 3] {
+            // piecewise-constant per interval
+            let tau = if tau.is_nan() { 0.0 } else if tau < 0.0 { 0.0 } else if tau > 1.0 { 1.0 } else { tau };
+            if n_intervals == 0 { return [0.0; 3]; }
+            let s = tau * (n_intervals as f64);
+            let k = if s >= (n_intervals as f64) { n_intervals - 1 } else { s.floor() as usize };
+            let st = (idx_u + 3 * (k as i64)) as usize;
+            [xvec[st], xvec[st + 1], xvec[st + 2]]
+        };
+
+        let sigma_fn = move |tau: f64| -> f64 {
+            let tau = if tau.is_nan() { 0.0 } else if tau < 0.0 { 0.0 } else if tau > 1.0 { 1.0 } else { tau };
+            if n_intervals == 0 { return 0.0; }
+            let s = tau * (n_intervals as f64);
+            let k = if s >= (n_intervals as f64) { n_intervals - 1 } else { s.floor() as usize };
+            xvec[(idx_sigma + (k as i64)) as usize]
+        };
+
+        // (Step 2) Predefined evaluation points (example: 101 points evenly spaced on [0,1])
+        let eval_points = 101usize;
+
+        let mut positions: Vec<[f64; 3]> = Vec::with_capacity(eval_points);
+        let mut velocities: Vec<[f64; 3]> = Vec::with_capacity(eval_points);
+        let mut masses: Vec<f64> = Vec::with_capacity(eval_points);
+        let mut thrusts: Vec<[f64; 3]> = Vec::with_capacity(eval_points);
+        let mut sigmas: Vec<f64> = Vec::with_capacity(eval_points);
+
+        // (Step 3) Evaluate polynomials at the evaluation points
+        for i in 0..eval_points {
+            let tau = if eval_points == 1 { 0.0 } else { (i as f64) / ((eval_points - 1) as f64) };
+            positions.push(position_fn(tau));
+            velocities.push(velocity_fn(tau));
+            masses.push(mass_fn(tau));
+            thrusts.push(thrust_fn(tau));
+            sigmas.push(sigma_fn(tau));
         }
 
         TrajectoryResult {
