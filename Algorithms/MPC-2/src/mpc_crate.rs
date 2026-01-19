@@ -18,7 +18,7 @@ pub fn dynamics(x: &Array1<f64>, u: &Array1<f64>) -> Array1<f64> {
     let ixx = 20.0;
     let iyy = 20.0;
     let izz = 10.0;
-    let dt = 0.1;
+    let dt = 0.05;
 
     // Inertia matrix and inverse
     let i = Array2::from_diag(&Array1::from(vec![ixx, iyy, izz]));
@@ -38,10 +38,12 @@ pub fn dynamics(x: &Array1<f64>, u: &Array1<f64>) -> Array1<f64> {
     let wx = x[10];
     let wy = x[11];
     let wz = x[12];
+    let gimbal_theta = x[13];
+    let gimbal_phi = x[14];
 
     // Unpack control
-    let gimbal_theta = u[0];
-    let gimbal_phi = u[1];
+    let gimbal_theta_rate = u[0];
+    let gimbal_phi_rate = u[1];
     let mut thrust = u[2];
     if thrust < 0.0 { thrust = 0.0; }
 
@@ -129,12 +131,15 @@ pub fn dynamics(x: &Array1<f64>, u: &Array1<f64>) -> Array1<f64> {
     let wx_new = wx + dt * omega_dot[0];
     let wy_new = wy + dt * omega_dot[1];
     let wz_new = wz + dt * omega_dot[2];
+    let gimbal_theta_new = gimbal_theta + dt * gimbal_theta_rate;
+    let gimbal_phi_new = gimbal_phi + dt * gimbal_phi_rate;
 
     let x_next = Array1::from(vec![
         x_pos_new, y_pos_new, z_pos_new,
         q_new[0], q_new[1], q_new[2], q_new[3],
         x_dot_new, y_dot_new, z_dot_new,
         wx_new, wy_new, wz_new,
+        gimbal_theta_new, gimbal_phi_new,
     ]);
 
     x_next
@@ -518,12 +523,13 @@ pub fn OpEnSolve(
     // Box bounds on U (same per stage here)
     let mut u_min_flat: Vec<f64> = Vec::with_capacity(n_dim_u);
     let mut u_max_flat: Vec<f64> = Vec::with_capacity(n_dim_u);
+    let rate_bound = 50.0_f64.to_radians(); // gimbal rate bound in rad/s
     for _k in 0..N {
-        // [gimbal_theta, gimbal_phi, thrust]
-        u_min_flat.push((-15.0_f64).to_radians());
-        u_max_flat.push(( 15.0_f64).to_radians());
-        u_min_flat.push((-15.0_f64).to_radians());
-        u_max_flat.push(( 15.0_f64).to_radians());
+        // [gimbal_theta_rate, gimbal_phi_rate, thrust]
+        u_min_flat.push((-rate_bound));
+        u_max_flat.push(( rate_bound));
+        u_min_flat.push((-rate_bound));
+        u_max_flat.push(( rate_bound));
         u_min_flat.push(300.0);
         u_max_flat.push(1000.0);
     }
@@ -534,7 +540,7 @@ pub fn OpEnSolve(
 
     // Problem and optimizer (reuse cache)
     let problem = Problem::new(&bounds, df, f);
-    let mut panoc = PANOCOptimizer::new(problem, panoc_cache).with_max_iter(200);
+    let mut panoc = PANOCOptimizer::new(problem, panoc_cache).with_max_iter(100);
 
     // Initial guess flattened from U
     let mut u_init_flat: Vec<f64> = Vec::with_capacity(n_dim_u);
