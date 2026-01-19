@@ -19,6 +19,11 @@ pub struct IMU {
     pub mag_noise_sigma: Vector3<f64>,
     pub mag_offset: Vector3<f64>,
     pub earth_mag: Vector3<f64>,
+
+    pub last_reading: IMUReading,
+
+    pub update_rate: f64, // This is in updates per second
+    system_time: f64,
 }
 
 // These readings are in the body frame
@@ -30,7 +35,7 @@ pub struct IMUReading {
 }
 
 impl IMU {
-    pub fn new(accel_noise_sigma: Vector3<f64>, accel_offset: Vector3<f64>, gyro_noise_sigma: Vector3<f64>, gyro_drift: Vector3<f64>, mag_noise_sigma: Vector3<f64>, mag_offset: Vector3<f64>, earth_mag: Vector3<f64>) -> Self {
+    pub fn new(accel_noise_sigma: Vector3<f64>, accel_offset: Vector3<f64>, gyro_noise_sigma: Vector3<f64>, gyro_drift: Vector3<f64>, mag_noise_sigma: Vector3<f64>, mag_offset: Vector3<f64>, earth_mag: Vector3<f64>, update_rate: f64) -> Self {
         Self {
             accel_noise_sigma,
             accel_offset,
@@ -39,10 +44,24 @@ impl IMU {
             mag_noise_sigma,
             mag_offset,
             earth_mag,
+            last_reading: IMUReading {
+                accel: Vector3::zeros(),
+                gyro: Vector3::zeros(),
+                mag: Vector3::zeros(),
+            },
+            update_rate,
+            system_time: 0.0,
         }
     }
 
-    pub fn update(&mut self, accel: Vector3<f64>, ang_vel: Vector3<f64>, attitude: UnitQuaternion<f64>) -> IMUReading {
+    pub fn update(&mut self, accel: Vector3<f64>, ang_vel: Vector3<f64>, attitude: UnitQuaternion<f64>, system_time: f64) -> IMUReading {
+        let elapsed_time = self.system_time - system_time;
+        if elapsed_time < 1.0 / self.update_rate {
+            return self.last_reading;
+        }
+
+        self.system_time = system_time;
+
         let mut rng = rand::rng();
 
         // 1. ACCELEROMETER
@@ -79,11 +98,13 @@ impl IMU {
             + self.mag_offset 
             + noise(&self.mag_noise_sigma, &mut rng);
 
-        IMUReading {
+        self.last_reading = IMUReading {
             accel: measured_accel,
             gyro: measured_gyro,
             mag: measured_mag,
-        }
+        };
+
+        self.last_reading
     }
 }
 
@@ -92,6 +113,10 @@ impl IMU {
 pub struct GPS {
     pub pos_noise_sigma: Vector3<f64>,
     pub pos_offset: Vector3<f64>,
+    pub last_reading: GPSReading,
+
+    pub update_rate: f64, // This is in updates per second
+    system_time: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -100,21 +125,35 @@ pub struct GPSReading {
 }
 
 impl GPS {
-    pub fn new(pos_noise_sigma: Vector3<f64>, pos_offset: Vector3<f64>) -> Self {
+    pub fn new(pos_noise_sigma: Vector3<f64>, pos_offset: Vector3<f64>, update_rate: f64) -> Self {
         Self {
             pos_noise_sigma,
             pos_offset,
+            last_reading: GPSReading {
+                position: Vector3::zeros(),
+            },
+            update_rate,
+            system_time: 0.0,
         }
     }
 
-    pub fn update(&mut self, position: Vector3<f64>) -> GPSReading {
+    pub fn update(&mut self, position: Vector3<f64>, system_time: f64) -> GPSReading {
+        let elapsed_time = self.system_time - system_time;
+        if elapsed_time < 1.0 / self.update_rate {
+            return self.last_reading;
+        }
+        
+        self.system_time = system_time;
+
         let mut rng = rand::rng();
 
         let noisy_position = position + self.pos_offset + noise(&self.pos_noise_sigma, &mut rng);
 
-        GPSReading {
+        self.last_reading = GPSReading {
             position: noisy_position,
-        }
+        };
+
+        self.last_reading
     }
 }
 
@@ -125,7 +164,10 @@ pub struct UWB {
     pub pos_offset: Vector3<f64>,
     pub origin: Vector3<f64>,
     pub range: f64,
-    last_valid_position: Vector3<f64>,
+    pub last_reading: UWBReading,
+
+    pub update_rate: f64, // This is in updates per second
+    system_time: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -134,30 +176,41 @@ pub struct UWBReading {
 }
 
 impl UWB {
-    pub fn new(pos_noise_sigma: Vector3<f64>, pos_offset: Vector3<f64>, origin: Vector3<f64>, range: f64) -> Self {
+    pub fn new(pos_noise_sigma: Vector3<f64>, pos_offset: Vector3<f64>, origin: Vector3<f64>, range: f64, update_rate: f64) -> Self {
         Self {
             pos_noise_sigma,
             pos_offset,
             origin,
             range,
-            last_valid_position: origin.clone(),
+            last_reading: UWBReading {
+                position: origin.clone(),
+            },
+            update_rate,
+            system_time: 0.0,
         }
     }
 
-    pub fn update(&mut self, position: Vector3<f64>) -> UWBReading {
+    pub fn update(&mut self, position: Vector3<f64>, system_time: f64) -> UWBReading {
+        let elapsed_time = self.system_time - system_time;
+        if elapsed_time < 1.0 / self.update_rate {
+            return self.last_reading;
+        }
+        
+        self.system_time = system_time;
+
         if (position - self.origin).norm() > self.range {
             // Out of range behavior simply returns the last valid read. Check with Avionics for actual behavior
-            UWBReading {
-                position: self.last_valid_position,
-            }
+            return self.last_reading;
         } else {
             let mut rng = rand::rng();
 
             let noisy_position = position + self.pos_offset + noise(&self.pos_noise_sigma, &mut rng);
 
-            UWBReading {
+            self.last_reading = UWBReading {
                 position: noisy_position,
-            }
+            };
+
+            return self.last_reading;
         }
     }
 }
@@ -173,10 +226,13 @@ pub struct TVCActuator {
     pub unloaded_speed: f64,
     pub stall_force: f64,
     pub p_gain: f64,
+
+    pub update_rate: f64, // This is in updates per second
+    system_time: f64,
 }
 
 impl TVCActuator {
-    pub fn new (start_position: f64, extension_limit: f64, unloaded_speed: f64, stall_force: f64, p_gain: f64) -> Self {
+    pub fn new (start_position: f64, extension_limit: f64, unloaded_speed: f64, stall_force: f64, p_gain: f64, update_rate: f64) -> Self {
         Self {
             position: start_position,
             velocity: 0.0,
@@ -184,10 +240,23 @@ impl TVCActuator {
             unloaded_speed,
             stall_force,
             p_gain,
+            update_rate,
+            system_time: 0.0,
         }
     }
 
-    pub fn update(&mut self, target_position: f64, load_force: f64, dt: f64) {
+    pub fn update(&mut self, target_position: f64, load_force: f64, dt: f64, system_time: f64) {
+        let elapsed_time = self.system_time - system_time;
+        if elapsed_time < 1.0 / self.update_rate {
+            // velocity stays constant, therefore acceleration is zero, but position does update
+            self.accel = 0.0;
+            self.position += self.velocity * dt;
+            self.position = self.position.clamp(0.0, self.extension_limit);
+            return;
+        }
+        
+        self.system_time = system_time;
+
         let error = target_position - self.position;
         let command = error * self.p_gain;
 
@@ -206,38 +275,182 @@ impl TVCActuator {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct MTV {
+    pub angle: f64,
+    pub ang_vel: f64,
+    pub ang_accel: f64,
+
+    pub unloaded_speed: f64,
+    pub stall_torque: f64,
+    pub p_gain: f64,
+
+    pub valve_torque: f64,
+
+    pub update_rate: f64,
+    system_time: f64,
+}
+
+impl MTV {
+    pub fn new(angle: f64, ang_vel: f64, ang_accel: f64, unloaded_speed: f64, stall_torque: f64, p_gain: f64, valve_torque: f64, update_rate: f64) -> Self {
+        Self {
+            angle,
+            ang_vel,
+            ang_accel,
+            unloaded_speed,
+            stall_torque,
+            p_gain,
+            valve_torque,
+            update_rate,
+            system_time: 0.0,
+        }
+    }
+
+    pub fn update(&mut self, target_thrust: f64, dt: f64, system_time: f64) {
+        let elapsed_time = self.system_time - system_time;
+        if elapsed_time < 1.0 / self.update_rate {
+            // angular velocity stays constant, therefore angular acceleration is zero, but angle does update
+            self.ang_accel = 0.0;
+            self.angle += self.ang_vel * dt;
+            self.angle = clamp(self.angle, 0.0, 90.0);
+            return;
+        }
+
+        self.system_time = system_time;
+
+        // TODO: convert the target thrust into a target angle
+        let target_angle = 0.0;
+
+        let error = target_angle - self.angle;
+        let command = error * self.p_gain;
+
+        let load_factor = (self.valve_torque / self.stall_torque).min(1.0);
+        let speed_limit = self.unloaded_speed * (1.0 - load_factor);
+
+        let prev_ang_vel = self.ang_vel;
+        self.ang_vel = command.clamp(-speed_limit, speed_limit);
+        self.ang_accel = (self.ang_vel - prev_ang_vel) / dt;
+        self.angle += self.ang_vel * dt;
+        self.angle = clamp(self.angle, 0.0, 90.0);
+    }
+
+    pub fn get_thrust(&mut self) -> f64 {
+        // TODO: use the current throttle angle to find the flow rate, then determine thrust
+        // TODO: also model the thrust decay somehow?
+        0.0
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct TVC {
+    pub mtv: MTV,
     pub x_actuator: TVCActuator,
     pub y_actuator: TVCActuator,
-    pub lever_arm: f64,
+    ang_vel: Vector3<f64>,
+    ang_accel: Vector3<f64>,
+    pub tvc_torque: Vector3<f64>,
+    pub actuator_lever_arm: f64,
+    pub tvc_lever_arm: Vector3<f64>,
     pub max_fuel_inertia: f64,
     pub min_fuel_inertia: f64,
 }
 
 impl TVC {
-    pub fn new(x_actuator: TVC_Actuator, y_actuator: TVC_Actuator, lever_arm: f64, max_fuel_inertia: f64, min_fuel_inertia: f64) -> Self {
+    // Our actuators appear to have a stall force of 400 lbf (need to convert to metric) and an unloaded speed of 4.777173913 in/s (also convert)
+    pub fn new(mtv: MTV, x_actuator: TVCActuator, y_actuator: TVCActuator, actuator_lever_arm: f64, tvc_lever_arm: Vector3<f64>, max_fuel_inertia: f64, min_fuel_inertia: f64) -> Self {
         Self {
+            mtv,
             x_actuator,
             y_actuator,
+            ang_vel: Vector3::zeros(),
+            ang_accel: Vector3::zeros(),
+            tvc_torque: Vector3::zeros(),
+            actuator_lever_arm,
+            tvc_lever_arm: Vector3<f64>,
             max_fuel_inertia,
             min_fuel_inertia,
         }
     }
 
     // percent fuel usage should be a decimal between 0 and 1
-    pub fn update(&mut self, command: Vector2<f64>, percent_fuel_usage: f64, dt: f64) {
-        let engine_inertia = self.min_fuel_inertia + (self.max_fuel_inertia - self.min_fuel_inertia) * percent_fuel_usage;
-        let x_load = (engine_inertia * self.x_actuator.get_accel()) / self.lever_arm.powi(2);
-        let y_load = (engine_inertia * self.y_actuator.get_accel()) / self.lever_arm.powi(2);
+    // engine is 11 kg with fuel, awaiting empty mass data
+    // Returns the reaction torque applied to the rocket body
+    // only the first two elements of command are used, the third is thrust
+    pub fn update(&mut self, command: Vector3<f64>, percent_fuel_usage: f64, dt: f64, system_time: f64) -> Vector3<f64> {
+        self.mtv.update(command[2], dt, system_time);
 
-        // TODO: translate gimbal angle commands to actuator target positions
+        let engine_inertia = self.min_fuel_inertia + (self.max_fuel_inertia - self.min_fuel_inertia) * percent_fuel_usage;
+        let x_load = (engine_inertia * self.x_actuator.get_accel()) / self.actuator_lever_arm.powi(2);
+        let y_load = (engine_inertia * self.y_actuator.get_accel()) / self.actuator_lever_arm.powi(2);
+
+        // TODO: translate gimbal angle commands to actuator target positions and update ang vels and ang accel
         let x_target = 0.0;
         let y_target = 0.0;
 
         self.x_actuator.update(x_target, x_load, dt);
         self.y_actuator.update(y_target, y_load, dt);
+
+        let reaction_torque = self.ang_accel * engine_inertia * -1.0;
+
+        let pitch_rot = UnitQuaternion::from_axis_angle(&Vector3::y_axis(), pitch_angle);
+        let yaw_rot = UnitQuaternion::from_axis_angle(&Vector3::x_axis(), yaw_angle);
+        let gimbal_rotation = yaw_rot * pitch_rot;
+
+        let thrust_vector = gimbal_rotation.transform_vector(Vector3::new(0.0, 0.0, self.mtv.get_thrust()));
+        let thrust_torque = self.tvc_lever_arm.cross(&thrust_vector);
+
+        self.tvc_torque = reaction_torque + thrust_torque;
+
+        return self.tvc_torque.clone();
+    }
+}
+
+
+#[derive(Debug, Clone)]
+pub struct RCS {
+    pub thrust: f64, // this is per thruster
+    pub lever_arm: f64,
+    last_command: f64,
+
+    pub update_rate: f64, // This is in updates per second
+    system_time: f64,
+}
+
+impl RCS {
+    pub fn new(thrust: f64, lever_arm: f64, update_rate: f64) -> Self{
+        Self {
+            thrust,
+            lever_arm,
+            update_rate,
+            system_time: 0.0,
+        }
+    }
+
+    // The command is either positive, 0, or negative. positive is roll right, negative is roll left
+    // returns the torque on the rocket body
+    pub fn update(&mut self, command: f64, system_time: f64) -> Vector3<f64> {
+        let mut actual_command = command;
+
+        let elapsed_time = self.system_time - system_time;
+        if elapsed_time < 1.0 / self.update_rate {
+            actual_command = self.last_command;
+        } else {
+            self.system_time = system_time;
+        }
+        
+        let torque_magnitude = 2.0 * self.thrust * self.lever_arm;
+        if (actual_command == 0.0) {
+            // No action needed
+            Vector3::zeros()
+        } else if actual_command > 0.0 {
+            // Positive Command -> Negative Z Torque
+            // This will roll clockwise from a top view
+            Vector3::new(0.0, 0.0, -torque_magnitude)
+        } else {
+            // Negative Command -> Positive Z Torque
+            // This will roll counterclockwise from a top view
+            Vector3::new(0.0, 0.0, torque_magnitude)
+        }
     }
 }
 
