@@ -29,9 +29,16 @@ fn main() {
     xref[2] = 10.0;
     xref[6] = 1.0; // reference orientation: level (unit quaternion)
 
+    let mut z_integral = 0.0;
+    let mut y_integral = 0.0;
+    let mut x_integral = 0.0;
+    let ki_z = 0.05;
+    let ki_y = 0.01;
+    let ki_x = 0.01;
+
     // Reference trajectory
-    let xref_traj = Array2::from_shape_fn((n_steps + 1, n), |(_, j)| xref[j]);
-    let xref_traj_vec: Vec<Array1<f64>> = xref_traj.axis_iter(ndarray::Axis(0)).map(|row| row.to_owned()).collect();
+    let mut xref_traj = Array2::from_shape_fn((n_steps + 1, n), |(_, j)| xref[j]);
+    let mut xref_traj_vec: Vec<Array1<f64>> = xref_traj.axis_iter(ndarray::Axis(0)).map(|row| row.to_owned()).collect();
 
     // Warm start: hover thrust (thrust = mass * gravity, gimbal angles = 0)
     let m_rocket = 80.0;
@@ -68,7 +75,7 @@ fn main() {
 
     // Store state and control history for plotting
     let mut x_history = Vec::with_capacity(iters);
-    let mut u_history = Vec::with_capacity(iters);
+    let mut u_history: Vec<Array1<f64>> = Vec::with_capacity(iters);
 
     let tolerance = 1e-4;
     let lbfgs_memory = 20;
@@ -77,9 +84,56 @@ fn main() {
     let mut panoc_cache = optimization_engine::panoc::PANOCCache::new(n_dim_u, tolerance, lbfgs_memory);
 
     // smoothing weight vector (for gimbal_theta, gimbal_phi, thrust)
-    let smoothing_weight = Array1::from(vec![500.0, 500.0, 0.02]);
+    let smoothing_weight = Array1::from(vec![1500.0, 1500.0, 0.02]);
 
-    for _ in 0..iters {
+    for k in 0..iters {
+
+        if k as f64 * dt <= 10.0 {
+            
+            // change reference point after 5 seconds
+            let f_iters = iters as f64;
+            let f_k = k as f64;
+            xref[0] = -0.0 * (f_k*dt)/10.0;
+            xref[1] = 0.0 * (f_k*dt)/10.0;
+            xref[2] = 25.0 * (f_k*dt)/10.0 + 3.0;
+
+            xref_traj = Array2::from_shape_fn((n_steps + 1, n), |(_, j)| xref[j]);
+            xref_traj_vec = xref_traj.axis_iter(ndarray::Axis(0)).map(|row| row.to_owned()).collect();
+             
+        } else if k as f64 * dt > 15.0 && k as f64 * dt <= 25.0 {
+            
+            // change reference point after 10 seconds
+            let f_iters = iters as f64;
+            let f_k = k as f64;
+            xref[0] = 0.0 * ((f_k*dt)-15.0)/10.0;
+            xref[1] = 0.0 * ((f_k*dt)-15.0)/10.0;
+            xref[2] = 25.0 - 25.0 * ((f_k*dt)-15.0)/10.0;
+
+            xref_traj = Array2::from_shape_fn((n_steps + 1, n), |(_, j)| xref[j]);
+            xref_traj_vec = xref_traj.axis_iter(ndarray::Axis(0)).map(|row| row.to_owned()).collect();
+        } 
+
+        let z_error = xref[2] - x[2];
+        z_integral += z_error * dt;
+        let mut x_ref_mod = xref.clone();
+        x_ref_mod[2] += ki_z * z_integral; // modify z reference with integral term
+        for i in 0..xref_traj_vec.len() {
+            xref_traj_vec[i][2] = x_ref_mod[2];
+        }
+        let x_error = xref[0] - x[0];
+        x_integral += x_error * dt;
+        x_ref_mod[0] += ki_x * x_integral; // modify x reference with integral term
+        for i in 0..xref_traj_vec.len() {
+            xref_traj_vec[i][0] = x_ref_mod[0];
+        }
+        let y_error = xref[1] - x[1];
+        y_integral += y_error * dt;
+        x_ref_mod[1] += ki_y * y_integral; // modify y reference with integral term
+        for i in 0..xref_traj_vec.len() {
+            xref_traj_vec[i][1] = x_ref_mod[1];
+        }
+
+
         // display progress
         println!("Time step: {}/{}", x_history.len() + 1, iters);
         // Solve MPC to get optimal control sequence
@@ -89,8 +143,27 @@ fn main() {
         // let (u_warm_vec, x_new, u_apply) = mpc_main(&x, &mut u_warm_vec, &xref_traj_vec, &q, &r, &qn, &u_min, &u_max, 2, 0.05);
         
         // OR we solve using OpEn
-        let (u_apply, u_warm) = mpc_crate::OpEnSolve(&x, &u_warm.axis_iter(ndarray::Axis(0)).map(|row| row.to_owned()).collect(), &xref_traj_vec, &q, &r, &qn, &smoothing_weight, &mut panoc_cache);
-        
+        let (mut u_apply, u_warm) = mpc_crate::OpEnSolve(&x, &u_warm.axis_iter(ndarray::Axis(0)).map(|row| row.to_owned()).collect(), &xref_traj_vec, &q, &r, &qn, &smoothing_weight, &mut panoc_cache);
+
+        //use an average between the current and the past 2 control inputs for smoother application
+        /*
+        if k >= 2 {
+            let u_prev2 = u_history[k - 2].clone();
+            let u_prev1 = u_history[k - 1].clone();
+            u_apply = (&u_prev2 + &u_prev1 + &u_apply) / 3.0;
+        } else if k == 1 {
+            let u_prev1 = u_history[k - 1].clone();
+            u_apply = (&u_prev1 + &u_apply) / 2.0;
+        }
+            */
+
+        // exponential filter
+        if k >= 1 {
+            let alpha = 0.4; // smoothing factor
+            let u_prev = u_history[k - 1].clone();
+            u_apply = alpha * &u_apply + (1.0 - alpha) * &u_prev;
+        }
+
         u_history.push(u_apply.clone());
 
         // Simulate dynamics for one time step
