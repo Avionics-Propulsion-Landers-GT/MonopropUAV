@@ -16,8 +16,12 @@ pub struct Rocket {
     pub ang_accel: Vector3<f64>,
 
     pub dry_mass: f64,
-    pub propellant_mass: f64,
-    starting_propellant_mass: f64,
+    pub nitrogen_mass: f64,
+    starting_nitrogen_mass: f64,
+    pub nitrous_mass: f64,
+    starting_nitrous_mass: f64,
+    pub fuel_grain_mass: f64,
+    starting_fuel_grain_mass: f64,
 
     pub inertia_tensor: Vector3<f64>, // Simplified diagonal inertia matrix
 
@@ -36,7 +40,7 @@ pub struct Rocket {
 }
 
 impl Rocket {
-    pub fn new(position: Vector3<f64>, velocity: Vector3<f64>, accel: Vector3<f64>, attitude: UnitQuaternion<f64>, ang_vel: Vector3<f64>, ang_accel: Vector3<f64>, dry_mass: f64, propellant_mass: f64, inertia_tensor: Vector3<f64>, tvc_range: f64, tvc: TVC, rcs: RCS, imu: IMU, gps: GPS, uwb: UWB) -> Self {
+    pub fn new(position: Vector3<f64>, velocity: Vector3<f64>, accel: Vector3<f64>, attitude: UnitQuaternion<f64>, ang_vel: Vector3<f64>, ang_accel: Vector3<f64>, dry_mass: f64, starting_nitrogen_mass: f64, starting_nitrous_mass: f64, starting_fuel_grain_mass: f64, inertia_tensor: Vector3<f64>, tvc_range: f64, tvc: TVC, rcs: RCS, imu: IMU, gps: GPS, uwb: UWB) -> Self {
         let mut rocket = Self {
             position,
             velocity,
@@ -45,8 +49,12 @@ impl Rocket {
             ang_vel,
             ang_accel,
             dry_mass,
-            propellant_mass,
-            starting_propellant_mass: propellant_mass,
+            nitrogen_mass: starting_nitrogen_mass,
+            starting_nitrogen_mass,
+            nitrous_mass: starting_nitrous_mass,
+            starting_nitrous_mass,
+            fuel_grain_mass: starting_fuel_grain_mass,
+            starting_fuel_grain_mass,
             inertia_tensor,
             tvc_range,
             tvc,
@@ -69,8 +77,25 @@ impl Rocket {
     /// forces: Force vector in World Frame
     /// torques: Torque vector in Body Frame
     pub fn step(&mut self, control_input: Vector3<f64>, outside_forces: Vector3<f64>, outside_torques: Vector3<f64>, dt: f64) {
+        // Update Sensors
+        self.imu.update(self.accel, self.ang_vel, self.attitude, self.system_time);
+        self.gps.update(self.position, self.system_time);
+        self.uwb.update(self.position, self.system_time);
+
+        // Update actuated devices
+        let tvc_effect = self.tvc.update(control_input, self.nitrous_mass, self.fuel_grain_mass, dt, self.system_time);
+        self.nitrous_mass = tvc_effect.nitrous_mass;
+        self.fuel_grain_mass = tvc_effect.fuel_grain_mass;
+
+        // TODO: implement throttle controller
+        // TODO: talk to team and change the control vector to have 4 dimensions (add in rcs control command)
+        let rcs_command = 0.0;
+        let rcs_effect = self.rcs.update(rcs_command, self.nitrogen_mass, dt, self.system_time);
+        self.nitrogen_mass = rcs_effect.nitrogen_mass;
+
+
         self.system_time += dt;
-        let mass = self.dry_mass + self.propellant_mass;
+        let mass = self.dry_mass + self.nitrogen_mass + self.nitrous_mass + self.fuel_grain_mass;
 
         // Translational Dynamics
         let gravity = Vector3::new(0.0, 0.0, -9.81);
@@ -92,7 +117,7 @@ impl Rocket {
         );
 
         let gyro_torque = self.ang_vel.cross(&i_omega);
-        let net_torque = outside_torques - gyro_torque;
+        let net_torque = outside_torques - gyro_torque + tvc_effect.torque + rcs_effect.torque;
 
         // Angular acceleration (alpha)
         let alpha = Vector3::new(
@@ -129,19 +154,6 @@ impl Rocket {
             // Apply rotation: new_attitude = old_attitude * delta_rotation
             self.attitude = self.attitude * axis;
         }
-
-        // Update Sensors
-        self.imu.update(self.accel, self.ang_vel, self.attitude, self.system_time);
-        self.gps.update(self.position, self.system_time);
-        self.uwb.update(self.position, self.system_time);
-
-        // Update actuated devices
-        let percent_fuel_usage = (self.starting_propellant_mass - self.propellant_mass) / self.starting_propellant_mass;
-        self.tvc.update(control_input, percent_fuel_usage, dt, self.system_time);
-        // TODO: implement throttle controller
-        // TODO: talk to team and change the control vector to have 4 dimensions (add in rcs control command)
-        let rcs_command = 0.0;
-        self.rcs.update(rcs_command, self.system_time);
     }
 }
 

@@ -287,12 +287,21 @@ pub struct MTV {
 
     pub valve_torque: f64,
 
+    starting_fuel_grain_mass: f64,
+
     pub update_rate: f64,
     system_time: f64,
 }
 
+#[derive(Debug, Clone)]
+pub struct MTVEffect {
+    pub nitrous_mass: f64,
+    pub fuel_grain_mass: f64,
+    pub thrust: f64,
+}
+
 impl MTV {
-    pub fn new(angle: f64, ang_vel: f64, ang_accel: f64, unloaded_speed: f64, stall_torque: f64, p_gain: f64, valve_torque: f64, update_rate: f64) -> Self {
+    pub fn new(angle: f64, ang_vel: f64, ang_accel: f64, unloaded_speed: f64, stall_torque: f64, p_gain: f64, valve_torque: f64, starting_fuel_grain_mass: f64, update_rate: f64) -> Self {
         Self {
             angle,
             ang_vel,
@@ -301,12 +310,13 @@ impl MTV {
             stall_torque,
             p_gain,
             valve_torque,
+            starting_fuel_grain_mass,
             update_rate,
             system_time: 0.0,
         }
     }
 
-    pub fn update(&mut self, target_thrust: f64, dt: f64, system_time: f64) {
+    pub fn update(&mut self, target_thrust: f64, nitrous_mass: f64, fuel_grain_mass: f64, dt: f64, system_time: f64) {
         let elapsed_time = self.system_time - system_time;
         if elapsed_time < 1.0 / self.update_rate {
             // angular velocity stays constant, therefore angular acceleration is zero, but angle does update
@@ -332,10 +342,20 @@ impl MTV {
         self.ang_accel = (self.ang_vel - prev_ang_vel) / dt;
         self.angle += self.ang_vel * dt;
         self.angle = clamp(self.angle, 0.0, 90.0);
+
+        let thrust = get_thrust(nitrous_mass, fuel_grain_mass);
+        // TODO: update the nitrous and fuel grain masses
+
+        return MTVEffect {
+            nitrous_mass,
+            fuel_grain_mass,
+            thrust,
+        }
     }
 
-    pub fn get_thrust(&mut self) -> f64 {
+    pub fn get_thrust(&mut self, nitrous_mass: f64, fuel_grain_mass: f64) -> f64 {
         // TODO: use the current throttle angle to find the flow rate, then determine thrust
+        // Remember to take into account either mass running out
         // TODO: also model the thrust decay somehow?
         0.0
     }
@@ -353,11 +373,19 @@ pub struct TVC {
     pub tvc_lever_arm: Vector3<f64>,
     pub max_fuel_inertia: f64,
     pub min_fuel_inertia: f64,
+    starting_fuel_grain_mass: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct TVCEffect {
+    pub torque: Vector3<f64>,
+    pub nitrous_mass: f64,
+    pub fuel_grain_mass: f64,
 }
 
 impl TVC {
     // Our actuators appear to have a stall force of 400 lbf (need to convert to metric) and an unloaded speed of 4.777173913 in/s (also convert)
-    pub fn new(mtv: MTV, x_actuator: TVCActuator, y_actuator: TVCActuator, actuator_lever_arm: f64, tvc_lever_arm: Vector3<f64>, max_fuel_inertia: f64, min_fuel_inertia: f64) -> Self {
+    pub fn new(mtv: MTV, x_actuator: TVCActuator, y_actuator: TVCActuator, actuator_lever_arm: f64, tvc_lever_arm: Vector3<f64>, max_fuel_inertia: f64, min_fuel_inertia: f64, starting_fuel_grain_mass: f64) -> Self {
         Self {
             mtv,
             x_actuator,
@@ -369,17 +397,17 @@ impl TVC {
             tvc_lever_arm: Vector3<f64>,
             max_fuel_inertia,
             min_fuel_inertia,
+            starting_fuel_grain_mass,
         }
     }
 
-    // percent fuel usage should be a decimal between 0 and 1
     // engine is 11 kg with fuel, awaiting empty mass data
     // Returns the reaction torque applied to the rocket body
     // only the first two elements of command are used, the third is thrust
-    pub fn update(&mut self, command: Vector3<f64>, percent_fuel_usage: f64, dt: f64, system_time: f64) -> Vector3<f64> {
-        self.mtv.update(command[2], dt, system_time);
+    pub fn update(&mut self, command: Vector3<f64>, nitrous_mass: f64, fuel_grain_mass: f64, dt: f64, system_time: f64) -> Vector3<f64> {
+        let mtv_effect = self.mtv.update(command[2], nitrous_mass, fuel_grain_mass, dt, system_time);
 
-        let engine_inertia = self.min_fuel_inertia + (self.max_fuel_inertia - self.min_fuel_inertia) * percent_fuel_usage;
+        let engine_inertia = self.min_fuel_inertia + (self.max_fuel_inertia - self.min_fuel_inertia) * (fuel_grain_mass / self.starting_fuel_grain_mass);
         let x_load = (engine_inertia * self.x_actuator.get_accel()) / self.actuator_lever_arm.powi(2);
         let y_load = (engine_inertia * self.y_actuator.get_accel()) / self.actuator_lever_arm.powi(2);
 
@@ -387,8 +415,8 @@ impl TVC {
         let x_target = 0.0;
         let y_target = 0.0;
 
-        self.x_actuator.update(x_target, x_load, dt);
-        self.y_actuator.update(y_target, y_load, dt);
+        self.x_actuator.update(x_target, x_load, dt, system_time);
+        self.y_actuator.update(y_target, y_load, dt, system_time);
 
         let reaction_torque = self.ang_accel * engine_inertia * -1.0;
 
@@ -396,12 +424,18 @@ impl TVC {
         let yaw_rot = UnitQuaternion::from_axis_angle(&Vector3::x_axis(), yaw_angle);
         let gimbal_rotation = yaw_rot * pitch_rot;
 
-        let thrust_vector = gimbal_rotation.transform_vector(Vector3::new(0.0, 0.0, self.mtv.get_thrust()));
+        let thrust_vector = gimbal_rotation.transform_vector(Vector3::new(0.0, 0.0, mtv_effect.thrust));
         let thrust_torque = self.tvc_lever_arm.cross(&thrust_vector);
 
         self.tvc_torque = reaction_torque + thrust_torque;
 
         return self.tvc_torque.clone();
+
+        return TVCEffect {
+            torque,
+            nitrous_mass: mtv_effect.nitrous_mass,
+            fuel_grain_mass: mtv_effect.fuel_grain_mass,
+        }
     }
 }
 
@@ -412,15 +446,25 @@ pub struct RCS {
     pub lever_arm: f64,
     last_command: f64,
 
+    pub nitrogen_consumption_rate: f64, // this is in kg/s
+
     pub update_rate: f64, // This is in updates per second
     system_time: f64,
 }
 
+#[derive(Debug, Clone)]
+pub struct RCSEffect {
+    pub torque: Vector3<f64>,
+    pub nitrogen_mass: f64,
+}
+
 impl RCS {
-    pub fn new(thrust: f64, lever_arm: f64, update_rate: f64) -> Self{
+    pub fn new(thrust: f64, lever_arm: f64, nitrogen_consumption_rate: f64, update_rate: f64) -> Self{
         Self {
             thrust,
             lever_arm,
+            last_command = 0.0,
+            nitrogen_consumption_rate
             update_rate,
             system_time: 0.0,
         }
@@ -428,7 +472,8 @@ impl RCS {
 
     // The command is either positive, 0, or negative. positive is roll right, negative is roll left
     // returns the torque on the rocket body
-    pub fn update(&mut self, command: f64, system_time: f64) -> Vector3<f64> {
+    pub fn update(&mut self, command: f64, nitrogen_mass: f64, dt: f64, system_time: f64) -> RCSEffect {
+        let mut remaining_nitrogen_mass = nitrogen_mass;
         let mut actual_command = command;
 
         let elapsed_time = self.system_time - system_time;
@@ -439,17 +484,25 @@ impl RCS {
         }
         
         let torque_magnitude = 2.0 * self.thrust * self.lever_arm;
+        let mut torque;
         if (actual_command == 0.0) {
             // No action needed
-            Vector3::zeros()
+            torque = Vector3::zeros();
         } else if actual_command > 0.0 {
             // Positive Command -> Negative Z Torque
             // This will roll clockwise from a top view
-            Vector3::new(0.0, 0.0, -torque_magnitude)
+            torque = Vector3::new(0.0, 0.0, -torque_magnitude);
+            remaining_nitrogen_mass -= self.nitrogen_consumption_rate * dt;
         } else {
             // Negative Command -> Positive Z Torque
             // This will roll counterclockwise from a top view
-            Vector3::new(0.0, 0.0, torque_magnitude)
+            torque = Vector3::new(0.0, 0.0, torque_magnitude);
+            remaining_nitrogen_mass -= self.nitrogen_consumption_rate * dt;
+        }
+
+        RCSEffect {
+            torque,
+            nitrogen_mass: remaining_nitrogen_mass,
         }
     }
 }
