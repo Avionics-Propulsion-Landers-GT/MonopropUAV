@@ -6,6 +6,7 @@ use mpc_crate::{mpc_main, dynamics};
 use externaldynamics::{real_dynamics};
 use ndarray::{Array1, Array2};
 use std::f64::consts::PI;
+use rand::Rng;
 
 // plotting
 use plotters::prelude::*;
@@ -13,28 +14,28 @@ use plotters::prelude::*;
 fn main() {
 
    // Problem sizes
-    let n = 13; // [x, y, z, qx, qy, qz, qw, x_dot, y_dot, z_dot, wx, wy, wz]
+    let n = 15; // [x, y, z, qx, qy, qz, qw, x_dot, y_dot, z_dot, wx, wy, wz. theta_dot, phi_dot]
     let m = 3;  // [gimbal_theta, gimbal_phi, thrust]
-    let n_steps = 10;
-    // let t_total = 60.0; // 60 seconds for lander scenario
-    let t_total = 20.0; // 20 seconds for tethered hover scenario
-    let dt = 0.1;
+    let n_steps = 20;
+    let t_total = 30.0;
+    let dt = 0.05;
     let iters = (t_total / dt) as usize;
 
     // Initial state: at origin, level, stationary, quaternion [0,0,0,1]
     let mut x = Array1::<f64>::zeros(n);
-    x[2] = 5.0;
     x[6] = 1.0; // qw = 1 (unit quaternion)
 
     // Hover at set point
     let mut xref = Array1::<f64>::zeros(n);
-    
+    xref[0] = -0.0;
+    xref[1] = 0.0;
+    xref[2] = 0.0;
     xref[6] = 1.0; // reference orientation: level (unit quaternion)
 
     let mut z_integral = 0.0;
     let mut y_integral = 0.0;
     let mut x_integral = 0.0;
-    let ki_z = 0.2;
+    let ki_z = 0.05;
     let ki_y = 0.01;
     let ki_x = 0.01;
 
@@ -43,7 +44,7 @@ fn main() {
     let mut xref_traj_vec: Vec<Array1<f64>> = xref_traj.axis_iter(ndarray::Axis(0)).map(|row| row.to_owned()).collect();
 
     // Warm start: hover thrust (thrust = mass * gravity, gimbal angles = 0)
-    let mut m_rocket = 80.0;
+    let m_rocket = 80.0;
     let g = 9.81;
     let hover_thrust = m_rocket * g;
     let mut u_warm = Array2::<f64>::zeros((n_steps, m));
@@ -53,23 +54,26 @@ fn main() {
 
     // Costs: penalize position, orientation, velocities, angular rates
     let q_vec = vec![
-        20.0, 20.0, 200.0,   // position x, y, z
-        0.0, 0.0, 0.0, 0.0, // quaternion qx, qy, qz, qw
+        250.0, 250.0, 220.0,   // position x, y, z
+        500.0, 500.0, 500.0, 500.0, // quaternion qx, qy, qz, qw
         3.0, 3.0, 1.0,        // linear velocities x_dot, y_dot, z_dot
-        1.0, 1.0, 1.0          // angular velocities wx, wy, wz
+        1.0, 1.0, 1.0,          // angular velocities wx, wy, wz
+        150.0, 150.0             // gimbal angles theta, phi
     ];
     let q = Array2::<f64>::from_diag(&Array1::from(q_vec.clone()));
-    let r = Array2::<f64>::from_diag(&Array1::from(vec![0000.0, 0000.0, 0.00]));
-    // let qn = q.clone();
+    let r = Array2::<f64>::from_diag(&Array1::from(vec![2000.0, 2000.0, 0.001]));
+    let qn = q.clone(); // terminal cost same as stage cost
+    /*
     let qn = Array2::<f64>::from_diag(&Array1::from(vec![
-        200.0, 200.0, 5000.0,   // position x, y, z
+        100.0, 100.0, 5000.0,   // position x, y, z
         10.0, 10.0, 10.0, 10.0, // quaternion qx, qy, qz, qw
         10.0, 10.0, 10.0,        // linear velocities x_dot, y_dot, z_dot
         5.0, 5.0, 5.0          // angular velocities wx, wy, wz
     ]));
+    */
 
     // Bounds on control inputs
-    let gimbal_limit = 15.0 * PI / 180.0; // +/- 15 degrees
+    let gimbal_limit = 10.0 * PI / 180.0; // +/- 10 degrees/sec
     let thrust_min = 300.0;
     let thrust_max = 1000.0;
     let u_min = Array1::from(vec![-gimbal_limit, -gimbal_limit, thrust_min]);
@@ -77,16 +81,15 @@ fn main() {
 
     // Store state and control history for plotting
     let mut x_history = Vec::with_capacity(iters);
-    let mut u_history: Vec<Array1<f64>> = Vec::with_capacity(iters);
+    let mut u_history = Vec::with_capacity(iters);
 
-    let tolerance = 1e-4;
+    let tolerance = 1e-5;
     let lbfgs_memory = 20;
     let max_iter = 200;
     let n_dim_u = m * n_steps;
     let mut panoc_cache = optimization_engine::panoc::PANOCCache::new(n_dim_u, tolerance, lbfgs_memory);
-
     // smoothing weight vector (for gimbal_theta, gimbal_phi, thrust)
-    let smoothing_weight = Array1::from(vec![1500.0, 1500.0, 0.02]);
+    let smoothing_weight = Array1::from(vec![15000.0, 15000.0, 0.20]);
 
     for k in 0..iters {
 
@@ -97,7 +100,7 @@ fn main() {
             let f_k = k as f64;
             xref[0] = -0.0 * (f_k*dt)/10.0;
             xref[1] = 0.0 * (f_k*dt)/10.0;
-            xref[2] = 25.0 * (f_k*dt)/10.0 + 3.0;
+            xref[2] = 25.0 * (f_k*dt)/10.0;
 
             xref_traj = Array2::from_shape_fn((n_steps + 1, n), |(_, j)| xref[j]);
             xref_traj_vec = xref_traj.axis_iter(ndarray::Axis(0)).map(|row| row.to_owned()).collect();
@@ -115,10 +118,10 @@ fn main() {
             xref_traj_vec = xref_traj.axis_iter(ndarray::Axis(0)).map(|row| row.to_owned()).collect();
         } 
 
-        
-        xref[0] = 0.0;
-        xref[1] = 0.0;
-        xref[2] = 5.0;
+
+        // display progress
+        println!("Time step: {}/{}", x_history.len() + 1, iters);
+        // Solve MPC to get optimal control sequence
 
         let z_error = xref[2] - x[2];
         z_integral += z_error * dt;
@@ -140,31 +143,44 @@ fn main() {
             xref_traj_vec[i][1] = x_ref_mod[1];
         }
 
-        // display progress
-        println!("Time step: {}/{}", x_history.len() + 1, iters);
-        // Solve MPC to get optimal control sequence
-
         // solve using mpc_main
         // let mut u_warm_vec: Vec<Array1<f64>> = u_warm.axis_iter(ndarray::Axis(0)).map(|row| row.to_owned()).collect();
-        // let (u_warm_vec, x_new, mut u_apply) = mpc_main(&x, &mut u_warm_vec, &xref_traj_vec, &q, &r, &qn, &u_min, &u_max, 2, 0.05);
-        
+        // let (u_warm_vec, x_new, u_apply) = mpc_main(&x, &mut u_warm_vec, &xref_traj_vec, &q, &r, &qn, &u_min, &u_max, 2, 0.05);
+
         // OR we solve using OpEn
         let (mut u_apply, u_warm) = mpc_crate::OpEnSolve(&x, &u_warm.axis_iter(ndarray::Axis(0)).map(|row| row.to_owned()).collect(), &xref_traj_vec, &q, &r, &qn, &smoothing_weight, &mut panoc_cache);
-
-        // exponential filter
-        if k >= 1 {
-            let alpha = 0.4; // smoothing factor
-            let u_prev = u_history[k - 1].clone();
-            u_apply = alpha * &u_apply + (1.0 - alpha) * &u_prev;
-        } 
+        
+        // for the first one and a half seconds , set gimbal angles to 0 
+        /*
+        if k as f64 * dt < 1.5 {
+            let mut u_apply_mut = u_apply.clone();
+            u_apply_mut[0] = 0.0; // gimbal_theta
+            u_apply_mut[1] = 0.0; // gimbal_phi
+            u_apply = u_apply_mut;
+        }
+            */
+            
+            
 
         u_history.push(u_apply.clone());
 
-        m_rocket = m_rocket - 0.001 * u_apply[2] * dt; // decrease mass directly proportional to thrust
-        println!("Time step: {}, Mass: {}", k as f64 * dt, m_rocket);
+        // use an average between the current and the past 2 control inputs for smoother application
+        
+        if k >= 2 {
+            let u_prev2 = u_history[k - 2].clone();
+            let u_prev1 = u_history[k - 1].clone();
+            u_apply = (&u_prev2 + &u_prev1 + &u_apply) / 3.0;
+        } else if k == 1 {
+            let u_prev1 = u_history[k - 1].clone();
+            u_apply = (&u_prev1 + &u_apply) / 2.0;
+        }
+            
 
         // Simulate dynamics for one time step
-        x = real_dynamics(&x, &u_apply, Some(m_rocket));
+        x = real_dynamics(&x, &u_apply);
+
+        // add constant roll rate to rocket
+        // x[10] += 0.05; // wx
 
         // print x and u for debugging
         // println!("Time step: {}", x_history.len());
@@ -254,7 +270,7 @@ fn main() {
         let gimbal_area = BitMapBackend::new("mpc_gimbal.png", (960, 540)).into_drawing_area();
         gimbal_area.fill(&WHITE).unwrap();
         let mut chart = ChartBuilder::on(&gimbal_area)
-            .caption("Gimbal Angles", ("sans-serif", 30).into_font())
+            .caption("Gimbal Angle Rates (deg/s)", ("sans-serif", 30).into_font())
             .margin(10)
             .x_label_area_size(40)
             .y_label_area_size(60)
@@ -262,12 +278,99 @@ fn main() {
             .unwrap();
         chart.configure_mesh()
             .x_desc("Time (s)")
-            .y_desc("Angle (deg)")
+            .y_desc("Angle Rate (deg/s)")
             .draw()
             .unwrap();
         let x_data: Vec<f64> = (0..iters).map(|i| i as f64 * dt).collect();
         let gimbal_theta_data: Vec<f64> = u_history.iter().map(|u| u[0].to_degrees()).collect();
         let gimbal_phi_data: Vec<f64> = u_history.iter().map(|u| u[1].to_degrees()).collect();
+        chart.draw_series(LineSeries::new(
+            x_data.iter().cloned().zip(gimbal_theta_data.iter().cloned()),
+            &RED,
+        )).unwrap().label("Gimbal Theta Rate (deg/s)").legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
+        chart.draw_series(LineSeries::new(
+            x_data.iter().cloned().zip(gimbal_phi_data.iter().cloned()),
+            &BLUE,
+        )).unwrap().label("Gimbal Phi Rate (deg/s)").legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &BLUE));
+        chart.configure_series_labels()
+            .background_style(&WHITE.mix(0.8))
+            .border_style(&BLACK)
+            .draw()
+            .unwrap();
+    }
+
+    //plot attitude on its own graph
+    {
+        let attitude_area = BitMapBackend::new("mpc_attitude.png", (960, 540)).into_drawing_area();
+        attitude_area.fill(&WHITE).unwrap();
+        let mut chart = ChartBuilder::on(&attitude_area)
+            .caption("Quaternion Attitude", ("sans-serif", 30).into_font())
+            .margin(10)
+            .x_label_area_size(40)
+            .y_label_area_size(60)
+            .build_cartesian_2d(0f64..t_total, -1.0f64..1.0f64)
+            .unwrap();
+        chart.configure_mesh()
+            .x_desc("Time (s)")
+            .y_desc("Quaternion Components")
+            .draw()
+            .unwrap();
+        let x_data: Vec<f64> = (0..iters).map(|i| i as f64 * dt).collect();
+        let qx_data: Vec<f64> = x_history.iter().map(|x| x[3]).collect();
+        let qy_data: Vec<f64> = x_history.iter().map(|x| x[4]).collect();
+        let qz_data: Vec<f64> = x_history.iter().map(|x| x[5]).collect();
+        let qw_data: Vec<f64> = x_history.iter().map(|x| x[6]).collect();
+        chart.draw_series(LineSeries::new(
+            x_data.iter().cloned().zip(qx_data.iter().cloned()),
+            &RED,
+        )).unwrap().label("qx").legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
+        chart.draw_series(LineSeries::new(
+            x_data.iter().cloned().zip(qy_data.iter().cloned()),
+            &BLUE,
+        )).unwrap().label("qy").legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &BLUE));
+        chart.draw_series(LineSeries::new(
+            x_data.iter().cloned().zip(qz_data.iter().cloned()),
+            &GREEN,
+        )).unwrap().label("qz").legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &GREEN));
+        chart.draw_series(LineSeries::new(
+            x_data.iter().cloned().zip(qw_data.iter().cloned()),
+            &BLACK,
+        )).unwrap().label("qw").legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &BLACK));
+        chart.configure_series_labels()
+            .background_style(&WHITE.mix(0.8))
+            .border_style(&BLACK)
+            .draw()
+            .unwrap();
+    }
+    println!("MPC simulation complete. Plot saved to mpc_simulation.png");
+
+    // plot gimbal angles over time
+    {
+        let gimbal_area = BitMapBackend::new("mpc_gimbal_angles.png", (960, 540)).into_drawing_area();
+        gimbal_area.fill(&WHITE).unwrap();
+        let mut chart = ChartBuilder::on(&gimbal_area)
+            .caption("Gimbal Angles (deg)", ("sans-serif", 30).into_font())
+            .margin(10)
+            .x_label_area_size(40)
+            .y_label_area_size(60)
+            .build_cartesian_2d(0f64..t_total, -15.0..15.0)
+            .unwrap();
+        chart.configure_mesh()
+            .x_desc("Time (s)")
+            .y_desc("Angle (deg)")
+            .draw()
+            .unwrap();
+        let x_data: Vec<f64> = (0..iters).map(|i| i as f64 * dt).collect();
+        let mut gimbal_theta_angle = 0.0;
+        let mut gimbal_phi_angle = 0.0;
+        let mut gimbal_theta_data: Vec<f64> = Vec::with_capacity(iters);
+        let mut gimbal_phi_data: Vec<f64> = Vec::with_capacity(iters);
+        for u in &u_history {
+            gimbal_theta_angle += u[0] * dt;
+            gimbal_phi_angle += u[1] * dt;
+            gimbal_theta_data.push(gimbal_theta_angle.to_degrees());
+            gimbal_phi_data.push(gimbal_phi_angle.to_degrees());
+        }
         chart.draw_series(LineSeries::new(
             x_data.iter().cloned().zip(gimbal_theta_data.iter().cloned()),
             &RED,
@@ -282,5 +385,4 @@ fn main() {
             .draw()
             .unwrap();
     }
-    println!("MPC simulation complete. Plot saved to mpc_simulation.png");
 }

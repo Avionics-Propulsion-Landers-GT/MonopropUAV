@@ -16,23 +16,32 @@ pub struct Rocket {
     pub ang_accel: Vector3<f64>,
 
     pub dry_mass: f64,
-    pub propellant_mass: f64,
+    pub nitrogen_mass: f64,
+    starting_nitrogen_mass: f64,
+    pub nitrous_mass: f64,
+    starting_nitrous_mass: f64,
+    pub fuel_grain_mass: f64,
+    starting_fuel_grain_mass: f64,
 
     pub inertia_tensor: Vector3<f64>, // Simplified diagonal inertia matrix
 
     pub tvc_range: f64,
     pub tvc: TVC,
 
+    pub rcs: RCS,
+
     thrust_vector: Vector3<f64>,
 
     pub imu: IMU,
     pub gps: GPS,
     pub uwb: UWB,
+
+    system_time: f64,
 }
 
 impl Rocket {
-    pub fn new(position: Vector3<f64>, velocity: Vector3<f64>, accel: Vector3<f64>, attitude: UnitQuaternion<f64>, ang_vel: Vector3<f64>, ang_accel: Vector3<f64>, dry_mass: f64, propellant_mass: f64, inertia_tensor: Vector3<f64>, tvc_range: f64, tvc: TVC) -> Self {
-        Self {
+    pub fn new(position: Vector3<f64>, velocity: Vector3<f64>, accel: Vector3<f64>, attitude: UnitQuaternion<f64>, ang_vel: Vector3<f64>, ang_accel: Vector3<f64>, dry_mass: f64, starting_nitrogen_mass: f64, starting_nitrous_mass: f64, starting_fuel_grain_mass: f64, inertia_tensor: Vector3<f64>, tvc_range: f64, tvc: TVC, rcs: RCS, imu: IMU, gps: GPS, uwb: UWB) -> Self {
+        let mut rocket = Self {
             position,
             velocity,
             accel,
@@ -40,24 +49,60 @@ impl Rocket {
             ang_vel,
             ang_accel,
             dry_mass,
-            propellant_mass,
+            nitrogen_mass: starting_nitrogen_mass,
+            starting_nitrogen_mass,
+            nitrous_mass: starting_nitrous_mass,
+            starting_nitrous_mass,
+            fuel_grain_mass: starting_fuel_grain_mass,
+            starting_fuel_grain_mass,
             inertia_tensor,
             tvc_range,
-            tvc,    
-        }
+            tvc,
+            rcs,
+            thrust_vector: Vector3::zeros(),
+            imu,
+            gps,
+            uwb,
+            system_time: 0.0,
+        };
+
+        rocket.imu.update(rocket.accel, rocket.ang_vel, rocket.attitude, rocket.system_time);
+        rocket.gps.update(rocket.position, rocket.system_time);
+        rocket.uwb.update(rocket.position, rocket.system_time);
+
+        rocket
     }
 
     /// Update state based on applied forces and torques
     /// forces: Force vector in World Frame
     /// torques: Torque vector in Body Frame
-    pub fn step(&mut self, control_input: Vector3<f64>) {
-        // 1. Translational Dynamics (F = ma)
-        // Gravity (assuming -Z is down)
+    pub fn step(&mut self, control_input: Vector3<f64>, outside_forces: Vector3<f64>, outside_torques: Vector3<f64>, dt: f64) {
+        // Update Sensors
+        self.imu.update(self.accel, self.ang_vel, self.attitude, self.system_time);
+        self.gps.update(self.position, self.system_time);
+        self.uwb.update(self.position, self.system_time);
+
+        // Update actuated devices
+        let tvc_effect = self.tvc.update(control_input, self.nitrous_mass, self.fuel_grain_mass, dt, self.system_time);
+        self.nitrous_mass = tvc_effect.nitrous_mass;
+        self.fuel_grain_mass = tvc_effect.fuel_grain_mass;
+
+        // TODO: implement throttle controller
+        // TODO: talk to team and change the control vector to have 4 dimensions (add in rcs control command)
+        let rcs_command = 0.0;
+        let rcs_effect = self.rcs.update(rcs_command, self.nitrogen_mass, dt, self.system_time);
+        self.nitrogen_mass = rcs_effect.nitrogen_mass;
+
+
+        self.system_time += dt;
+        let mass = self.dry_mass + self.nitrogen_mass + self.nitrous_mass + self.fuel_grain_mass;
+
+        // Translational Dynamics
         let gravity = Vector3::new(0.0, 0.0, -9.81);
-        let total_force = forces_world + (gravity * self.mass);
-        
-        self.acceleration = total_force / self.mass;
-        self.velocity += self.acceleration * dt;
+        let total_force = outside_forces + (gravity * mass);
+
+        self.accel = total_force / mass;        
+        self.velocity += self.accel * dt;
         self.position += self.velocity * dt;
 
         // 2. Rotational Dynamics (Euler's rotation equations)
@@ -66,13 +111,13 @@ impl Rocket {
         
         // We calculate I * omega manually since inertia is a diagonal Vector3 here
         let i_omega = Vector3::new(
-            self.inertia_tensor.x * self.angular_velocity.x,
-            self.inertia_tensor.y * self.angular_velocity.y,
-            self.inertia_tensor.z * self.angular_velocity.z,
+            self.inertia_tensor.x * self.ang_vel.x,
+            self.inertia_tensor.y * self.ang_vel.y,
+            self.inertia_tensor.z * self.ang_vel.z,
         );
 
-        let gyroscopic_term = self.angular_velocity.cross(&i_omega);
-        let net_torque = torques_body - gyroscopic_term;
+        let gyro_torque = self.ang_vel.cross(&i_omega);
+        let net_torque = outside_torques - gyro_torque + tvc_effect.torque + rcs_effect.torque;
 
         // Angular acceleration (alpha)
         let alpha = Vector3::new(
@@ -82,15 +127,15 @@ impl Rocket {
         );
 
         // Update Angular Velocity
-        self.angular_velocity += alpha * dt;
+        self.ang_vel += alpha * dt;
 
         // 3. Update Attitude (Quaternion Integration)
         // q_dot = 0.5 * quaternion(0, omega) * q
         let omega_quat = Quaternion::new(
             0.0, 
-            self.angular_velocity.x, 
-            self.angular_velocity.y, 
-            self.angular_velocity.z
+            self.ang_vel.x, 
+            self.ang_vel.y, 
+            self.ang_vel.z
         );
         
         // Standard approach: q_new = q_old + (0.5 * omega * q_old) * dt
@@ -99,11 +144,12 @@ impl Rocket {
         
         // Note: For small timesteps, we approximate the integration.
         // A common robust method is integrating the angle axis directly:
-        let angle = self.angular_velocity.norm() * dt;
+        let angle = self.ang_vel.norm() * dt;
         if angle > 1e-6 {
             let axis = UnitQuaternion::from_axis_angle(
-                &nalgebra::Unit::new_normalize(self.angular_velocity), 
-                angle
+                &nalgebra::Unit::new_normalize(self.ang_vel), 
+           
+            |    angle
             );
             // Apply rotation: new_attitude = old_attitude * delta_rotation
             self.attitude = self.attitude * axis;
