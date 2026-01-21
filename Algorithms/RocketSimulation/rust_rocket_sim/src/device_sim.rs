@@ -227,12 +227,14 @@ pub struct TVCActuator {
     pub stall_force: f64,
     pub p_gain: f64,
 
+    pub pos_noise_sigma: f64,
+
     pub update_rate: f64, // This is in updates per second
     system_time: f64,
 }
 
 impl TVCActuator {
-    pub fn new (start_position: f64, extension_limit: f64, unloaded_speed: f64, stall_force: f64, p_gain: f64, update_rate: f64) -> Self {
+    pub fn new (start_position: f64, extension_limit: f64, unloaded_speed: f64, stall_force: f64, p_gain: f64, pos_noise_sigma: f64, update_rate: f64) -> Self {
         Self {
             position: start_position,
             velocity: 0.0,
@@ -240,6 +242,7 @@ impl TVCActuator {
             unloaded_speed,
             stall_force,
             p_gain,
+            pos_noise_sigma,
             update_rate,
             system_time: 0.0,
         }
@@ -273,6 +276,11 @@ impl TVCActuator {
     pub fn get_accel(&self) -> f64 {
         self.accel
     }
+
+    pub fn get_noisy_position(&self) -> f64 {
+        let mut rng = rand::rng();
+        self.position + noise(&self.pos_noise_sigma, &mut rng)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -295,6 +303,7 @@ pub struct MTV {
 
 #[derive(Debug, Clone)]
 pub struct MTVEffect {
+    pub nitrogen_mass: f64,
     pub nitrous_mass: f64,
     pub fuel_grain_mass: f64,
     pub thrust: f64,
@@ -316,7 +325,7 @@ impl MTV {
         }
     }
 
-    pub fn update(&mut self, target_thrust: f64, nitrous_mass: f64, fuel_grain_mass: f64, dt: f64, system_time: f64) {
+    pub fn update(&mut self, target_thrust: f64, nitrogen_mass: f64, pressurizing_nitrogen_mass: f64, nitrous_mass: f64, fuel_grain_mass: f64, dt: f64, system_time: f64) {
         let elapsed_time = self.system_time - system_time;
         if elapsed_time < 1.0 / self.update_rate {
             // angular velocity stays constant, therefore angular acceleration is zero, but angle does update
@@ -343,21 +352,22 @@ impl MTV {
         self.angle += self.ang_vel * dt;
         self.angle = clamp(self.angle, 0.0, 90.0);
 
-        let thrust = get_thrust(nitrous_mass, fuel_grain_mass);
-        // TODO: update the nitrous and fuel grain masses
+        let mtv_effect = self.get_thrust(nitrogen_mass, nitrous_mass, fuel_grain_mass);
 
-        return MTVEffect {
-            nitrous_mass,
-            fuel_grain_mass,
-            thrust,
-        }
+        return mtv_effect;
     }
 
-    pub fn get_thrust(&mut self, nitrous_mass: f64, fuel_grain_mass: f64) -> f64 {
+    pub fn get_thrust(&mut self, nitrogen_mass:f64, pressurizing_nitrogen_mass: f64,nitrous_mass: f64, fuel_grain_mass: f64) -> MTVEffect {
+        // TODO: update the nitrogen, nitrous, and fuel grain masses (nitrogen is used to pressurize the tank, so nitrogen will flow out of the nitrogen tank into the nitrous tank)
         // TODO: use the current throttle angle to find the flow rate, then determine thrust
         // Remember to take into account either mass running out
         // TODO: also model the thrust decay somehow?
-        0.0
+        MTVEffect {
+            nitrogen_mass,
+            nitrous_mass,
+            fuel_grain_mass,
+            thrust: 0.0,
+        }
     }
 }
 
@@ -383,6 +393,12 @@ pub struct TVCEffect {
     pub fuel_grain_mass: f64,
 }
 
+#[derive(Debug, Clone)]
+pub struct ActuatorPositions {
+    pub x_position: f64,
+    pub y_position: f64,
+}
+
 impl TVC {
     // Our actuators appear to have a stall force of 400 lbf (need to convert to metric) and an unloaded speed of 4.777173913 in/s (also convert)
     pub fn new(mtv: MTV, x_actuator: TVCActuator, y_actuator: TVCActuator, actuator_lever_arm: f64, tvc_lever_arm: Vector3<f64>, max_fuel_inertia: f64, min_fuel_inertia: f64, starting_fuel_grain_mass: f64) -> Self {
@@ -404,8 +420,8 @@ impl TVC {
     // engine is 11 kg with fuel, awaiting empty mass data
     // Returns the reaction torque applied to the rocket body
     // only the first two elements of command are used, the third is thrust
-    pub fn update(&mut self, command: Vector3<f64>, nitrous_mass: f64, fuel_grain_mass: f64, dt: f64, system_time: f64) -> Vector3<f64> {
-        let mtv_effect = self.mtv.update(command[2], nitrous_mass, fuel_grain_mass, dt, system_time);
+    pub fn update(&mut self, command: Vector3<f64>, nitrogen_mass: f64, pressurizing_nitrogen_mass: f64, nitrous_mass: f64, fuel_grain_mass: f64, dt: f64, system_time: f64) -> Vector3<f64> {
+        let mtv_effect = self.mtv.update(command[2], nitrogen_mass, pressurizing_nitrogen_mass,nitrous_mass, fuel_grain_mass, dt, system_time);
 
         let engine_inertia = self.min_fuel_inertia + (self.max_fuel_inertia - self.min_fuel_inertia) * (fuel_grain_mass / self.starting_fuel_grain_mass);
         let x_load = (engine_inertia * self.x_actuator.get_accel()) / self.actuator_lever_arm.powi(2);
@@ -436,6 +452,18 @@ impl TVC {
             nitrous_mass: mtv_effect.nitrous_mass,
             fuel_grain_mass: mtv_effect.fuel_grain_mass,
         }
+    }
+
+    pub fn get_noisy_actuator_positions(&self) -> ActuatorPositions {
+        return ActuatorPositions {
+            x_position: self.x_actuator.get_noisy_position(),
+            y_position: self.y_actuator.get_noisy_position(),
+        };
+    }
+
+    pub fn get_chamber_pressure(&self) -> f64 {
+        // TODO: implement chamber pressure calculation
+        0.0
     }
 }
 

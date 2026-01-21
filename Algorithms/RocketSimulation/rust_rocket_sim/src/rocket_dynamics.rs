@@ -18,6 +18,8 @@ pub struct Rocket {
     pub dry_mass: f64,
     pub nitrogen_mass: f64,
     starting_nitrogen_mass: f64,
+    pub pressurizing_nitrogen_mass: f64,
+    starting_pressurizing_nitrogen_mass: f64,
     pub nitrous_mass: f64,
     starting_nitrous_mass: f64,
     pub fuel_grain_mass: f64,
@@ -40,7 +42,7 @@ pub struct Rocket {
 }
 
 impl Rocket {
-    pub fn new(position: Vector3<f64>, velocity: Vector3<f64>, accel: Vector3<f64>, attitude: UnitQuaternion<f64>, ang_vel: Vector3<f64>, ang_accel: Vector3<f64>, dry_mass: f64, starting_nitrogen_mass: f64, starting_nitrous_mass: f64, starting_fuel_grain_mass: f64, inertia_tensor: Vector3<f64>, tvc_range: f64, tvc: TVC, rcs: RCS, imu: IMU, gps: GPS, uwb: UWB) -> Self {
+    pub fn new(position: Vector3<f64>, velocity: Vector3<f64>, accel: Vector3<f64>, attitude: UnitQuaternion<f64>, ang_vel: Vector3<f64>, ang_accel: Vector3<f64>, dry_mass: f64, starting_nitrogen_mass: f64, starting_pressurizing_nitrogen_mass: f64, starting_nitrous_mass: f64, starting_fuel_grain_mass: f64, inertia_tensor: Vector3<f64>, tvc_range: f64, tvc: TVC, rcs: RCS, imu: IMU, gps: GPS, uwb: UWB) -> Self {
         let mut rocket = Self {
             position,
             velocity,
@@ -51,6 +53,8 @@ impl Rocket {
             dry_mass,
             nitrogen_mass: starting_nitrogen_mass,
             starting_nitrogen_mass,
+            pressurizing_nitrogen_mass: starting_pressurizing_nitrogen_mass,
+            starting_pressurizing_nitrogen_mass,
             nitrous_mass: starting_nitrous_mass,
             starting_nitrous_mass,
             fuel_grain_mass: starting_fuel_grain_mass,
@@ -77,13 +81,17 @@ impl Rocket {
     /// forces: Force vector in World Frame
     /// torques: Torque vector in Body Frame
     pub fn step(&mut self, control_input: Vector3<f64>, outside_forces: Vector3<f64>, outside_torques: Vector3<f64>, dt: f64) {
+        // TODO: model the ground!
+
         // Update Sensors
         self.imu.update(self.accel, self.ang_vel, self.attitude, self.system_time);
         self.gps.update(self.position, self.system_time);
         self.uwb.update(self.position, self.system_time);
 
         // Update actuated devices
-        let tvc_effect = self.tvc.update(control_input, self.nitrous_mass, self.fuel_grain_mass, dt, self.system_time);
+        let tvc_effect = self.tvc.update(control_input, self.nitrogen_mass, self.pressurizing_nitrogen_mass, self.nitrous_mass, self.fuel_grain_mass, dt, self.system_time);
+        self.nitrogen_mass = tvc_effect.nitrogen_mass;
+        self.pressurizing_nitrogen_mass = tvc_effect.pressurizing_nitrogen_mass;
         self.nitrous_mass = tvc_effect.nitrous_mass;
         self.fuel_grain_mass = tvc_effect.fuel_grain_mass;
 
