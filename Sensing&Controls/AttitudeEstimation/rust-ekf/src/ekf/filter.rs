@@ -72,13 +72,13 @@ impl<T: EKFModel> ExtendedKalmanFilter<T> {
             Err(_) => return, // Prevent panic on singular matrix
         };
 
-        let k = self.error_covariance.dot(&h_jac.t()).dot(&s_inv);
+        let k = self.error_covariance.dot(&prediction_jacobian.t()).dot(&s_inv);
 
         self.previous_state = self.state.clone();
         self.state = &self.state + &k.dot(&residual);
 
         let identity = Array2::eye(self.state.len());
-        self.error_covariance = (identity - k.dot(&h_jac)).dot(&self.error_covariance);
+        self.error_covariance = (identity - k.dot(&prediction_jacobian)).dot(&self.error_covariance);
     }
 
     pub fn get_state(&self) -> &Array1<f64> {
