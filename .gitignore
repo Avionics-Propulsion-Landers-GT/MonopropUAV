@@ -31,3 +31,5 @@ Algorithms/RocketSimulation/rust_rocket_sim/target/
 Algorithms/RocketSimulation/rust_rocket_sim/Cargo.lock
 Algorithms/MPC/target/
 Algorithms/MOC/Cargo.lock
+**/target/**
+*.lock
