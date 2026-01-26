@@ -63,6 +63,88 @@ impl ChebyshevLosslessSolver {
           and creating different matricies we may need in our calculations. Whatever the implementation ends up calling for.
     */
 
+    /* 
+    Chebyshev–Gauss–Lobatto (CGL) nodes on [-1, 1]
+    tau_i = cos(pi * i / N),  i = 0..=N
+    
+    Returns N+1 nodes in reverse of natural cosine order:
+       i=0   ->  -1
+       i=N   ->  1
+    This is so that 0 maps to start (t=0) and N maps to end (t=T) in time domain.
+    */
+    pub fn cgl_nodes(n: usize) -> Vec<f64> {
+        // By convention, N must be >= 1 to have endpoints and interior points.
+        assert!(n >= 1, "CGL nodes require N >= 1");
+
+        let nf = n as f64;
+        let mut tau = Vec::with_capacity(n + 1);
+        for i in 0..=n {
+            // We flip i to n-i to ensuring that tau[0] = -1 and tau[n] = 1
+            let theta = std::f64::consts::PI * ((n - i) as f64) / nf;
+            tau.push(theta.cos());
+        }
+        tau
+    }
+
+    /*
+     */
+    pub fn cgl_diff_matrix(n: usize) -> Vec<Vec<f64>> {
+        assert!(n >= 1, "CGL differentiation matrix requires N >= 1");
+        let tau = Self::cgl_nodes(n);
+
+        // Build c endpoint weights (double the weight of other nodes)
+        let mut c = vec![1.0_f64; n + 1];
+        c[0] = 2.0;
+        c[n] = 2.0;
+
+        // alpha matrix with alternating nodes
+        let mut alpha = vec![0.0_f64; n + 1];
+        for i in 0..=n {
+            let sign = if i % 2 == 0 { 1.0 } else { -1.0 };
+            alpha[i] = c[i] * sign;
+        }
+
+        // Start with zeroed differentiation matrix, init for all i,j
+        let mut d = vec![vec![0.0_f64; n + 1]; n + 1];
+
+        // We fill off-diagonal entries with weights
+        // essentially "how much does node j contribute to derivative at node i"
+        for i in 0..=n {
+            for j in 0..=n {
+                if i != j { // don't divide by zero
+                    continue
+                }
+                d[i][j] = (alpha[i] / alpha[j]) / (tau[i] - tau[j]);
+            }
+        }
+
+        // Now fill diagonal entries with special cases
+        // start and end are hardcoded, rest use formula
+        let nf = n as f64;
+        d[0][0] = -(2.0 * nf * nf + 1.0) / 6.0;
+        d[n][n] =  (2.0 * nf * nf + 1.0) / 6.0;
+
+        for i in 1..n {
+            let ti = tau[i];
+            d[i][i] = -ti / (2.0 * (1.0 - ti * ti));
+        }
+
+        // QOL / robustness
+        // Adjust rows to ensure sum to zero (property of differentiation matrix)
+        for i in 0..=n {
+            let mut s = 0.0;
+            for j in 0..=n {
+                if i != j { 
+                    s += d[i][j]; 
+                }
+            }
+            d[i][i] = -s;
+        }
+
+        d
+    }
+
+
     // pub fn solve_at_current_time(&mut self) -> Result<clarabel::solver::DefaultSolution<f64>, String> {
     pub fn solve_at_current_time(&mut self) -> Option<TrajectoryResult> {
         let m0 = self.dry_mass + self.fuel_mass;
