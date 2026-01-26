@@ -128,17 +128,17 @@ impl ChebyshevLosslessSolver {
             d[i][i] = -ti / (2.0 * (1.0 - ti * ti));
         }
 
-        // QOL / robustness
-        // Adjust rows to ensure sum to zero (property of differentiation matrix)
-        for i in 0..=n {
-            let mut s = 0.0;
-            for j in 0..=n {
-                if i != j { 
-                    s += d[i][j]; 
-                }
-            }
-            d[i][i] = -s;
-        }
+        // QOL / robustness (in case of weird floating point behavior)
+        // Essentially a double check to ensure rows sum to zero
+        // for i in 0..=n {
+        //     let mut s = 0.0;
+        //     for j in 0..=n {
+        //         if i != j { 
+        //             s += d[i][j]; 
+        //         }
+        //     }
+        //     d[i][i] = -s;
+        // }
 
         d
     }
