@@ -112,9 +112,8 @@ impl ChebyshevLosslessSolver {
         for i in 0..=n {
             for j in 0..=n {
                 if i != j { // don't divide by zero
-                    continue
+                    d[i][j] = (alpha[i] / alpha[j]) / (tau[i] - tau[j]);
                 }
-                d[i][j] = (alpha[i] / alpha[j]) / (tau[i] - tau[j]);
             }
         }
 
