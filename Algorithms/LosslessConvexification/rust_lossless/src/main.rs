@@ -1,5 +1,7 @@
 mod lossless;
+mod chebyshev_lossless;
 use crate::lossless::LosslessSolver;
+use crate::chebyshev_lossless::*;
 
 fn main() {
     let mut solver = LosslessSolver {
