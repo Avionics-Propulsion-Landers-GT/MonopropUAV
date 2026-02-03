@@ -46,7 +46,7 @@ impl Default for ChebyshevLosslessSolver {
             line_search_delta_t: 1.0,
             coarse_nodes: 1,
             fine_nodes: 1,
-            N: 1
+            N: 1,
             pointing_direction: [0.0, 0.0, 1.0],
         }
     }
@@ -91,7 +91,7 @@ impl ChebyshevLosslessSolver {
      */
     pub fn cgl_diff_matrix(&self) -> Vec<Vec<f64>> {
         assert!(self.N >= 1, "CGL differentiation matrix requires N >= 1");
-        let tau = Self::cgl_nodes(self.N);
+        let tau = self.cgl_nodes();
 
         // Build c endpoint weights (double the weight of other nodes)
         let mut c = vec![1.0_f64; self.N + 1];
@@ -106,12 +106,12 @@ impl ChebyshevLosslessSolver {
         }
 
         // Start with zeroed differentiation matrix, init for all i,j
-        let mut d = vec![vec![0.0_f64; n + 1]; n + 1];
+        let mut d = vec![vec![0.0_f64; self.N + 1]; self.N + 1];
 
         // We fill off-diagonal entries with weights
         // essentially "how much does node j contribute to derivative at node i"
-        for i in 0..=n {
-            for j in 0..=n {
+        for i in 0..=self.N {
+            for j in 0..=self.N {
                 if i != j { // don't divide by zero
                     d[i][j] = (alpha[i] / alpha[j]) / (tau[i] - tau[j]);
                 }
@@ -120,11 +120,11 @@ impl ChebyshevLosslessSolver {
 
         // Now fill diagonal entries with special cases
         // start and end are hardcoded, rest use formula
-        let nf = n as f64;
+        let nf = self.N as f64;
         d[0][0] = -(2.0 * nf * nf + 1.0) / 6.0;
-        d[n][n] =  (2.0 * nf * nf + 1.0) / 6.0;
+        d[self.N][self.N] =  (2.0 * nf * nf + 1.0) / 6.0;
 
-        for i in 1..n {
+        for i in 1..self.N {
             let ti = tau[i];
             d[i][i] = -ti / (2.0 * (1.0 - ti * ti));
         }
@@ -169,7 +169,7 @@ impl ChebyshevLosslessSolver {
             let mut value = 0.0;
 
             for j in 0..(j_value + 1) {
-                let value_increment = (1.0 / (1 - 4.0 * (j as f64).powi(2))) * ((2.0 * std::f64::consts::PI * (j as f64) * (s as f64)) / (self.N as f64)).cos();
+                let value_increment = (1.0 / (1.0 - 4.0 * (j as f64).powi(2))) * ((2.0 * std::f64::consts::PI * (j as f64) * (s as f64)) / (self.N as f64)).cos();
                 if j == 0 || j == j_value {
                     value += value_increment / 2.0;
                 } else {
@@ -196,9 +196,11 @@ impl ChebyshevLosslessSolver {
             - We don't use the variables at the end of each timestep, but instead use the Coefficients of the polynomial
         */
 
-        const num_vars_per_node = 11; // x (3), v (3), w (1), sigma (1), u (3)
+        const num_vars_per_node: usize = 11; // x (3), v (3), w (1), sigma (1), u (3)
         let num_nodes = (self.N + 1) as usize;
         let n_vars = num_vars_per_node * num_nodes;
+
+        let D = self.cgl_diff_matrix();
         
         /*
         TODO: We still use the Second Order Cone Problem (SOCP) constraints and apply them at discrete points
@@ -224,7 +226,9 @@ impl ChebyshevLosslessSolver {
 
         // 3. Build Constraints (A matrix)
         // ---------------------------
-        let mut triplets: Vec<(usize, usize, f64)> = Vec::new();
+        let mut rows: Vec<usize> = Vec::new();
+        let mut cols: Vec<usize> = Vec::new();
+        let mut vals: Vec<f64> = Vec::new();
         let mut b: Vec<f64> = Vec::new();
         let mut cones: Vec<SupportedConeT<f64>> = Vec::new();
         let mut row_idx = 0;
@@ -235,17 +239,21 @@ impl ChebyshevLosslessSolver {
 
         // Position Dynamics: D*r = (tf/2)*v
         for dim in 0..3 {
-            for k in 0..=n {
+            for k in 0..=self.N {
                 // The D-Matrix part (sum over j)
-                for j in 0..=n {
-                    let d_val = d_matrix[k][j]; // <--- USING YOUR MATRIX
+                for j in 0..=self.N {
+                    let d_val = D[k][j]; // <--- USING YOUR MATRIX
                     if d_val.abs() > 1e-9 {
-                        triplets.push((row_idx, j * num_vars_per_node + dim, d_val));
+                        rows.push(row_idx);
+                        cols.push(j * num_vars_per_node + dim);
+                        vals.push(d_val);
                     }
                 }
                 // The Velocity part (-tf/2 * v_k)
                 let v_idx = k * num_vars_per_node + 3 + dim;
-                triplets.push((row_idx, v_idx, -0.5 * tf));
+                rows.push(row_idx);
+                cols.push(v_idx);
+                vals.push(-0.5 * current_time);
 
                 b.push(0.0);
                 row_idx += 1;
@@ -255,37 +263,45 @@ impl ChebyshevLosslessSolver {
         // Velocity Dynamics: D*v = (tf/2) * (u + g)
         // Rearranged: D*v - (tf/2)*u = (tf/2)*g
         for dim in 0..3 {
-            for k in 0..=n {
+            for k in 0..=self.N {
                 // D-Matrix part
-                for j in 0..=n {
-                    let d_val = d_matrix[k][j];
+                for j in 0..=self.N {
+                    let d_val = D[k][j];
                     if d_val.abs() > 1e-9 {
                         let v_idx = j * num_vars_per_node + 3 + dim;
-                        triplets.push((row_idx, v_idx, d_val));
+                        rows.push(row_idx);
+                        cols.push(v_idx);
+                        vals.push(d_val);
                     }
                 }
                 // Control part (-tf/2 * u_k)
                 let u_idx = k * num_vars_per_node + 8 + dim;
-                triplets.push((row_idx, u_idx, -0.5 * tf));
+                rows.push(row_idx);
+                cols.push(u_idx);
+                vals.push(-0.5 * current_time);
 
                 // RHS: (tf/2) * g
-                b.push(0.5 * tf * gravity[dim]);
+                b.push(0.5 * current_time * GRAVITY[dim]);
                 row_idx += 1;
             }
         }
 
         // Mass Dynamics: D*z = -(tf/2) * alpha * sigma
         // Rearranged: D*z + (tf/2)*alpha*sigma = 0
-        for k in 0..=n {
-            for j in 0..=n {
-                let d_val = d_matrix[k][j];
+        for k in 0..=self.N {
+            for j in 0..=self.N {
+                let d_val = D[k][j];
                 if d_val.abs() > 1e-9 {
                     let z_idx = j * num_vars_per_node + 6;
-                    triplets.push((row_idx, z_idx, d_val));
+                    rows.push(row_idx);
+                    cols.push(z_idx);
+                    vals.push(d_val);
                 }
             }
             let sigma_idx = k * num_vars_per_node + 7;
-            triplets.push((row_idx, sigma_idx, 0.5 * tf * alpha));
+            rows.push(row_idx);
+            cols.push(sigma_idx);
+            vals.push(0.5 * current_time * self.alpha);
             
             b.push(0.0);
             row_idx += 1;
@@ -301,26 +317,41 @@ impl ChebyshevLosslessSolver {
         
         // Start State (r0, v0, z0)
         for dim in 0..3 {
-            triplets.push((row_idx, 0 + dim, 1.0)); // r0
-            b.push(start_state.r[dim]);
+            // r0
+            rows.push(row_idx);
+            cols.push(dim);
+            vals.push(1.0);
+            b.push(self.initial_position[dim]);
             row_idx += 1;
             
-            triplets.push((row_idx, 3 + dim, 1.0)); // v0
-            b.push(start_state.v[dim]);
+            // v0
+            rows.push(row_idx);
+            cols.push(3 + dim);
+            vals.push(1.0);
+            b.push(self.initial_velocity[dim]);
             row_idx += 1;
         }
-        triplets.push((row_idx, 6, 1.0)); // z0
-        b.push(start_state.z);
+        // z0
+        rows.push(row_idx);
+        cols.push(6);
+        vals.push(1.0);
+        b.push((self.fuel_mass + self.dry_mass).ln());
         row_idx += 1;
 
         // End State (rN = 0, vN = 0)
-        let end_offset = n * num_vars_per_node;
+        let end_offset = self.N * num_vars_per_node;
         for dim in 0..3 {
-            triplets.push((row_idx, end_offset + dim, 1.0)); // rN
+            // rN
+            rows.push(row_idx);
+            cols.push(end_offset + dim);
+            vals.push(1.0);
             b.push(0.0); // Target Pos
             row_idx += 1;
             
-            triplets.push((row_idx, end_offset + 3 + dim, 1.0)); // vN
+            // vN
+            rows.push(row_idx);
+            cols.push(end_offset + 3 + dim);
+            vals.push(1.0);
             b.push(0.0); // Target Vel
             row_idx += 1;
         }
@@ -330,18 +361,22 @@ impl ChebyshevLosslessSolver {
 
         // --- C. THRUST CONE (Second Order Cone) ---
         // ||u|| <= sigma  -->  (sigma, ux, uy, uz) in SOC
-        for k in 0..=n {
+        for k in 0..=self.N {
             let sigma_idx = k * num_vars_per_node + 7;
             let u_idx = k * num_vars_per_node + 8;
 
             // Row 1: -sigma + s0 = 0
-            triplets.push((row_idx, sigma_idx, -1.0));
+            rows.push(row_idx);
+            cols.push(sigma_idx);
+            vals.push(-1.0);
             b.push(0.0);
             row_idx += 1;
 
             // Rows 2-4: -u + s = 0
             for dim in 0..3 {
-                triplets.push((row_idx, u_idx + dim, -1.0));
+                rows.push(row_idx);
+                cols.push(u_idx + dim);
+                vals.push(-1.0);
                 b.push(0.0);
                 row_idx += 1;
             }
@@ -355,7 +390,7 @@ impl ChebyshevLosslessSolver {
         // Rearranged: Tmax*e^(-z_bar) - [sigma + Tmax*e^(-z_bar)*z] >= 0
         
         let start_ineq = row_idx;
-        for k in 0..=n {
+        for k in 0..=self.N {
             let z_bar = prev_solution[k].z;
             let thrust_limit = t_max * (-z_bar).exp();
             
@@ -369,8 +404,13 @@ impl ChebyshevLosslessSolver {
             let sigma_idx = k * num_vars_per_node + 7;
             let z_idx = k * num_vars_per_node + 6;
 
-            triplets.push((row_idx, sigma_idx, 1.0));
-            triplets.push((row_idx, z_idx, thrust_limit)); // The slope
+            
+            rows.push(row_idx);
+            cols.push(sigma_idx);
+            vals.push(1.0);
+            rows.push(row_idx);
+            cols.push(z_idx);
+            vals.push(thrust_limit); // The slope
             b.push(rhs);
             
             row_idx += 1;
@@ -380,7 +420,7 @@ impl ChebyshevLosslessSolver {
 
         // 4. Solve
         // ---------------------------
-        let a_csc = CscMatrix::from_triplets(row_idx, n_vars, triplets);
+        let a_csc = Self::csc_from_triplets(row_idx as usize, n_vars as usize, &rows, &cols, &vals);
 
         let settings = DefaultSettings::default(); // Adjust tolerances here if needed
         settings.verbose = true;
@@ -397,40 +437,6 @@ impl ChebyshevLosslessSolver {
             println!("{}", format!("Solver failed with status {:?}", solver.solution.status));
             return None
         }
-    }
-
-    /*
-    Helper function that converts the constraint triplets (row, col, value) to a Compressed Sparse Column (CSC) format that is utilized by our solver.
-    Should remain unchanged for Chebyshev implementation
-    */
-    pub fn csc_from_triplets(nrows: usize, ncols: usize, rows: &[usize], cols: &[usize], vals: &[f64]) -> CscMatrix<f64> {
-        let mut triplets: Vec<(usize, usize, f64)> = rows.iter().zip(cols).zip(vals)
-            .map(|((r, c), v)| (*r, *c, *v))
-            .collect();
-        triplets.sort_by_key(|&(r, c, _)| (c, r));
-
-        let mut colptr = vec![0; ncols + 1];
-        let mut rowval = Vec::with_capacity(vals.len());
-        let mut nzval = Vec::with_capacity(vals.len());
-
-        let mut current_col = 0;
-        let mut count = 0;
-
-        for &(r, c, v) in &triplets {
-            while current_col < c {
-                colptr[current_col + 1] = count;
-                current_col += 1;
-            }
-            rowval.push(r);
-            nzval.push(v);
-            count += 1;
-        }
-        while current_col < ncols {
-            colptr[current_col + 1] = count;
-            current_col += 1;
-        }
-
-        CscMatrix::new(nrows, ncols, colptr, rowval, nzval)
     }
 
     /*
@@ -567,52 +573,82 @@ impl ChebyshevLosslessSolver {
             - Start with a low polynomial order and solve to find a feasible flight time, increasing the polynomial order 
     */
     pub fn solve(&mut self) -> Option<TrajectoryResult> {
-        self.N = self.coarse_nodes;
+        // self.N = self.coarse_nodes;
 
-        let vel_norm = self.initial_velocity.iter()
-            .map(|v| v * v)
-            .sum::<f64>()
-            .sqrt();
+        // let vel_norm = self.initial_velocity.iter()
+        //     .map(|v| v * v)
+        //     .sum::<f64>()
+        //     .sqrt();
         
-        let t_min = self.dry_mass * vel_norm / self.upper_thrust_bound;
-        let t_max = self.fuel_mass / (self.alpha * self.lower_thrust_bound);
-        let mut current_time = t_min;
+        // let t_min = self.dry_mass * vel_norm / self.upper_thrust_bound;
+        // let t_max = self.fuel_mass / (self.alpha * self.lower_thrust_bound);
+        // let mut current_time = t_min;
 
-        let mut traj_result: Option<TrajectoryResult> = None;
+        // let mut traj_result: Option<TrajectoryResult> = None;
 
-        while current_time <= t_max {
-            println!("Solving step {}...", current_time);
-            match self.solve_at_current_time(current_time) {
-                Some(sol) => {
-                    println!("✅ Step {} converged successfully.", k);
-                    traj_result = Some(sol);
-                    break;
-                },
-                None => println!(""),
+        // while current_time <= t_max {
+        //     println!("Solving step {}...", current_time);
+        //     match self.solve_at_current_time(current_time) {
+        //         Some(sol) => {
+        //             println!("✅ Step {} converged successfully.", k);
+        //             traj_result = Some(sol);
+        //             break;
+        //         },
+        //         None => println!(""),
+        //     }
+        //     current_time += self.line_search_delta_t;
+        // }
+
+        // if traj_result.is_none() {
+        //     println!("No successful solve found in the given time bounds.");
+        //     return None;
+        // }
+
+        // self.N = ((self.N as f64) * self.coarse_delta_t / self.fine_delta_t).ceil() as i64;
+        // self.delta_t = self.fine_delta_t;
+        
+        // match self.solve_at_current_time() {
+        //     Some(sol) => {
+        //         println!("✅ Fine solve converged successfully.");
+        //         traj_result = Some(sol);
+        //     },
+        //     None => {
+        //         println!("No successful solve found in the given time bounds.");
+        //         return None;
+        //     },
+        // }
+
+
+        // return traj_result
+    }
+    
+    pub fn csc_from_triplets(nrows: usize, ncols: usize, rows: &[usize], cols: &[usize], vals: &[f64]) -> CscMatrix<f64> {
+        let mut triplets: Vec<(usize, usize, f64)> = rows.iter().zip(cols).zip(vals)
+            .map(|((r, c), v)| (*r, *c, *v))
+            .collect();
+        triplets.sort_by_key(|&(r, c, _)| (c, r));
+
+        let mut colptr = vec![0; ncols + 1];
+        let mut rowval = Vec::with_capacity(vals.len());
+        let mut nzval = Vec::with_capacity(vals.len());
+
+        let mut current_col = 0;
+        let mut count = 0;
+
+        for &(r, c, v) in &triplets {
+            while current_col < c {
+                colptr[current_col + 1] = count;
+                current_col += 1;
             }
-            current_time += self.line_search_delta_t;
+            rowval.push(r);
+            nzval.push(v);
+            count += 1;
+        }
+        while current_col < ncols {
+            colptr[current_col + 1] = count;
+            current_col += 1;
         }
 
-        if traj_result.is_none() {
-            println!("No successful solve found in the given time bounds.");
-            return None;
-        }
-
-        self.N = ((self.N as f64) * self.coarse_delta_t / self.fine_delta_t).ceil() as i64;
-        self.delta_t = self.fine_delta_t;
-        
-        match self.solve_at_current_time() {
-            Some(sol) => {
-                println!("✅ Fine solve converged successfully.");
-                traj_result = Some(sol);
-            },
-            None => {
-                println!("No successful solve found in the given time bounds.");
-                return None;
-            },
-        }
-
-
-        return traj_result
+        CscMatrix::new(nrows, ncols, colptr, rowval, nzval)
     }
 }
