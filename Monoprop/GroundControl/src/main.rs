@@ -13,7 +13,7 @@ use crossbeam_channel::{bounded, Sender, Receiver};
 use Common::{DroneTelemetry, GroundCommand}; // Your shared structs
 
 use std::fs::File;
-use std::io::Write;
+use std::io::{self, Write, BufRead};
 
 // MPC Configuration Struct
 struct MPCConfig {
@@ -24,6 +24,12 @@ struct MPCConfig {
     qn: Array2<f64>,
     smoothing_weight: Array1<f64>,
     panoc_cache: PANOCCache,
+}
+
+enum ControlCommand {
+    Go,
+    Land,
+    Kill,
 }
 
 // Configuration
@@ -47,9 +53,34 @@ fn main() -> anyhow::Result<()> {
 
     // 2. Channels for Thread Communication
     // Telemetry: Network Thread -> MPC Thread  
-    let (telem_tx, telem_rx) = bounded::<DroneTelemetry>(5); 
+    let (telem_tx, telem_rx) = bounded::<DroneTelemetry>(5);
+
+    // Control Commands: Input Thread -> Main Thread
+    let (cmd_tx, cmd_rx) = bounded::<ControlCommand>(5);
     
-    // 3. Spawn Network Listener Thread
+    // 3. Spawn User Input Thread
+    thread::spawn(move || {
+        let stdin = io::stdin();
+        println!("Type 'go' to activate control, 'land' to command landing, or 'kill' to exit.");
+        for line in stdin.lock().lines() {
+            if let Ok(cmd) = line {
+                let cmd = cmd.trim().to_lowercase();
+                if cmd == "go" {
+                    let _ = cmd_tx.send(ControlCommand::Go);
+                    println!("Sending control commands!");
+                } else if cmd == "land" {
+                    let _ = cmd_tx.send(ControlCommand::Land);
+                    println!("Landing command issued.");
+                } else if cmd == "kill" {
+                    println!("Exiting program.");
+                    let _ = cmd_tx.send(ControlCommand::Kill);
+                    break;
+                }
+            }
+        }
+    });
+    
+    // 4. Spawn Network Listener Thread
     thread::spawn(move || {
         let mut buf = [0u8; 1024];
         loop {
@@ -68,7 +99,7 @@ fn main() -> anyhow::Result<()> {
 
     println!("Ground Station Started. Waiting for drone...");
 
-    // 4. Main MPC Loop (Runs at e.g., 50Hz)
+    // 5. Main MPC Loop (Runs at e.g., 50Hz)
     let mut sequence_id = 0;
 
     // Define problem MPC parameters here
@@ -84,8 +115,10 @@ fn main() -> anyhow::Result<()> {
     x[6] = 1.0; // qw = 1 (unit quaternion)
 
     // Hover at set point
+    let hover_alt = 1.0;
+    let land_alt = 0.07;
     let mut xref = Array1::<f64>::zeros(n);
-    xref[2] = 1.0; // reference position: hover at 1m altitude
+    xref[2] = hover_alt; // reference position: hover at 1m altitude
     xref[6] = 1.0; // reference orientation: level (unit quaternion)
 
     let mut z_integral = 0.0;
@@ -128,11 +161,11 @@ fn main() -> anyhow::Result<()> {
     ]));
 
     // Bounds on control inputs
-    let gimbal_limit = 15.0 * PI / 180.0; // +/- 15 degrees
-    let thrust_min = 300.0;
-    let thrust_max = 1000.0;
-    let u_min = Array1::from(vec![-gimbal_limit, -gimbal_limit, thrust_min]);
-    let u_max = Array1::from(vec![gimbal_limit, gimbal_limit, thrust_max]);
+    // let gimbal_limit = 15.0 * PI / 180.0; // +/- 15 degrees
+    // let thrust_min = 300.0;
+    // let thrust_max = 1000.0;
+    // let u_min = Array1::from(vec![-gimbal_limit, -gimbal_limit, thrust_min]);
+    // let u_max = Array1::from(vec![gimbal_limit, gimbal_limit, thrust_max]);
 
     // Store state and control history for plotting
     let mut x_history = Vec::new();
@@ -160,6 +193,10 @@ fn main() -> anyhow::Result<()> {
 
     let mut last_timestamp: Option<Instant> = None;
 
+    let mut activated = false; // flag to indicate if we are sending control commands
+    let mut first_telem_received = false; // flag for first telemetry packet
+    let mut landing_initiated = false; // flag for landing sequence
+
     loop {
         let loop_start = Instant::now();
 
@@ -170,7 +207,48 @@ fn main() -> anyhow::Result<()> {
             latest_telem = Some(t);
         }
 
+        // Check for control commands (non-blocking)
+        if let Ok(cmd) = cmd_rx.try_recv() {
+            match cmd {
+                ControlCommand::Go => {
+                    activated = true;
+                    landing_initiated = false;
+                    xref[2] = hover_alt;
+                    z_integral = 0.0;
+                    y_integral = 0.0;
+                    x_integral = 0.0;
+                    println!("✓ Control commands activated.");
+                }
+                ControlCommand::Land => {
+                    activated = true;
+                    landing_initiated = true;
+                    xref[2] = land_alt;
+                    z_integral = 0.0;
+                    y_integral = 0.0;
+                    x_integral = 0.0;
+                    println!("✓ Landing mode activated.");
+                }
+                ControlCommand::Kill => {
+                    activated = false;
+                    landing_initiated = false;
+                    println!("Exiting program.");
+                    break;
+                }
+            }
+        }
+
         if let Some(telem) = latest_telem {
+            if !first_telem_received {
+                first_telem_received = true;
+                println!("✓ Telemetry received from drone!");
+                println!("Position: [{:.2}, {:.2}, {:.2}] m", telem.position[0], telem.position[1], telem.position[2]);
+                println!("\nType 'go' to start sending control commands, 'land' to command landing, or 'kill' to exit.");
+            }
+
+            if !activated {
+                continue; // Skip MPC until activated
+            }
+
             // ============================================
             // B. RUN YOUR MPC SOLVER HERE
             // ============================================
@@ -224,21 +302,55 @@ fn main() -> anyhow::Result<()> {
             // Calculate the full control sequence
             let mut u_control_seq = run_mpc_solver(&telem, &mut mpc_config);
 
+            // Exponential filter on control inputs
+            if let Some(u_prev) = u_history.last() {
+                let alpha = 0.4; // smoothing factor
+                u_control_seq = alpha * &u_control_seq + (1.0 - alpha) * u_prev;
+            }
+
             // Push u_control_seq to history for filtering
             u_history.push(u_control_seq.clone());
-
-            // Exponential filter on control inputs
-            if sequence_id > 0 {
-                let alpha = 0.4; // smoothing factor
-                if let Some(u_prev) = u_history.last() {
-                    u_control_seq = alpha * &u_control_seq + (1.0 - alpha) * u_prev;
-                }
-            } 
 
             // Convert to fixed array sizes for sending
             let thrust_seq: [f32; 10] = u_control_seq.slice(s![.., 2]).mapv(|v| v as f32).to_owned().as_slice().unwrap().try_into().unwrap();
             let gimbal_theta_seq: [f32; 10] = u_control_seq.slice(s![.., 0]).mapv(|v| v as f32).to_owned().as_slice().unwrap().try_into().unwrap();
             let gimbal_phi_seq: [f32; 10] = u_control_seq.slice(s![.., 1]).mapv(|v| v as f32).to_owned().as_slice().unwrap().try_into().unwrap();
+
+            if landing_initiated {
+                if telem.position[2] <= land_alt + 0.02 {
+                    println!("Scaling down thrust at altitude {:.2} m", telem.position[2]);
+                    
+                    // Scale down thrust from 100% to 0% of commanded value over 2 seconds
+                    // Track landing start time
+                    static LANDING_START: std::sync::Once = std::sync::Once::new();
+                    static mut LANDING_TIME: Option<Instant> = None;
+
+                    LANDING_START.call_once(|| {
+                        unsafe { LANDING_TIME = Some(Instant::now()); }
+                    });
+
+                    if let Some(start_time) = unsafe { LANDING_TIME } {
+                        let elapsed = start_time.elapsed().as_secs_f64();
+
+                        let mut scale_factor = 1.0;
+                        if elapsed < 2.0 {
+                            scale_factor = 1.0 - (elapsed / 2.0); // Linear scale from 1.0 to 0.0 over 2 seconds   
+                        } else {
+                            scale_factor = 0.0; // After 2 seconds, set to 0
+                            activated = false; // Deactivate control commands
+                            landing_initiated = false;
+                            println!("✓ Landing complete. Control commands deactivated.");
+                            break;
+                        };
+                        
+                        // Scale down all thrust values in the sequence
+                        for i in 0..thrust_seq.len() {
+                            thrust_seq[i] *= scale_factor as f32;
+                        }
+                    }
+                        
+                }
+            }
 
             // C. Prepare Command
             let cmd = GroundCommand {
