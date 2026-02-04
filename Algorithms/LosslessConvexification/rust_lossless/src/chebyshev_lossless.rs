@@ -131,9 +131,9 @@ impl ChebyshevLosslessSolver {
 
         // QOL / robustness (in case of weird floating point behavior)
         // Essentially a double check to ensure rows sum to zero
-        // for i in 0..=n {
+        // for i in 0..=self.N {
         //     let mut s = 0.0;
-        //     for j in 0..=n {
+        //     for j in 0..=self.N {
         //         if i != j { 
         //             s += d[i][j]; 
         //         }
