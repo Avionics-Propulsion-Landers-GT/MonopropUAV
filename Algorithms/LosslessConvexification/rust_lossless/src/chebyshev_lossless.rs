@@ -146,7 +146,7 @@ impl ChebyshevLosslessSolver {
 
     pub fn clenshaw_curtis_weights(&self) -> Vec<f64> {
         let mut w = vec![0.0; self.N + 1];
-        let sum_coeff = (self.N as f64) / 4.0;
+        let sum_coeff = 4.0 / (self.N as f64);
 
         let mut initial_value;
         let mut s_value;
@@ -191,11 +191,6 @@ impl ChebyshevLosslessSolver {
     pub fn solve_at_current_time(&mut self, current_time: f64) -> Option<TrajectoryResult> {
         let m0 = self.dry_mass + self.fuel_mass;
         
-        /* 
-        TODO: We are switching from discrete timesteps to Chebyshev approximation.
-            - We don't use the variables at the end of each timestep, but instead use the Coefficients of the polynomial
-        */
-
         const num_vars_per_node: usize = 11; // x (3), v (3), w (1), sigma (1), u (3)
         let num_nodes = (self.N + 1) as usize;
         let n_vars = num_vars_per_node * num_nodes;
@@ -219,7 +214,12 @@ impl ChebyshevLosslessSolver {
         TODO: For Chebyshev polynomials, the objective function changes to an integration over the normalized time domain [-1, 1]
         */
         
+        // 1. Quadratic Objective Matrix (P)
+        // ---------------------------
         let p = CscMatrix::zeros((n_vars, n_vars)); // Zero P (Linear Objective)
+
+        // 2. Linear Objective Vector (q)
+        // ---------------------------
         let mut q = vec![0.0; n_vars];
         
         // Calculate Clenshaw-Curtis quadrature weights for integration
@@ -240,9 +240,9 @@ impl ChebyshevLosslessSolver {
 
         // --- A. DYNAMICS (Equality Cone) ---
         // Equation: D * x - (tf/2) * x_dot = 0
-        // We loop through your D matrix (Vec<Vec<f64>>) manually.
+        // In other words (r = x, v = x_dot): D*r = (tf/2)*v
+        // We loop through the diff matrix (D) manually.
 
-        // Position Dynamics: D*r = (tf/2)*v
         for dim in 0..3 {
             for k in 0..=self.N {
                 // The D-Matrix part (sum over j)
