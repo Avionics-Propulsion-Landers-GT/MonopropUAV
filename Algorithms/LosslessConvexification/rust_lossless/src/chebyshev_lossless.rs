@@ -199,6 +199,11 @@ impl ChebyshevLosslessSolver {
         const num_vars_per_node: usize = 11; // x (3), v (3), w (1), sigma (1), u (3)
         let num_nodes = (self.N + 1) as usize;
         let n_vars = num_vars_per_node * num_nodes;
+        let X_INDEX = 0;
+        let V_INDEX = X_INDEX + 3 * num_nodes;
+        let W_INDEX = V_INDEX + 3 * num_nodes;
+        let SIGMA_INDEX = W_INDEX + num_nodes;
+        let U_INDEX = SIGMA_INDEX + num_nodes;
 
         let D = self.cgl_diff_matrix();
         
@@ -242,15 +247,16 @@ impl ChebyshevLosslessSolver {
             for k in 0..=self.N {
                 // The D-Matrix part (sum over j)
                 for j in 0..=self.N {
-                    let d_val = D[k][j]; // <--- USING YOUR MATRIX
+                    let d_val = D[k][j];
                     if d_val.abs() > 1e-9 {
+                        let x_idx = X_INDEX + j * 3 + dim;
                         rows.push(row_idx);
-                        cols.push(j * num_vars_per_node + dim);
+                        cols.push(x_idx);
                         vals.push(d_val);
                     }
                 }
                 // The Velocity part (-tf/2 * v_k)
-                let v_idx = k * num_vars_per_node + 3 + dim;
+                let v_idx = V_INDEX + k * 3 + dim;
                 rows.push(row_idx);
                 cols.push(v_idx);
                 vals.push(-0.5 * current_time);
@@ -268,14 +274,14 @@ impl ChebyshevLosslessSolver {
                 for j in 0..=self.N {
                     let d_val = D[k][j];
                     if d_val.abs() > 1e-9 {
-                        let v_idx = j * num_vars_per_node + 3 + dim;
+                        let v_idx = V_INDEX + j * 3 + dim;
                         rows.push(row_idx);
                         cols.push(v_idx);
                         vals.push(d_val);
                     }
                 }
                 // Control part (-tf/2 * u_k)
-                let u_idx = k * num_vars_per_node + 8 + dim;
+                let u_idx = U_INDEX + k * 3 + dim;
                 rows.push(row_idx);
                 cols.push(u_idx);
                 vals.push(-0.5 * current_time);
@@ -287,18 +293,18 @@ impl ChebyshevLosslessSolver {
         }
 
         // Mass Dynamics: D*z = -(tf/2) * alpha * sigma
-        // Rearranged: D*z + (tf/2)*alpha*sigma = 0
+        // Rearranged: D*w + (tf/2)*alpha*sigma = 0
         for k in 0..=self.N {
             for j in 0..=self.N {
                 let d_val = D[k][j];
                 if d_val.abs() > 1e-9 {
-                    let z_idx = j * num_vars_per_node + 6;
+                    let w_idx = W_INDEX + j;
                     rows.push(row_idx);
-                    cols.push(z_idx);
+                    cols.push(w_idx);
                     vals.push(d_val);
                 }
             }
-            let sigma_idx = k * num_vars_per_node + 7;
+            let sigma_idx = SIGMA_INDEX + k;
             rows.push(row_idx);
             cols.push(sigma_idx);
             vals.push(0.5 * current_time * self.alpha);
@@ -313,50 +319,71 @@ impl ChebyshevLosslessSolver {
 
 
         // --- B. BOUNDARY CONDITIONS (Equality Cone) ---
-        let start_row = row_idx;
+        let boundary_cond_start_row = row_idx;
         
         // Start State (r0, v0, z0)
         for dim in 0..3 {
             // r0
             rows.push(row_idx);
-            cols.push(dim);
+            cols.push(X_INDEX + dim);
             vals.push(1.0);
             b.push(self.initial_position[dim]);
             row_idx += 1;
             
             // v0
             rows.push(row_idx);
-            cols.push(3 + dim);
+            cols.push(V_INDEX + dim);
             vals.push(1.0);
             b.push(self.initial_velocity[dim]);
             row_idx += 1;
         }
-        // z0
+
+        // w0
         rows.push(row_idx);
-        cols.push(6);
+        cols.push(W_INDEX);
         vals.push(1.0);
         b.push((self.fuel_mass + self.dry_mass).ln());
         row_idx += 1;
 
         // End State (rN = 0, vN = 0)
-        let end_offset = self.N * num_vars_per_node;
         for dim in 0..3 {
             // rN
             rows.push(row_idx);
-            cols.push(end_offset + dim);
+            cols.push(X_INDEX + 3 * (num_nodes - 1) + dim);
             vals.push(1.0);
             b.push(0.0); // Target Pos
             row_idx += 1;
             
             // vN
             rows.push(row_idx);
-            cols.push(end_offset + 3 + dim);
+            cols.push(V_INDEX + 3 * (num_nodes - 1) + dim);
             vals.push(1.0);
             b.push(0.0); // Target Vel
             row_idx += 1;
         }
         
-        cones.push(SupportedConeT::ZeroConeT(row_idx - start_row));
+        cones.push(SupportedConeT::ZeroConeT(row_idx - boundary_cond_start_row));
+
+        // TODO: Don't forget to add in the dry mass constraint (w >= ln(m0)) as a non-negativity constraint on w - ln(m0) (or equivalently -w <= -ln(m0))
+        // This is an inequality constraint, so i havent gotten around to actually verifying it but heres a rough idea of what it should look like:
+        
+        // --- C. DRY MASS CONSTRAINT (Inequality) ---
+        // We must ensure the final mass is greater than or equal to the dry mass.
+        // w_N >= ln(m_dry)  -->  w_N - ln(m_dry) >= 0
+
+        // Clarabel expects: s = b - Ax, where s >= 0
+        // We want: w_N - ln(m_dry) >= 0
+        // Let s = w_N - ln(m_dry)
+        // s = (-ln(m_dry)) - (-1.0 * w_N)
+        // So: b = -ln(m_dry), A_val = -1.0
+
+        rows.push(row_idx);
+        cols.push(W_INDEX + (num_nodes - 1)); // w_N
+        vals.push(-1.0); 
+        b.push(-self.dry_mass.ln());
+
+        row_idx += 1;
+        cones.push(SupportedConeT::NonnegativeConeT(1));
 
 
         // --- C. THRUST CONE (Second Order Cone) ---
