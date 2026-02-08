@@ -239,8 +239,9 @@ impl ChebyshevLosslessSolver {
         let mut row_idx = 0;
 
         // --- A. DYNAMICS (Equality Cone) ---
-        // Equation: D * x - (tf/2) * x_dot = 0
-        // In other words (r = x, v = x_dot): D*r = (tf/2)*v
+        // Position dynamics
+        // Standard form: x_{k+1} - x_k - dt * v_k = 0
+        // Chebyshev: D * x - (tf/2) * x_dot = 0
         // We loop through the diff matrix (D) manually.
 
         for dim in 0..3 {
@@ -266,8 +267,9 @@ impl ChebyshevLosslessSolver {
             }
         }
 
-        // Velocity Dynamics: D*v = (tf/2) * (u + g)
-        // Rearranged: D*v - (tf/2)*u = (tf/2)*g
+        // Velocity Dynamics
+        // Standard form: v_{k+1} - v_k - dt * u_k = dt * g
+        // Chebyshev: D*v - (tf/2)*u = (tf/2)*g
         for dim in 0..3 {
             for k in 0..=self.N {
                 // D-Matrix part
@@ -292,8 +294,9 @@ impl ChebyshevLosslessSolver {
             }
         }
 
-        // Mass Dynamics: D*z = -(tf/2) * alpha * sigma
-        // Rearranged: D*w + (tf/2)*alpha*sigma = 0
+        // Mass Dynamics
+        // Standard form: w_{k+1} - w_k + dt * alpha * sigma_k = 0
+        // Chebyshev: D*w + (tf/2)*alpha*sigma = 0
         for k in 0..=self.N {
             for j in 0..=self.N {
                 let d_val = D[k][j];
