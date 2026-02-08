@@ -210,10 +210,7 @@ impl ChebyshevLosslessSolver {
         /*
         TODO: Similar to terminal position and velocity constraints, evaluate w polynomial at the final time.
         */
-        /*
-        TODO: For Chebyshev polynomials, the objective function changes to an integration over the normalized time domain [-1, 1]
-        */
-        
+
         // 1. Quadratic Objective Matrix (P)
         // ---------------------------
         let p = CscMatrix::zeros((n_vars, n_vars)); // Zero P (Linear Objective)
