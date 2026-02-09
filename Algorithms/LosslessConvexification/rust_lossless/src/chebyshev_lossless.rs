@@ -363,9 +363,6 @@ impl ChebyshevLosslessSolver {
         }
         
         cones.push(SupportedConeT::ZeroConeT(row_idx - boundary_cond_start_row));
-
-        // TODO: Don't forget to add in the dry mass constraint (w >= ln(m0)) as a non-negativity constraint on w - ln(m0) (or equivalently -w <= -ln(m0))
-        // This is an inequality constraint, so i havent gotten around to actually verifying it but heres a rough idea of what it should look like:
         
         // --- C. DRY MASS CONSTRAINT (Inequality) ---
         // We must ensure the final mass is greater than or equal to the dry mass.
@@ -389,8 +386,8 @@ impl ChebyshevLosslessSolver {
         // --- C. THRUST CONE (Second Order Cone) ---
         // ||u|| <= sigma  -->  (sigma, ux, uy, uz) in SOC
         for k in 0..=self.N {
-            let sigma_idx = k * num_vars_per_node + 7;
-            let u_idx = k * num_vars_per_node + 8;
+            let sigma_idx = k + SIGMA_INDEX;
+            let u_idx = k + U_INDEX;
 
             // Row 1: -sigma + s0 = 0
             rows.push(row_idx);
@@ -443,6 +440,9 @@ impl ChebyshevLosslessSolver {
             row_idx += 1;
         }
         cones.push(SupportedConeT::NonnegativeConeT(row_idx - start_ineq));
+
+        
+        // TODO: still need to check the mass thrust limit, as well as the max velocity constraint. the glide slope constraint would be good but not necessary
 
 
         // 4. Solve
