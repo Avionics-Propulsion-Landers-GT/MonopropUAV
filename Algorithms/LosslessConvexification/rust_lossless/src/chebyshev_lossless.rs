@@ -524,16 +524,18 @@ impl ChebyshevLosslessSolver {
             3) Evaluate the polynomials at the points
         - Alternatively We could store the coefficients themselves to later re-evaluate the trajectory for graphing
             - This would mean changing the TrajectoryResult struct as well as how main.rs parses our results
+    
     */
     fn extract_result(&self, result: &DefaultSolution<f64>) -> TrajectoryResult {
 
         // (Step 1) extract coefficents (idk yet gang shall return after diving into papers)
 
-        let idx_x = 0;
-        let idx_v = idx_x + 3 * (self.N + 1);
-        let idx_w = idx_v + 3 * (self.N + 1);
-        let idx_u = idx_w + (self.N + 1);
-        let idx_sigma = idx_u + 3 * self.N;
+        let num_nodes = (self.N + 1) as usize;
+        let X_INDEX = 0;
+        let V_INDEX = X_INDEX + 3 * num_nodes;
+        let W_INDEX = V_INDEX + 3 * num_nodes;
+        let SIGMA_INDEX = W_INDEX + num_nodes;
+        let U_INDEX = SIGMA_INDEX + num_nodes;
 
         // Create dummy lambdas (closures) to evaluate each quantity at a normalized
         // time tau in [0,1]. These are simple piecewise-linear & built from result.x. 
@@ -547,14 +549,14 @@ impl ChebyshevLosslessSolver {
             let tau = if tau.is_nan() { 0.0 } else if tau < 0.0 { 0.0 } else if tau > 1.0 { 1.0 } else { tau };
             if n_nodes == 0 { return [0.0; 3]; }
             if n_nodes == 1 {
-                let s = idx_x as usize;
+                let s = X_INDEX as usize;
                 return [xvec[s], xvec[s + 1], xvec[s + 2]];
             }
             let t = tau * ((n_nodes - 1) as f64);
             let k = t.floor() as usize;
             let alpha = if k >= n_nodes - 1 { 1.0 } else { t - (k as f64) };
-            let s0 = (idx_x + 3 * (k as i64)) as usize;
-            let s1 = (idx_x + 3 * (if k >= n_nodes - 1 { n_nodes - 1 } else { k + 1 } as i64)) as usize;
+            let s0 = (X_INDEX + 3 * (k as usize)) as usize;
+            let s1 = (X_INDEX + 3 * (if k >= n_nodes - 1 { n_nodes - 1 } else { k + 1 } as usize));
             [xvec[s0] * (1.0 - alpha) + xvec[s1] * alpha,
              xvec[s0 + 1] * (1.0 - alpha) + xvec[s1 + 1] * alpha,
              xvec[s0 + 2] * (1.0 - alpha) + xvec[s1 + 2] * alpha]
@@ -564,14 +566,14 @@ impl ChebyshevLosslessSolver {
             let tau = if tau.is_nan() { 0.0 } else if tau < 0.0 { 0.0 } else if tau > 1.0 { 1.0 } else { tau };
             if n_nodes == 0 { return [0.0; 3]; }
             if n_nodes == 1 {
-                let s = idx_v as usize;
+                let s = V_INDEX as usize;
                 return [xvec[s], xvec[s + 1], xvec[s + 2]];
             }
             let t = tau * ((n_nodes - 1) as f64);
             let k = t.floor() as usize;
             let alpha = if k >= n_nodes - 1 { 1.0 } else { t - (k as f64) };
-            let s0 = (idx_v + 3 * (k as i64)) as usize;
-            let s1 = (idx_v + 3 * (if k >= n_nodes - 1 { n_nodes - 1 } else { k + 1 } as i64)) as usize;
+            let s0 = (V_INDEX + 3 * (k as usize)) as usize;
+            let s1 = (V_INDEX + 3 * (if k >= n_nodes - 1 { n_nodes - 1 } else { k + 1 }));
             [xvec[s0] * (1.0 - alpha) + xvec[s1] * alpha,
              xvec[s0 + 1] * (1.0 - alpha) + xvec[s1 + 1] * alpha,
              xvec[s0 + 2] * (1.0 - alpha) + xvec[s1 + 2] * alpha]
@@ -581,14 +583,22 @@ impl ChebyshevLosslessSolver {
             let tau = if tau.is_nan() { 0.0 } else if tau < 0.0 { 0.0 } else if tau > 1.0 { 1.0 } else { tau };
             if n_nodes == 0 { return 0.0; }
             if n_nodes == 1 {
-                return xvec[idx_w as usize].exp();
+                return xvec[W_INDEX as usize].exp();
             }
             let t = tau * ((n_nodes - 1) as f64);
             let k = t.floor() as usize;
             let alpha = if k >= n_nodes - 1 { 1.0 } else { t - (k as f64) };
-            let w0 = xvec[(idx_w + (k as i64)) as usize].exp();
-            let w1 = xvec[(idx_w + (if k >= n_nodes - 1 { n_nodes - 1 } else { k + 1 } as i64)) as usize].exp();
+            let w0 = xvec[(W_INDEX + (k as usize)) as usize].exp();
+            let w1 = xvec[(W_INDEX + (if k >= n_nodes - 1 { n_nodes - 1 } else { k + 1 } as usize))].exp();
             w0 * (1.0 - alpha) + w1 * alpha
+        };
+
+        let sigma_fn = move |tau: f64| -> f64 {
+            let tau = if tau.is_nan() { 0.0 } else if tau < 0.0 { 0.0 } else if tau > 1.0 { 1.0 } else { tau };
+            if n_intervals == 0 { return 0.0; }
+            let s = tau * (n_intervals as f64);
+            let k = if s >= (n_intervals as f64) { n_intervals - 1 } else { s.floor() as usize };
+            xvec[(SIGMA_INDEX + (k as usize)) as usize]
         };
 
         let thrust_fn = move |tau: f64| -> [f64; 3] {
@@ -597,16 +607,8 @@ impl ChebyshevLosslessSolver {
             if n_intervals == 0 { return [0.0; 3]; }
             let s = tau * (n_intervals as f64);
             let k = if s >= (n_intervals as f64) { n_intervals - 1 } else { s.floor() as usize };
-            let st = (idx_u + 3 * (k as i64)) as usize;
+            let st = (U_INDEX + 3 * (k as usize));
             [xvec[st], xvec[st + 1], xvec[st + 2]]
-        };
-
-        let sigma_fn = move |tau: f64| -> f64 {
-            let tau = if tau.is_nan() { 0.0 } else if tau < 0.0 { 0.0 } else if tau > 1.0 { 1.0 } else { tau };
-            if n_intervals == 0 { return 0.0; }
-            let s = tau * (n_intervals as f64);
-            let k = if s >= (n_intervals as f64) { n_intervals - 1 } else { s.floor() as usize };
-            xvec[(idx_sigma + (k as i64)) as usize]
         };
 
         // (Step 2) Predefined evaluation points (example: 101 points evenly spaced on [0,1])

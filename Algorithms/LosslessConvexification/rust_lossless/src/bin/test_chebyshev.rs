@@ -18,8 +18,8 @@ fn main() {
         lower_thrust_bound: 1000.0 * 0.4,
         upper_thrust_bound: 1000.0,
         tvc_range_rad: 15_f64.to_radians(),
-        coarse_delta_t: 0.5,
-        fine_delta_t: 0.05,
+        coarse_nodes: 8,
+        fine_nodes: 16,
         use_glide_slope: false,
         glide_slope: 5_f64.to_radians(),
         N: 8, // modest size for testing
