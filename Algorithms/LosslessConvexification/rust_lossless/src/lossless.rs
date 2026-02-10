@@ -271,7 +271,6 @@ impl LosslessSolver {
             b.push(0.0);
             row_counter += 4;
 
-            // TODO: add glide slope constraints (ts gpt rn)
             if self.use_glide_slope {
                 // ---------- Glide slope SOC: ||x_k[:2]|| <= x_k[2] / tan(glide_slope) ----------
                 let x_offset = idx_x + 3 * k;
@@ -285,10 +284,10 @@ impl LosslessSolver {
                 row_counter += 3;
             }
 
-            // TODO: add max velocity constraints
             
             // ---------- Max velocity SOC: ||v_k|| <= max_velocity ----------
-            rows.push((row_counter as usize) + 0); cols.push(v_offset as usize);     vals.push(0.0); // -v0
+            // rows.push((row_counter as usize) + 0); cols.push(v_offset as usize);     vals.push(0.0); // -v0
+            // No need to push a zero value
             rows.push((row_counter as usize) + 1); cols.push(v_offset as usize);     vals.push(-1.0); // -v0
             rows.push((row_counter as usize) + 2); cols.push((v_offset as usize) + 1);   vals.push(-1.0); // -v1
             rows.push((row_counter as usize) + 3); cols.push((v_offset as usize) + 2);   vals.push(-1.0); // -v2

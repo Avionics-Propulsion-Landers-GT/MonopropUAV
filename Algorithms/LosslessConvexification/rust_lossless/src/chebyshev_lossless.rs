@@ -81,7 +81,7 @@ impl ChebyshevLosslessSolver {
         let mut tau = Vec::with_capacity(self.N + 1);
         for i in 0..=self.N {
             // We flip i to n-i to ensuring that tau[0] = -1 and tau[n] = 1
-            let theta = std::f64::consts::PI * ((self.N - i) as f64) / nf;
+            let theta = PI * ((self.N - i) as f64) / nf;
             tau.push(theta.cos());
         }
         tau
@@ -148,9 +148,9 @@ impl ChebyshevLosslessSolver {
         let mut w = vec![0.0; self.N + 1];
         let sum_coeff = 4.0 / (self.N as f64);
 
-        let mut initial_value;
-        let mut s_value;
-        let mut j_value;
+        let initial_value;
+        let s_value;
+        let j_value;
 
         if self.N % 2 == 0 {
             initial_value = 1.0 / ((self.N * self.N - 1) as f64);
@@ -169,7 +169,7 @@ impl ChebyshevLosslessSolver {
             let mut value = 0.0;
 
             for j in 0..(j_value + 1) {
-                let value_increment = (1.0 / (1.0 - 4.0 * (j as f64).powi(2))) * ((2.0 * std::f64::consts::PI * (j as f64) * (s as f64)) / (self.N as f64)).cos();
+                let value_increment = (1.0 / (1.0 - 4.0 * (j as f64).powi(2))) * ((2.0 * PI * (j as f64) * (s as f64)) / (self.N as f64)).cos();
                 if j == 0 || j == j_value {
                     value += value_increment / 2.0;
                 } else {
@@ -313,13 +313,8 @@ impl ChebyshevLosslessSolver {
             row_idx += 1;
         }
 
-        // Mark all dynamics as Zero Cone
-        let dynamics_rows = row_idx;
-        cones.push(SupportedConeT::ZeroConeT(dynamics_rows));
-
 
         // --- B. BOUNDARY CONDITIONS (Equality Cone) ---
-        let boundary_cond_start_row = row_idx;
         
         // Start State (r0, v0, z0)
         for dim in 0..3 {
@@ -362,7 +357,7 @@ impl ChebyshevLosslessSolver {
             row_idx += 1;
         }
         
-        cones.push(SupportedConeT::ZeroConeT(row_idx - boundary_cond_start_row));
+        cones.push(SupportedConeT::ZeroConeT(row_idx)); // All equality constraints so far
         
         // --- C. DRY MASS CONSTRAINT (Inequality) ---
         // We must ensure the final mass is greater than or equal to the dry mass.
@@ -383,11 +378,16 @@ impl ChebyshevLosslessSolver {
         cones.push(SupportedConeT::NonnegativeConeT(1));
 
 
-        // --- C. THRUST CONE (Second Order Cone) ---
+        // --- C. SOC CONSTRAINTS (Thrust, Pointing, Glide, Velocity) ---
         // ||u|| <= sigma  -->  (sigma, ux, uy, uz) in SOC
+        let sin_theta = self.tvc_range_rad.sin();
         for k in 0..=self.N {
-            let sigma_idx = k + SIGMA_INDEX;
-            let u_idx = k + U_INDEX;
+            // Thrust magnitude constraint: ||u_k|| <= sigma_k
+            let x_idx = X_INDEX + 3 * k;
+            let v_idx = V_INDEX + 3 * k;
+            let sigma_idx = SIGMA_INDEX + k;
+            let w_idx = W_INDEX + k;
+            let u_idx = U_INDEX + 3 * k;
 
             // Row 1: -sigma + s0 = 0
             rows.push(row_idx);
@@ -405,51 +405,99 @@ impl ChebyshevLosslessSolver {
                 row_idx += 1;
             }
             cones.push(SupportedConeT::SecondOrderConeT(4));
-        }
 
 
-        // --- D. MASS THRUST LIMIT (Non-negative Cone) ---
-        // sigma <= Tmax * e^(-z)
-        // Linearized: sigma <= Tmax * e^(-z_bar) * [1 - (z - z_bar)]
-        // Rearranged: Tmax*e^(-z_bar) - [sigma + Tmax*e^(-z_bar)*z] >= 0
-        
-        let start_ineq = row_idx;
-        for k in 0..=self.N {
-            let z_bar = prev_solution[k].z;
-            let thrust_limit = t_max * (-z_bar).exp();
-            
-            // s = (RHS_constant) - (sigma + slope*z)
-            // We want s >= 0.
-            // Clarabel form: Ax + s = b  ->  s = b - Ax
-            // So b = RHS_constant, A = [1.0 at sigma, slope at z]
-            
-            let rhs = thrust_limit * (1.0 + z_bar);
-            
-            let sigma_idx = k * num_vars_per_node + 7;
-            let z_idx = k * num_vars_per_node + 6;
+            // Calculate Time at Node k (Crucial for Linearization)
+            // Chebyshev Time Map: t = (tf / 2) * (tau + 1)
+            // tau_k = -cos(pi * k / N)  -> Goes from -1 to 1
+            let tau_k = -(PI * k as f64 / self.N as f64).cos();
+            let t_current = (current_time / 2.0) * (tau_k + 1.0);
 
-            
-            rows.push(row_idx);
-            cols.push(sigma_idx);
-            vals.push(1.0);
-            rows.push(row_idx);
-            cols.push(z_idx);
-            vals.push(thrust_limit); // The slope
-            b.push(rhs);
-            
+            let z_0 = (m0 + self.alpha * self.upper_thrust_bound * t_current).ln();
+            let exp_neg_z_0 = (-z_0).exp();
+            let sigma_min_coeff = self.lower_thrust_bound * exp_neg_z_0;
+            let sigma_min_h_val = sigma_min_coeff * (1.0 + z_0);
+            let sigma_max_coeff = self.upper_thrust_bound * exp_neg_z_0;
+            let sigma_max_h_val = sigma_max_coeff * (1.0 + z_0);
+
+            // thrust bounds
+            // min bound
+            cones.push(SupportedConeT::NonnegativeConeT(1));
+            rows.push(row_idx as usize); cols.push(sigma_idx as usize); vals.push(-1.0); // sigma_k - sigma_min
+            rows.push(row_idx as usize); cols.push(w_idx as usize); vals.push(-sigma_min_coeff);
+            b.push(-sigma_min_h_val);
             row_idx += 1;
-        }
-        cones.push(SupportedConeT::NonnegativeConeT(row_idx - start_ineq));
+            
+            // max bound
+            cones.push(SupportedConeT::NonnegativeConeT(1));
+            rows.push(row_idx as usize); cols.push(sigma_idx as usize); vals.push(1.0); // -sigma_k + sigma_max
+            rows.push(row_idx as usize); cols.push(w_idx as usize); vals.push(sigma_max_coeff);
+            b.push(sigma_max_h_val);
+            row_idx += 1;
 
-        
-        // TODO: still need to check the mass thrust limit, as well as the max velocity constraint. the glide slope constraint would be good but not necessary
+            
+            // ---------- Thrust magnitude SOC: ||u_k|| <= sigma_k ----------
+            rows.push((row_idx as usize) + 0); cols.push(sigma_idx as usize); vals.push(-1.0); // -sigma_k
+            rows.push((row_idx as usize) + 1); cols.push(u_idx as usize);     vals.push(-1.0); // -u0
+            rows.push((row_idx as usize) + 2); cols.push((u_idx as usize) + 1);   vals.push(-1.0); // -u1
+            rows.push((row_idx as usize) + 3); cols.push((u_idx as usize) + 2);   vals.push(-1.0); // -u2
+            cones.push(SupportedConeT::SecondOrderConeT(4));
+            b.push(0.0);
+            b.push(0.0);
+            b.push(0.0);
+            b.push(0.0);
+            row_idx += 4;
+
+            
+            // ---------- Thrust pointing SOC: ||u_k - sigma_k*d|| <= sigma_k*sin(theta) ----------
+            rows.push((row_idx as usize) + 0); cols.push(sigma_idx as usize); vals.push(-sin_theta); // top of SOC
+            rows.push((row_idx as usize) + 1); cols.push(u_idx as usize);     vals.push(1.0);
+            rows.push((row_idx as usize) + 1); cols.push(sigma_idx as usize);     vals.push(-self.pointing_direction[0]);
+            rows.push((row_idx as usize) + 2); cols.push((u_idx as usize) + 1);   vals.push(1.0);
+            rows.push((row_idx as usize) + 2); cols.push(sigma_idx as usize);     vals.push(-self.pointing_direction[1]);
+            rows.push((row_idx as usize) + 3); cols.push((u_idx as usize) + 2);   vals.push(1.0);
+            rows.push((row_idx as usize) + 3); cols.push(sigma_idx as usize);     vals.push(-self.pointing_direction[2]);
+            cones.push(SupportedConeT::SecondOrderConeT(4));
+            b.push(0.0);
+            b.push(0.0);
+            b.push(0.0);
+            b.push(0.0);
+            row_idx += 4;
+
+
+            // ---------- Glide slope SOC: ||x_k[:2]|| <= x_k[2] / tan(glide_slope) ----------
+            if self.use_glide_slope {
+                rows.push((row_idx as usize) + 0); cols.push((x_idx as usize) + 2); vals.push(-1.0 / self.glide_slope.tan()); // x_k[2]
+                rows.push((row_idx as usize) + 1); cols.push((x_idx as usize) + 0); vals.push(1.0); // -x_k[0]
+                rows.push((row_idx as usize) + 2); cols.push((x_idx as usize) + 1); vals.push(1.0); // -x_k[1]
+                cones.push(SupportedConeT::SecondOrderConeT(3));
+                b.push(0.0);
+                b.push(self.landing_point[0]);
+                b.push(self.landing_point[1]);
+                row_idx += 3;
+            }
+
+            
+            // ---------- Max velocity SOC: ||v_k|| <= max_velocity ----------
+            // rows.push((row_idx as usize) + 0); cols.push(v_idx as usize);     vals.push(0.0); // -v0
+            // No need to push a zero value
+            rows.push((row_idx as usize) + 1); cols.push(v_idx as usize);     vals.push(-1.0); // -v0
+            rows.push((row_idx as usize) + 2); cols.push((v_idx as usize) + 1);   vals.push(-1.0); // -v1
+            rows.push((row_idx as usize) + 3); cols.push((v_idx as usize) + 2);   vals.push(-1.0); // -v2
+            cones.push(SupportedConeT::SecondOrderConeT(4));
+            b.push(self.max_velocity);
+            b.push(0.0);
+            b.push(0.0);
+            b.push(0.0);
+            row_idx += 4;
+        }
 
 
         // 4. Solve
         // ---------------------------
         let a_csc = Self::csc_from_triplets(row_idx as usize, n_vars as usize, &rows, &cols, &vals);
 
-        let settings = DefaultSettings::default(); // Adjust tolerances here if needed
+        let mut settings = DefaultSettings::default(); // Adjust tolerances here if needed
         settings.verbose = true;
         
         let mut solver = DefaultSolver::new(&p, &q, &a_csc, &b, &cones, settings);
