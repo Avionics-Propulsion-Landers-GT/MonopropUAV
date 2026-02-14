@@ -6,6 +6,71 @@ use crate::lossless::{TrajectoryResult};
 
 const GRAVITY: [f64; 3] = [0.0, 0.0, -9.81];
 
+pub struct TrajectorySample {
+    pub position: [f64; 3],
+    pub velocity: [f64; 3],
+    pub mass: f64,
+    pub thrust: [f64; 3],
+    pub sigma: f64,
+}
+
+pub struct TrajectoryEvaluator {
+    nodes: Vec<f64>,
+    weights: Vec<f64>,
+    positions: Vec<[f64; 3]>,
+    velocities: Vec<[f64; 3]>,
+    log_masses: Vec<f64>,
+    thrusts: Vec<[f64; 3]>,
+    sigmas: Vec<f64>,
+    final_time: f64,
+}
+
+impl TrajectoryEvaluator {
+    pub fn eval_at_time(&self, t: f64) -> TrajectorySample {
+        let tau = ChebyshevLosslessSolver::time_to_tau(t, self.final_time);
+
+        let position = ChebyshevLosslessSolver::barycentric_eval_vec3(
+            tau,
+            &self.nodes,
+            &self.weights,
+            &self.positions,
+        );
+        let velocity = ChebyshevLosslessSolver::barycentric_eval_vec3(
+            tau,
+            &self.nodes,
+            &self.weights,
+            &self.velocities,
+        );
+        let log_mass = ChebyshevLosslessSolver::barycentric_eval(
+            tau,
+            &self.nodes,
+            &self.weights,
+            &self.log_masses,
+        );
+        let mass = log_mass.exp();
+        let thrust = ChebyshevLosslessSolver::barycentric_eval_vec3(
+            tau,
+            &self.nodes,
+            &self.weights,
+            &self.thrusts,
+        );
+        let sigma = ChebyshevLosslessSolver::barycentric_eval(
+            tau,
+            &self.nodes,
+            &self.weights,
+            &self.sigmas,
+        );
+
+        TrajectorySample {
+            position,
+            velocity,
+            mass,
+            thrust,
+            sigma,
+        }
+    }
+}
+
 pub struct ChebyshevLosslessSolver {
     pub landing_point: [f64; 3],
     pub initial_position: [f64; 3],
@@ -603,7 +668,7 @@ impl ChebyshevLosslessSolver {
         solver.solve();
 
         if solver.solution.status == SolverStatus::Solved || solver.solution.status == SolverStatus::AlmostSolved {
-            let traj_result = self.extract_result(&solver.solution);
+            let traj_result = self.extract_result(&solver.solution, current_time);
             Some(traj_result)
             
         } else {
@@ -628,92 +693,64 @@ impl ChebyshevLosslessSolver {
         It iterpolates along the entire N-order polynomial with numerical stability
     
     */
-    fn extract_result(&self, result: &DefaultSolution<f64>) -> TrajectoryResult {
+    pub fn build_trajectory_evaluator(&self, result: &DefaultSolution<f64>, final_time: f64) -> TrajectoryEvaluator {
+        let num_nodes = self.N + 1;
+        let x = &result.x;
 
-        // (Step 1) extract coefficents (idk yet gang shall return after diving into papers)
+        let x_index = 0usize;
+        let v_index = x_index + 3 * num_nodes;
+        let w_index = v_index + 3 * num_nodes;
+        let sigma_index = w_index + num_nodes;
+        let u_index = sigma_index + num_nodes;
 
-        let num_nodes = (self.N + 1) as usize;
-        let X_INDEX = 0;
-        let V_INDEX = X_INDEX + 3 * num_nodes;
-        let W_INDEX = V_INDEX + 3 * num_nodes;
-        let SIGMA_INDEX = W_INDEX + num_nodes;
-        let U_INDEX = SIGMA_INDEX + num_nodes;
+        let mut positions = Vec::with_capacity(num_nodes);
+        let mut velocities = Vec::with_capacity(num_nodes);
+        let mut log_masses = Vec::with_capacity(num_nodes);
+        let mut thrusts = Vec::with_capacity(num_nodes);
+        let mut sigmas = Vec::with_capacity(num_nodes);
 
-        // Create dummy lambdas (closures) to evaluate each quantity at a normalized
-        // time tau in [0,1]. These are simple piecewise-linear & built from result.x. 
-        // They are dummies for now and should be replaced with Chebyshev polynomial evaluations.
+        for k in 0..num_nodes {
+            let s = x_index + 3 * k;
+            positions.push([x[s], x[s + 1], x[s + 2]]);
+        }
 
-        let xvec = &result.x;
-        let n_nodes = (self.N + 1) as usize;
-        let n_intervals = (self.N) as usize; // for u and sigma
+        for k in 0..num_nodes {
+            let s = v_index + 3 * k;
+            velocities.push([x[s], x[s + 1], x[s + 2]]);
+        }
 
-        let position_fn = move |tau: f64| -> [f64; 3] {
-            let tau = if tau.is_nan() { 0.0 } else if tau < 0.0 { 0.0 } else if tau > 1.0 { 1.0 } else { tau };
-            if n_nodes == 0 { return [0.0; 3]; }
-            if n_nodes == 1 {
-                let s = X_INDEX as usize;
-                return [xvec[s], xvec[s + 1], xvec[s + 2]];
-            }
-            let t = tau * ((n_nodes - 1) as f64);
-            let k = t.floor() as usize;
-            let alpha = if k >= n_nodes - 1 { 1.0 } else { t - (k as f64) };
-            let s0 = (X_INDEX + 3 * (k as usize)) as usize;
-            let s1 = (X_INDEX + 3 * (if k >= n_nodes - 1 { n_nodes - 1 } else { k + 1 } as usize));
-            [xvec[s0] * (1.0 - alpha) + xvec[s1] * alpha,
-             xvec[s0 + 1] * (1.0 - alpha) + xvec[s1 + 1] * alpha,
-             xvec[s0 + 2] * (1.0 - alpha) + xvec[s1 + 2] * alpha]
-        };
+        for k in 0..num_nodes {
+            log_masses.push(x[w_index + k]);
+        }
 
-        let velocity_fn = move |tau: f64| -> [f64; 3] {
-            let tau = if tau.is_nan() { 0.0 } else if tau < 0.0 { 0.0 } else if tau > 1.0 { 1.0 } else { tau };
-            if n_nodes == 0 { return [0.0; 3]; }
-            if n_nodes == 1 {
-                let s = V_INDEX as usize;
-                return [xvec[s], xvec[s + 1], xvec[s + 2]];
-            }
-            let t = tau * ((n_nodes - 1) as f64);
-            let k = t.floor() as usize;
-            let alpha = if k >= n_nodes - 1 { 1.0 } else { t - (k as f64) };
-            let s0 = (V_INDEX + 3 * (k as usize)) as usize;
-            let s1 = (V_INDEX + 3 * (if k >= n_nodes - 1 { n_nodes - 1 } else { k + 1 }));
-            [xvec[s0] * (1.0 - alpha) + xvec[s1] * alpha,
-             xvec[s0 + 1] * (1.0 - alpha) + xvec[s1 + 1] * alpha,
-             xvec[s0 + 2] * (1.0 - alpha) + xvec[s1 + 2] * alpha]
-        };
+        for k in 0..num_nodes {
+            let s = u_index + 3 * k;
+            thrusts.push([x[s], x[s + 1], x[s + 2]]);
+        }
 
-        let mass_fn = move |tau: f64| -> f64 {
-            let tau = if tau.is_nan() { 0.0 } else if tau < 0.0 { 0.0 } else if tau > 1.0 { 1.0 } else { tau };
-            if n_nodes == 0 { return 0.0; }
-            if n_nodes == 1 {
-                return xvec[W_INDEX as usize].exp();
-            }
-            let t = tau * ((n_nodes - 1) as f64);
-            let k = t.floor() as usize;
-            let alpha = if k >= n_nodes - 1 { 1.0 } else { t - (k as f64) };
-            let w0 = xvec[(W_INDEX + (k as usize)) as usize].exp();
-            let w1 = xvec[(W_INDEX + (if k >= n_nodes - 1 { n_nodes - 1 } else { k + 1 } as usize))].exp();
-            w0 * (1.0 - alpha) + w1 * alpha
-        };
+        for k in 0..num_nodes {
+            sigmas.push(x[sigma_index + k]);
+        }
 
-        let sigma_fn = move |tau: f64| -> f64 {
-            let tau = if tau.is_nan() { 0.0 } else if tau < 0.0 { 0.0 } else if tau > 1.0 { 1.0 } else { tau };
-            if n_intervals == 0 { return 0.0; }
-            let s = tau * (n_intervals as f64);
-            let k = if s >= (n_intervals as f64) { n_intervals - 1 } else { s.floor() as usize };
-            xvec[(SIGMA_INDEX + (k as usize)) as usize]
-        };
+        let nodes = self.cgl_nodes();
+        let weights = self.cgl_barycentric_weights();
 
-        let thrust_fn = move |tau: f64| -> [f64; 3] {
-            // piecewise-constant per interval
-            let tau = if tau.is_nan() { 0.0 } else if tau < 0.0 { 0.0 } else if tau > 1.0 { 1.0 } else { tau };
-            if n_intervals == 0 { return [0.0; 3]; }
-            let s = tau * (n_intervals as f64);
-            let k = if s >= (n_intervals as f64) { n_intervals - 1 } else { s.floor() as usize };
-            let st = (U_INDEX + 3 * (k as usize));
-            [xvec[st], xvec[st + 1], xvec[st + 2]]
-        };
+        TrajectoryEvaluator {
+            nodes,
+            weights,
+            positions,
+            velocities,
+            log_masses,
+            thrusts,
+            sigmas,
+            final_time,
+        }
+    }
 
-        // (Step 2) Predefined evaluation points (example: 101 points evenly spaced on [0,1])
+    fn extract_result(&self, result: &DefaultSolution<f64>, final_time: f64) -> TrajectoryResult {
+        let evaluator = self.build_trajectory_evaluator(result, final_time);
+
+        // Sample evenly spaced points in time for graphing.
         let eval_points = 101usize;
 
         let mut positions: Vec<[f64; 3]> = Vec::with_capacity(eval_points);
@@ -722,14 +759,19 @@ impl ChebyshevLosslessSolver {
         let mut thrusts: Vec<[f64; 3]> = Vec::with_capacity(eval_points);
         let mut sigmas: Vec<f64> = Vec::with_capacity(eval_points);
 
-        // (Step 3) Evaluate polynomials at the evaluation points
         for i in 0..eval_points {
-            let tau = if eval_points == 1 { 0.0 } else { (i as f64) / ((eval_points - 1) as f64) };
-            positions.push(position_fn(tau));
-            velocities.push(velocity_fn(tau));
-            masses.push(mass_fn(tau));
-            thrusts.push(thrust_fn(tau));
-            sigmas.push(sigma_fn(tau));
+            let t = if eval_points == 1 {
+                0.0
+            } else {
+                final_time * (i as f64) / ((eval_points - 1) as f64)
+            };
+
+            let sample = evaluator.eval_at_time(t);
+            positions.push(sample.position);
+            velocities.push(sample.velocity);
+            masses.push(sample.mass);
+            thrusts.push(sample.thrust);
+            sigmas.push(sample.sigma);
         }
 
         TrajectoryResult {
