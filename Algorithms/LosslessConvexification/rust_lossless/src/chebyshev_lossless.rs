@@ -622,6 +622,10 @@ impl ChebyshevLosslessSolver {
             3) Evaluate the polynomials at the points
         - Alternatively We could store the coefficients themselves to later re-evaluate the trajectory for graphing
             - This would mean changing the TrajectoryResult struct as well as how main.rs parses our results
+
+    UPDATE:
+        We are continuing with barycentric interpolation, allowing us to evaluate the trajectory at any point in time
+        It iterpolates along the entire N-order polynomial with numerical stability
     
     */
     fn extract_result(&self, result: &DefaultSolution<f64>) -> TrajectoryResult {
