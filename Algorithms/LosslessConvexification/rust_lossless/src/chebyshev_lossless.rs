@@ -88,6 +88,71 @@ impl ChebyshevLosslessSolver {
     }
 
     /*
+    Barycentric weights for CGL nodes on [-1, 1].
+    (Helper function for evaluating Chebyshev polynomials)
+    w_i = (-1)^i, halved at endpoints (i=0 and i=N)
+    */
+    pub fn cgl_barycentric_weights(&self) -> Vec<f64> {
+        assert!(self.N >= 1, "CGL weights require N >= 1");
+        let mut w = vec![0.0_f64; self.N + 1];
+
+        for i in 0..=self.N {
+            w[i] = if i % 2 == 0 { 1.0 } else { -1.0 }; // (-1)^i
+            if i == 0 || i == self.N {
+                w[i] *= 0.5;
+            }
+        }
+
+        w
+    }
+
+    /*
+    Barycentric interpolation on N nodes, forming an order N chebyshev polynomial.
+    Evaluates the polynomial at any point x in [-1, 1] given:
+        - nodes: CGL nodes
+        - weights: the barycentric weights for those nodes
+        - values: the function values at those nodes (e.g. from our optimization variables)
+    */
+    pub fn barycentric_eval(x: f64, nodes: &[f64], weights: &[f64], values: &[f64]) -> f64 {
+        // Basic sanity checks to avoid silent mismatch bugs.
+        assert!(!nodes.is_empty(), "barycentric_eval: empty nodes");
+        assert!(nodes.len() == weights.len() && nodes.len() == values.len(), "barycentric_eval: length mismatch");
+
+        // If x matches a node (within tolerance), return the exact value to avoid divide-by-zero.
+        let eps = 1e-12;
+        for i in 0..nodes.len() {
+            if (x - nodes[i]).abs() <= eps {
+                return values[i];
+            }
+        }
+
+        // Barycentric formula: f(x) = (sum w_i * f_i / (x - x_i)) / (sum w_i / (x - x_i)).
+        let mut num = 0.0_f64;
+        let mut den = 0.0_f64;
+        for i in 0..nodes.len() {
+            let diff = x - nodes[i];
+            let w_over_diff = weights[i] / diff;
+            num += w_over_diff * values[i];
+            den += w_over_diff;
+        }
+
+        // Final interpolated value.
+        num / den
+    }
+        }
+
+        let mut num = 0.0_f64;
+        let mut den = 0.0_f64;
+        for i in 0..nodes.len() {
+            let diff = x - nodes[i];
+            let w_over_diff = weights[i] / diff;
+            num += w_over_diff * values[i];
+            den += w_over_diff;
+        }
+
+        num / den
+    }
+    /*
      */
     pub fn cgl_diff_matrix(&self) -> Vec<Vec<f64>> {
         assert!(self.N >= 1, "CGL differentiation matrix requires N >= 1");
@@ -729,3 +794,5 @@ impl ChebyshevLosslessSolver {
         CscMatrix::new(nrows, ncols, colptr, rowval, nzval)
     }
 }
+
+
