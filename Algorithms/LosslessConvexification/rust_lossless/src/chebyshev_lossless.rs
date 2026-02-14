@@ -385,7 +385,7 @@ impl ChebyshevLosslessSolver {
         // Calculate Clenshaw-Curtis quadrature weights for integration
         let weights = self.clenshaw_curtis_weights();
         for k in 0..=self.N {
-            let sigma_idx = k * num_vars_per_node + 7;
+            let sigma_idx = SIGMA_INDEX + k;
             q[sigma_idx] = weights[k] * (current_time / 2.0); // Scale by time-mapping
         }
 
