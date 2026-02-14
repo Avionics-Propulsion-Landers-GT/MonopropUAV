@@ -139,19 +139,52 @@ impl ChebyshevLosslessSolver {
         // Final interpolated value.
         num / den
     }
+
+    /*
+    Vector barycentric interpolation on given nodes.
+    */
+    pub fn barycentric_eval_vec3(x: f64, nodes: &[f64], weights: &[f64], values: &[[f64; 3]]) -> [f64; 3] {
+        // Basic sanity checks to avoid silent mismatch bugs.
+        assert!(!nodes.is_empty(), "barycentric_eval_vec3: empty nodes");
+        assert!(nodes.len() == weights.len() && nodes.len() == values.len(), "barycentric_eval_vec3: length mismatch");
+
+        // If x matches a node (within tolerance), return the exact value to avoid divide-by-zero.
+        let eps = 1e-12;
+        for i in 0..nodes.len() {
+            if (x - nodes[i]).abs() <= eps {
+                return values[i];
+            }
         }
 
-        let mut num = 0.0_f64;
+        // Barycentric formula applied component-wise.
+        let mut num = [0.0_f64; 3];
         let mut den = 0.0_f64;
         for i in 0..nodes.len() {
             let diff = x - nodes[i];
             let w_over_diff = weights[i] / diff;
-            num += w_over_diff * values[i];
+            num[0] += w_over_diff * values[i][0];
+            num[1] += w_over_diff * values[i][1];
+            num[2] += w_over_diff * values[i][2];
             den += w_over_diff;
         }
 
-        num / den
+        [num[0] / den, num[1] / den, num[2] / den]
     }
+
+    /*
+    Map time t in [0, final_time] to Chebyshev domain tau in [-1, 1].
+    */
+    pub fn time_to_tau(t: f64, final_time: f64) -> f64 {
+        assert!(final_time > 0.0, "time_to_tau requires positive final_time");
+        let mut tau = 2.0 * (t / final_time) - 1.0;
+        if tau < -1.0 {
+            tau = -1.0;
+        } else if tau > 1.0 {
+            tau = 1.0;
+        }
+        tau
+    }
+
     /*
      */
     pub fn cgl_diff_matrix(&self) -> Vec<Vec<f64>> {
