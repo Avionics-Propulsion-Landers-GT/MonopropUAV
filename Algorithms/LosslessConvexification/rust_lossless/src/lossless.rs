@@ -454,15 +454,15 @@ impl LosslessSolver {
             .sum::<f64>()
             .sqrt();
         
-        let t_min = self.dry_mass * vel_norm / self.upper_thrust_bound;
-        let t_max = self.fuel_mass / (self.alpha * self.lower_thrust_bound);
+        let coarse_t_min = self.dry_mass * vel_norm / self.upper_thrust_bound;
+        let coarse_t_max = self.fuel_mass / (self.alpha * self.lower_thrust_bound);
 
-        let n_min = (t_min / self.delta_t).ceil() as i64;
-        let n_max = (t_max / self.delta_t).floor() as i64;
+        let coarse_n_min = (coarse_t_min / self.delta_t).ceil() as i64;
+        let coarse_n_max = (coarse_t_max / self.delta_t).floor() as i64;
 
         let mut traj_result: Option<TrajectoryResult> = None;
 
-        for k in n_min..n_max {
+        for k in coarse_n_min..coarse_n_max {
             println!("Solving step {}...", k);
             self.N = k;
             match self.solve_at_current_time() {
@@ -480,20 +480,30 @@ impl LosslessSolver {
             return None;
         }
 
-        self.N = ((self.N as f64) * self.coarse_delta_t / self.fine_delta_t).ceil() as i64;
+        let fine_start = ((self.N as f64) * self.coarse_delta_t / self.fine_delta_t).ceil() as i64;
         self.delta_t = self.fine_delta_t;
         
-        match self.solve_at_current_time() {
-            Some(sol) => {
-                println!("✅ Fine solve converged successfully.");
-                traj_result = Some(sol);
-            },
-            None => {
-                println!("No successful solve found in the given time bounds.");
-                return None;
-            },
+        let fine_t_max = self.fuel_mass / (self.alpha * self.lower_thrust_bound);
+
+        let fine_n_max = (fine_t_max / self.delta_t).floor() as i64;
+        
+        for k in fine_start..fine_n_max {
+            println!("Solving step {}...", k);
+            self.N = k;
+            match self.solve_at_current_time() {
+                    Some(sol) => {
+                    println!("✅ Fine solve converged successfully.");
+                    traj_result = Some(sol);
+                    break;
+                },
+                None => println!(""),
+            }
         }
 
+        if traj_result.is_none() {
+            println!("No successful solve found in the given time bounds.");
+            return None;
+        }
 
         return traj_result
     }

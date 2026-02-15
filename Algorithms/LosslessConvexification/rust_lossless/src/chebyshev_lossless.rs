@@ -84,10 +84,11 @@ pub struct ChebyshevLosslessSolver {
     pub lower_thrust_bound: f64,
     pub upper_thrust_bound: f64,
     pub tvc_range_rad: f64,
-    pub line_search_delta_t: f64,
+    pub coarse_line_search_delta_t: f64,
+    pub fine_line_search_delta_t: f64,
     pub coarse_nodes: usize,
     pub fine_nodes: usize,
-    N: usize,
+    pub N: usize,
     pub pointing_direction: [f64; 3],
     // TODO: We are moving away from discretization into Chebyshev approximation:
     // We should track the order of our polynomial for our solver instead.
@@ -108,12 +109,14 @@ impl Default for ChebyshevLosslessSolver {
             lower_thrust_bound: 0.0,
             upper_thrust_bound: 0.0,
             tvc_range_rad: (15.0_f64).to_radians(),
-            line_search_delta_t: 1.0,
+            coarse_line_search_delta_t: 1.0,
+            fine_line_search_delta_t: 1.0,
             coarse_nodes: 1,
             fine_nodes: 1,
             N: 1,
             pointing_direction: [0.0, 0.0, 1.0],
         }
+        
     }
 }
 
@@ -294,15 +297,15 @@ impl ChebyshevLosslessSolver {
 
         // QOL / robustness (in case of weird floating point behavior)
         // Essentially a double check to ensure rows sum to zero
-        // for i in 0..=self.N {
-        //     let mut s = 0.0;
-        //     for j in 0..=self.N {
-        //         if i != j { 
-        //             s += d[i][j]; 
-        //         }
-        //     }
-        //     d[i][i] = -s;
-        // }
+        for i in 0..=self.N {
+            let mut s = 0.0;
+            for j in 0..=self.N {
+                if i != j { 
+                    s += d[i][j]; 
+                }
+            }
+            d[i][i] = -s;
+        }
 
         d
     }
@@ -794,53 +797,58 @@ impl ChebyshevLosslessSolver {
             - Start with a low polynomial order and solve to find a feasible flight time, increasing the polynomial order 
     */
     pub fn solve(&mut self) -> Option<TrajectoryResult> {
-        // self.N = self.coarse_nodes;
+        self.N = self.coarse_nodes;
 
-        // let vel_norm = self.initial_velocity.iter()
-        //     .map(|v| v * v)
-        //     .sum::<f64>()
-        //     .sqrt();
+        let vel_norm = self.initial_velocity.iter()
+            .map(|v| v * v)
+            .sum::<f64>()
+            .sqrt();
         
-        // let t_min = self.dry_mass * vel_norm / self.upper_thrust_bound;
-        // let t_max = self.fuel_mass / (self.alpha * self.lower_thrust_bound);
-        // let mut current_time = t_min;
+        let t_min = self.dry_mass * vel_norm / self.upper_thrust_bound;
+        let t_max = self.fuel_mass / (self.alpha * self.lower_thrust_bound);
+        let mut current_time = t_min;
 
-        // let mut traj_result: Option<TrajectoryResult> = None;
+        let mut traj_result: Option<TrajectoryResult> = None;
 
-        // while current_time <= t_max {
-        //     println!("Solving step {}...", current_time);
-        //     match self.solve_at_current_time(current_time) {
-        //         Some(sol) => {
-        //             println!("✅ Step {} converged successfully.", k);
-        //             traj_result = Some(sol);
-        //             break;
-        //         },
-        //         None => println!(""),
-        //     }
-        //     current_time += self.line_search_delta_t;
-        // }
+        while current_time <= t_max {
+            println!("Solving coarse step {}...", current_time);
+            match self.solve_at_current_time(current_time) {
+                Some(sol) => {
+                    println!("✅ Converged successfully at time {}.", current_time);
+                    traj_result = Some(sol);
+                    break;
+                },
+                None => println!(""),
+            }
+            current_time += self.coarse_line_search_delta_t;
+        }
 
-        // if traj_result.is_none() {
-        //     println!("No successful solve found in the given time bounds.");
-        //     return None;
-        // }
+        if traj_result.is_none() {
+            println!("No successful solve found in the given time bounds.");
+            return None;
+        }
 
-        // self.N = ((self.N as f64) * self.coarse_delta_t / self.fine_delta_t).ceil() as i64;
-        // self.delta_t = self.fine_delta_t;
+        self.N = self.fine_nodes;
+        while current_time <= t_max {
+            println!("Solving fine step {}...", current_time);
+            match self.solve_at_current_time(current_time) {
+                Some(sol) => {
+                    println!("✅ Converged successfully at time {}.", current_time);
+                    traj_result = Some(sol);
+                    break;
+                },
+                None => println!(""),
+            }
+            current_time += self.fine_line_search_delta_t;
+        }
         
-        // match self.solve_at_current_time() {
-        //     Some(sol) => {
-        //         println!("✅ Fine solve converged successfully.");
-        //         traj_result = Some(sol);
-        //     },
-        //     None => {
-        //         println!("No successful solve found in the given time bounds.");
-        //         return None;
-        //     },
-        // }
+        if traj_result.is_none() {
+            println!("No successful solve found in the given time bounds.");
+            return None;
+        }
 
 
-        // return traj_result
+        return traj_result
     }
     
     pub fn csc_from_triplets(nrows: usize, ncols: usize, rows: &[usize], cols: &[usize], vals: &[f64]) -> CscMatrix<f64> {
