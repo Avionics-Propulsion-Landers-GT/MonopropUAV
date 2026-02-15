@@ -579,7 +579,7 @@ impl ChebyshevLosslessSolver {
             let tau_k = -(PI * k as f64 / self.N as f64).cos();
             let t_current = (current_time / 2.0) * (tau_k + 1.0);
 
-            let z_0 = (m0 + self.alpha * self.upper_thrust_bound * t_current).ln();
+            let z_0 = (m0 - self.alpha * self.upper_thrust_bound * t_current).ln();
             let exp_neg_z_0 = (-z_0).exp();
             let sigma_min_coeff = self.lower_thrust_bound * exp_neg_z_0;
             let sigma_min_h_val = sigma_min_coeff * (1.0 + z_0);

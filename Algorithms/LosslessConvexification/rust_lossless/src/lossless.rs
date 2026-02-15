@@ -222,7 +222,7 @@ impl LosslessSolver {
             let sigma_offset = idx_sigma + k;
 
             // One change I did make is to make the lower bound only a linear Taylor approximation instead of a quadratic one.
-            let z_0 = (m0 + self.alpha * self.upper_thrust_bound * self.delta_t * (k as f64)).ln();
+            let z_0 = (m0 - self.alpha * self.upper_thrust_bound * self.delta_t * (k as f64)).ln();
             let exp_neg_z_0 = (-z_0).exp();
             let sigma_min_coefficient = self.lower_thrust_bound * exp_neg_z_0;
             let sigma_min_h_val = sigma_min_coefficient * (1.0 + z_0);
