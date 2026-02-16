@@ -269,7 +269,7 @@ fn solve_qp_pgd(H: &Array2<f64>, g: &Array1<f64>, dU_min: &Array1<f64>, dU_max: 
         dU[i] = dU[i].max(dU_min[i]).min(dU_max[i]);
     }
 
-    for iter in 0..max_iters {
+    for _ in 0..max_iters {
         // Compute gradient
         let grad = H.dot(&dU) + g;
         let grad_norm = grad.norm();
@@ -323,7 +323,6 @@ fn solve_qp_pgd(H: &Array2<f64>, g: &Array1<f64>, dU_min: &Array1<f64>, dU_max: 
             break;
         }
         
-        // println!("Iter {}: grad_norm = {:.6}, cost = {:.6}", iter, grad_norm, cost_old);
     }
 
     dU

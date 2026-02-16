@@ -312,12 +312,12 @@ fn main() -> anyhow::Result<()> {
             u_history.push(u_control_seq.clone());
 
             // Convert to fixed array sizes for sending
-            let thrust_seq: [f32; 10] = u_control_seq.slice(s![.., 2]).mapv(|v| v as f32).to_owned().as_slice().unwrap().try_into().unwrap();
+            let mut thrust_seq: [f32; 10] = u_control_seq.slice(s![.., 2]).mapv(|v| v as f32).to_owned().as_slice().unwrap().try_into().unwrap();
             let gimbal_theta_seq: [f32; 10] = u_control_seq.slice(s![.., 0]).mapv(|v| v as f32).to_owned().as_slice().unwrap().try_into().unwrap();
             let gimbal_phi_seq: [f32; 10] = u_control_seq.slice(s![.., 1]).mapv(|v| v as f32).to_owned().as_slice().unwrap().try_into().unwrap();
 
             if landing_initiated {
-                if telem.position[2] <= land_alt + 0.02 {
+                if telem.position[2] <= land_alt as f32 + 0.02f32 {
                     println!("Scaling down thrust at altitude {:.2} m", telem.position[2]);
                     
                     // Scale down thrust from 100% to 0% of commanded value over 2 seconds
@@ -358,7 +358,6 @@ fn main() -> anyhow::Result<()> {
                 thrust_seq: thrust_seq,
                 gimbal_theta_seq: gimbal_theta_seq,
                 gimbal_phi_seq: gimbal_phi_seq,
-                body_rates: [0.0, 0.0, 0.0], 
             };
 
             // D. Serialize and Send

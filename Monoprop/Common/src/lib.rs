@@ -10,7 +10,6 @@ pub struct DroneTelemetry {
     pub position: [f32; 3],    // x, y, z (if you have local position est)
     pub velocity: [f32; 3],    // vx, vy, vz
     pub angular_vel: [f32; 3], // wx, wy, wz
-    pub battery: f32,
 }
 
 // COMMAND: Ground -> Drone
@@ -21,5 +20,4 @@ pub struct GroundCommand {
     pub thrust_seq: [f32; 10],       // Normalized Thrust (0.0 - 1.0) or Force in Newtons (n.b. thrust hasn't been normalized yet in the solver)
     pub gimbal_theta_seq: [f32; 10], // Gimbal angle theta sequence (radians)
     pub gimbal_phi_seq: [f32; 10],   // Gimbal angle phi sequence (radians)
-    pub body_rates: [f32; 3], // Feedforward rates (optional but recommended)
 }
