@@ -1,4 +1,4 @@
-use nalgebra::{Vector2, Vector3, UnitQuaternion};
+use nalgebra::{Vector3, UnitQuaternion};
 use rand::prelude::*;
 use rand_distr::{Normal, Distribution};
 
@@ -57,7 +57,7 @@ impl IMU {
     pub fn update(&mut self, accel: Vector3<f64>, ang_vel: Vector3<f64>, attitude: UnitQuaternion<f64>, system_time: f64) -> IMUReading {
         let elapsed_time = self.system_time - system_time;
         if elapsed_time < 1.0 / self.update_rate {
-            return self.last_reading;
+            return self.last_reading.clone();
         }
 
         self.system_time = system_time;
@@ -77,7 +77,7 @@ impl IMU {
         // Add Bias + Noise
         let measured_accel = proper_accel_body 
             + self.accel_offset 
-            + noise(&self.accel_noise_sigma, &mut rng);
+            + noise_3D(&self.accel_noise_sigma, &mut rng);
 
 
         // 2. GYROSCOPE
@@ -87,7 +87,7 @@ impl IMU {
 
         let measured_gyro = ang_vel_body 
             + self.gyro_drift 
-            + noise(&self.gyro_noise_sigma, &mut rng);
+            + noise_3D(&self.gyro_noise_sigma, &mut rng);
 
 
         // 3. MAGNETOMETER
@@ -96,7 +96,7 @@ impl IMU {
         
         let measured_mag = mag_body 
             + self.mag_offset 
-            + noise(&self.mag_noise_sigma, &mut rng);
+            + noise_3D(&self.mag_noise_sigma, &mut rng);
 
         self.last_reading = IMUReading {
             accel: measured_accel,
@@ -104,7 +104,7 @@ impl IMU {
             mag: measured_mag,
         };
 
-        self.last_reading
+        self.last_reading.clone()
     }
 }
 
@@ -140,20 +140,20 @@ impl GPS {
     pub fn update(&mut self, position: Vector3<f64>, system_time: f64) -> GPSReading {
         let elapsed_time = self.system_time - system_time;
         if elapsed_time < 1.0 / self.update_rate {
-            return self.last_reading;
+            return self.last_reading.clone();
         }
         
         self.system_time = system_time;
 
         let mut rng = rand::rng();
 
-        let noisy_position = position + self.pos_offset + noise(&self.pos_noise_sigma, &mut rng);
+        let noisy_position = position + self.pos_offset + noise_3D(&self.pos_noise_sigma, &mut rng);
 
         self.last_reading = GPSReading {
             position: noisy_position,
         };
 
-        self.last_reading
+        self.last_reading.clone()
     }
 }
 
@@ -193,24 +193,24 @@ impl UWB {
     pub fn update(&mut self, position: Vector3<f64>, system_time: f64) -> UWBReading {
         let elapsed_time = self.system_time - system_time;
         if elapsed_time < 1.0 / self.update_rate {
-            return self.last_reading;
+            return self.last_reading.clone();
         }
         
         self.system_time = system_time;
 
         if (position - self.origin).norm() > self.range {
             // Out of range behavior simply returns the last valid read. Check with Avionics for actual behavior
-            return self.last_reading;
+            return self.last_reading.clone();
         } else {
             let mut rng = rand::rng();
 
-            let noisy_position = position + self.pos_offset + noise(&self.pos_noise_sigma, &mut rng);
+            let noisy_position = position + self.pos_offset + noise_3D(&self.pos_noise_sigma, &mut rng);
 
             self.last_reading = UWBReading {
                 position: noisy_position,
             };
 
-            return self.last_reading;
+            return self.last_reading.clone();
         }
     }
 }
@@ -238,6 +238,7 @@ impl TVCActuator {
         Self {
             position: start_position,
             velocity: 0.0,
+            accel: 0.0,
             extension_limit,
             unloaded_speed,
             stall_force,
@@ -279,7 +280,7 @@ impl TVCActuator {
 
     pub fn get_noisy_position(&self) -> f64 {
         let mut rng = rand::rng();
-        self.position + noise(&self.pos_noise_sigma, &mut rng)
+        self.position + noise_1D(self.pos_noise_sigma, &mut rng)
     }
 }
 
@@ -304,6 +305,7 @@ pub struct MTV {
 #[derive(Debug, Clone)]
 pub struct MTVEffect {
     pub nitrogen_mass: f64,
+    pub pressurizing_nitrogen_mass: f64,
     pub nitrous_mass: f64,
     pub fuel_grain_mass: f64,
     pub thrust: f64,
@@ -325,34 +327,34 @@ impl MTV {
         }
     }
 
-    pub fn update(&mut self, target_thrust: f64, nitrogen_mass: f64, pressurizing_nitrogen_mass: f64, nitrous_mass: f64, fuel_grain_mass: f64, dt: f64, system_time: f64) {
+    pub fn update(&mut self, target_thrust: f64, nitrogen_mass: f64, pressurizing_nitrogen_mass: f64, nitrous_mass: f64, fuel_grain_mass: f64, dt: f64, system_time: f64) -> MTVEffect {
         let elapsed_time = self.system_time - system_time;
         if elapsed_time < 1.0 / self.update_rate {
             // angular velocity stays constant, therefore angular acceleration is zero, but angle does update
             self.ang_accel = 0.0;
             self.angle += self.ang_vel * dt;
-            self.angle = clamp(self.angle, 0.0, 90.0);
-            return;
+            self.angle = nalgebra::clamp(self.angle, 0.0, 90.0);
+        } else {
+
+            self.system_time = system_time;
+
+            // TODO: convert the target thrust into a target angle
+            let target_angle = 0.0;
+
+            let error = target_angle - self.angle;
+            let command = error * self.p_gain;
+
+            let load_factor = (self.valve_torque / self.stall_torque).min(1.0);
+            let speed_limit = self.unloaded_speed * (1.0 - load_factor);
+
+            let prev_ang_vel = self.ang_vel;
+            self.ang_vel = command.clamp(-speed_limit, speed_limit);
+            self.ang_accel = (self.ang_vel - prev_ang_vel) / dt;
+            self.angle += self.ang_vel * dt;
+            self.angle = nalgebra::clamp(self.angle, 0.0, 90.0);
         }
 
-        self.system_time = system_time;
-
-        // TODO: convert the target thrust into a target angle
-        let target_angle = 0.0;
-
-        let error = target_angle - self.angle;
-        let command = error * self.p_gain;
-
-        let load_factor = (self.valve_torque / self.stall_torque).min(1.0);
-        let speed_limit = self.unloaded_speed * (1.0 - load_factor);
-
-        let prev_ang_vel = self.ang_vel;
-        self.ang_vel = command.clamp(-speed_limit, speed_limit);
-        self.ang_accel = (self.ang_vel - prev_ang_vel) / dt;
-        self.angle += self.ang_vel * dt;
-        self.angle = clamp(self.angle, 0.0, 90.0);
-
-        let mtv_effect = self.get_thrust(nitrogen_mass, nitrous_mass, fuel_grain_mass);
+        let mtv_effect = self.get_thrust(nitrogen_mass, pressurizing_nitrogen_mass, nitrous_mass, fuel_grain_mass);
 
         return mtv_effect;
     }
@@ -364,6 +366,7 @@ impl MTV {
         // TODO: also model the thrust decay somehow?
         MTVEffect {
             nitrogen_mass,
+            pressurizing_nitrogen_mass,
             nitrous_mass,
             fuel_grain_mass,
             thrust: 0.0,
@@ -378,7 +381,7 @@ pub struct TVC {
     pub y_actuator: TVCActuator,
     ang_vel: Vector3<f64>,
     ang_accel: Vector3<f64>,
-    pub tvc_torque: Vector3<f64>,
+    tvc_torque: Vector3<f64>,
     pub actuator_lever_arm: f64,
     pub tvc_lever_arm: Vector3<f64>,
     pub max_fuel_inertia: f64,
@@ -388,7 +391,10 @@ pub struct TVC {
 
 #[derive(Debug, Clone)]
 pub struct TVCEffect {
+    pub thrust: f64,
     pub torque: Vector3<f64>,
+    pub nitrogen_mass: f64,
+    pub pressurizing_nitrogen_mass: f64,
     pub nitrous_mass: f64,
     pub fuel_grain_mass: f64,
 }
@@ -410,7 +416,7 @@ impl TVC {
             ang_accel: Vector3::zeros(),
             tvc_torque: Vector3::zeros(),
             actuator_lever_arm,
-            tvc_lever_arm: Vector3<f64>,
+            tvc_lever_arm,
             max_fuel_inertia,
             min_fuel_inertia,
             starting_fuel_grain_mass,
@@ -420,7 +426,7 @@ impl TVC {
     // engine is 11 kg with fuel, awaiting empty mass data
     // Returns the reaction torque applied to the rocket body
     // only the first two elements of command are used, the third is thrust
-    pub fn update(&mut self, command: Vector3<f64>, nitrogen_mass: f64, pressurizing_nitrogen_mass: f64, nitrous_mass: f64, fuel_grain_mass: f64, dt: f64, system_time: f64) -> Vector3<f64> {
+    pub fn update(&mut self, command: Vector3<f64>, nitrogen_mass: f64, pressurizing_nitrogen_mass: f64, nitrous_mass: f64, fuel_grain_mass: f64, dt: f64, system_time: f64) -> TVCEffect {
         let mtv_effect = self.mtv.update(command[2], nitrogen_mass, pressurizing_nitrogen_mass,nitrous_mass, fuel_grain_mass, dt, system_time);
 
         let engine_inertia = self.min_fuel_inertia + (self.max_fuel_inertia - self.min_fuel_inertia) * (fuel_grain_mass / self.starting_fuel_grain_mass);
@@ -430,6 +436,8 @@ impl TVC {
         // TODO: translate gimbal angle commands to actuator target positions and update ang vels and ang accel
         let x_target = 0.0;
         let y_target = 0.0;
+        let pitch_angle = 0.0;
+        let yaw_angle = 0.0;
 
         self.x_actuator.update(x_target, x_load, dt, system_time);
         self.y_actuator.update(y_target, y_load, dt, system_time);
@@ -440,18 +448,19 @@ impl TVC {
         let yaw_rot = UnitQuaternion::from_axis_angle(&Vector3::x_axis(), yaw_angle);
         let gimbal_rotation = yaw_rot * pitch_rot;
 
-        let thrust_vector = gimbal_rotation.transform_vector(Vector3::new(0.0, 0.0, mtv_effect.thrust));
+        let thrust_vector = gimbal_rotation.transform_vector(&Vector3::new(0.0, 0.0, mtv_effect.thrust));
         let thrust_torque = self.tvc_lever_arm.cross(&thrust_vector);
 
         self.tvc_torque = reaction_torque + thrust_torque;
 
-        return self.tvc_torque.clone();
-
         return TVCEffect {
-            torque,
+            thrust: mtv_effect.thrust,
+            torque: self.tvc_torque.clone(),
+            nitrogen_mass: mtv_effect.nitrogen_mass,
+            pressurizing_nitrogen_mass: mtv_effect.pressurizing_nitrogen_mass,
             nitrous_mass: mtv_effect.nitrous_mass,
             fuel_grain_mass: mtv_effect.fuel_grain_mass,
-        }
+        };
     }
 
     pub fn get_noisy_actuator_positions(&self) -> ActuatorPositions {
@@ -491,8 +500,8 @@ impl RCS {
         Self {
             thrust,
             lever_arm,
-            last_command = 0.0,
-            nitrogen_consumption_rate
+            last_command: 0.0,
+            nitrogen_consumption_rate,
             update_rate,
             system_time: 0.0,
         }
@@ -513,7 +522,7 @@ impl RCS {
         
         let torque_magnitude = 2.0 * self.thrust * self.lever_arm;
         let mut torque;
-        if (actual_command == 0.0) {
+        if actual_command == 0.0 {
             // No action needed
             torque = Vector3::zeros();
         } else if actual_command > 0.0 {
@@ -536,9 +545,14 @@ impl RCS {
 }
 
 // Helper to generate 3D noise
-fn noise(sigma: &Vector3<f64>, rng: &mut ThreadRng) -> Vector3<f64> {
+fn noise_3D(sigma: &Vector3<f64>, rng: &mut ThreadRng) -> Vector3<f64> {
     let n_x = Normal::new(0.0, sigma.x).unwrap().sample(rng);
     let n_y = Normal::new(0.0, sigma.y).unwrap().sample(rng);
     let n_z = Normal::new(0.0, sigma.z).unwrap().sample(rng);
     Vector3::new(n_x, n_y, n_z)
+}
+
+// Helper to generate 3D noise
+fn noise_1D(sigma: f64, rng: &mut ThreadRng) -> f64 {
+    Normal::new(0.0, sigma).unwrap().sample(rng)
 }

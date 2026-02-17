@@ -1,9 +1,6 @@
-use nalgebra::{Vector3, UnitQuaternion, Quaternion};
+use nalgebra::{Vector3, Vector4, UnitQuaternion, Quaternion};
 
 use crate::device_sim::*;
-
-/// Constants for the simulation
-const dt: f64 = 0.01; // Time step in seconds
 
 #[derive(Debug, Clone)]
 pub struct Rocket {
@@ -38,11 +35,13 @@ pub struct Rocket {
     pub gps: GPS,
     pub uwb: UWB,
 
+    pub com_to_ground: Vector3<f64>, // Distance from center of mass to ground (for ground interaction)
+
     system_time: f64,
 }
 
 impl Rocket {
-    pub fn new(position: Vector3<f64>, velocity: Vector3<f64>, accel: Vector3<f64>, attitude: UnitQuaternion<f64>, ang_vel: Vector3<f64>, ang_accel: Vector3<f64>, dry_mass: f64, starting_nitrogen_mass: f64, starting_pressurizing_nitrogen_mass: f64, starting_nitrous_mass: f64, starting_fuel_grain_mass: f64, inertia_tensor: Vector3<f64>, tvc_range: f64, tvc: TVC, rcs: RCS, imu: IMU, gps: GPS, uwb: UWB) -> Self {
+    pub fn new(position: Vector3<f64>, velocity: Vector3<f64>, accel: Vector3<f64>, attitude: UnitQuaternion<f64>, ang_vel: Vector3<f64>, ang_accel: Vector3<f64>, dry_mass: f64, starting_nitrogen_mass: f64, starting_pressurizing_nitrogen_mass: f64, starting_nitrous_mass: f64, starting_fuel_grain_mass: f64, inertia_tensor: Vector3<f64>, tvc_range: f64, tvc: TVC, rcs: RCS, imu: IMU, gps: GPS, uwb: UWB, com_to_ground: Vector3<f64>) -> Self {
         let mut rocket = Self {
             position,
             velocity,
@@ -67,6 +66,7 @@ impl Rocket {
             imu,
             gps,
             uwb,
+            com_to_ground,
             system_time: 0.0,
         };
 
@@ -80,8 +80,14 @@ impl Rocket {
     /// Update state based on applied forces and torques
     /// forces: Force vector in World Frame
     /// torques: Torque vector in Body Frame
-    pub fn step(&mut self, control_input: Vector3<f64>, outside_forces: Vector3<f64>, outside_torques: Vector3<f64>, dt: f64) {
-        // TODO: model the ground!
+    /// Returns true if the step is successful and false if the simulation has ended (hit the ground)
+    pub fn step(&mut self, control_input: Vector4<f64>, outside_forces: Vector3<f64>, outside_torques: Vector3<f64>, dt: f64) -> bool {
+        let rotated_offset = self.attitude.transform_vector(&self.com_to_ground);
+        let rocket_bottom = self.position + rotated_offset;
+        if rocket_bottom.z <= 0.0 {
+            return false; // Indicate that we've hit the ground
+        }
+        
 
         // Update Sensors
         self.imu.update(self.accel, self.ang_vel, self.attitude, self.system_time);
@@ -89,7 +95,7 @@ impl Rocket {
         self.uwb.update(self.position, self.system_time);
 
         // Update actuated devices
-        let tvc_effect = self.tvc.update(control_input, self.nitrogen_mass, self.pressurizing_nitrogen_mass, self.nitrous_mass, self.fuel_grain_mass, dt, self.system_time);
+        let tvc_effect: TVCEffect = self.tvc.update(Vector3::new(control_input.x, control_input.y, control_input.z), self.nitrogen_mass, self.pressurizing_nitrogen_mass, self.nitrous_mass, self.fuel_grain_mass, dt, self.system_time);
         self.nitrogen_mass = tvc_effect.nitrogen_mass;
         self.pressurizing_nitrogen_mass = tvc_effect.pressurizing_nitrogen_mass;
         self.nitrous_mass = tvc_effect.nitrous_mass;
@@ -97,7 +103,7 @@ impl Rocket {
 
         // TODO: implement throttle controller
         // TODO: talk to team and change the control vector to have 4 dimensions (add in rcs control command)
-        let rcs_command = 0.0;
+        let rcs_command = control_input.w; // Assuming the 4th element of control_input is for RCS
         let rcs_effect = self.rcs.update(rcs_command, self.nitrogen_mass, dt, self.system_time);
         self.nitrogen_mass = rcs_effect.nitrogen_mass;
 
@@ -154,42 +160,40 @@ impl Rocket {
         // A common robust method is integrating the angle axis directly:
         let angle = self.ang_vel.norm() * dt;
         if angle > 1e-6 {
-            let axis = UnitQuaternion::from_axis_angle(
-                &nalgebra::Unit::new_normalize(self.ang_vel), 
-           
-            |    angle
-            );
+            let axis = UnitQuaternion::from_axis_angle(&nalgebra::Unit::new_normalize(self.ang_vel), angle);
             // Apply rotation: new_attitude = old_attitude * delta_rotation
             self.attitude = self.attitude * axis;
         }
+
+        return true; // Indicate successful step
     }
 }
 
 fn main() {
-    let mut rocket = Rocket::new();
+    // let mut rocket = Rocket::new();
 
-    println!("Starting Simulation...");
-    println!("Initial State: Z = {:.2} m", rocket.position.z);
+    // println!("Starting Simulation...");
+    // println!("Initial State: Z = {:.2} m", rocket.position.z);
 
-    // Simulation Loop
-    for i in 0..100 {
-        // Simulate a thruster firing upwards (World Frame Z)
-        // Force = 20,000 N (enough to overcome gravity: 1000kg * 9.81 = 9810 N)
-        let thrust_force = Vector3::new(0.0, 0.0, 20000.0);
+    // // Simulation Loop
+    // for i in 0..100 {
+    //     // Simulate a thruster firing upwards (World Frame Z)
+    //     // Force = 20,000 N (enough to overcome gravity: 1000kg * 9.81 = 9810 N)
+    //     let thrust_force = Vector3::new(0.0, 0.0, 20000.0);
         
-        // Simulate a small torque causing a spin (Body Frame)
-        let control_torque = Vector3::new(0.0, 0.0, 10.0);
+    //     // Simulate a small torque causing a spin (Body Frame)
+    //     let control_torque = Vector3::new(0.0, 0.0, 10.0);
 
-        rocket.step(thrust_force, control_torque);
+    //     rocket.step(thrust_force, control_torque);
 
-        if i % 10 == 0 {
-            println!(
-                "T={:.2}s | Pos Z: {:.2} | Vel Z: {:.2} | Roll Rate: {:.4}", 
-                (i as f64) * dt,
-                rocket.position.z, 
-                rocket.velocity.z,
-                rocket.angular_velocity.z
-            );
-        }
-    }
+    //     if i % 10 == 0 {
+    //         println!(
+    //             "T={:.2}s | Pos Z: {:.2} | Vel Z: {:.2} | Roll Rate: {:.4}", 
+    //             (i as f64) * dt,
+    //             rocket.position.z, 
+    //             rocket.velocity.z,
+    //             rocket.angular_velocity.z
+    //         );
+    //     }
+    // }
 }
