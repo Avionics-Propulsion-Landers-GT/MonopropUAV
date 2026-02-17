@@ -308,7 +308,7 @@ pub struct MTVEffect {
     pub pressurizing_nitrogen_mass: f64,
     pub nitrous_mass: f64,
     pub fuel_grain_mass: f64,
-    pub thrust: f64,
+    pub thrust: Vector3<f64>,
 }
 
 impl MTV {
@@ -369,7 +369,7 @@ impl MTV {
             pressurizing_nitrogen_mass,
             nitrous_mass,
             fuel_grain_mass,
-            thrust: 0.0,
+            thrust: Vector3::new(0.0, 0.0, 800.0),
         }
     }
 }
@@ -391,7 +391,7 @@ pub struct TVC {
 
 #[derive(Debug, Clone)]
 pub struct TVCEffect {
-    pub thrust: f64,
+    pub thrust: Vector3<f64>,
     pub torque: Vector3<f64>,
     pub nitrogen_mass: f64,
     pub pressurizing_nitrogen_mass: f64,
@@ -448,13 +448,13 @@ impl TVC {
         let yaw_rot = UnitQuaternion::from_axis_angle(&Vector3::x_axis(), yaw_angle);
         let gimbal_rotation = yaw_rot * pitch_rot;
 
-        let thrust_vector = gimbal_rotation.transform_vector(&Vector3::new(0.0, 0.0, mtv_effect.thrust));
+        let thrust_vector = gimbal_rotation.transform_vector(&mtv_effect.thrust);
         let thrust_torque = self.tvc_lever_arm.cross(&thrust_vector);
 
         self.tvc_torque = reaction_torque + thrust_torque;
 
         return TVCEffect {
-            thrust: mtv_effect.thrust,
+            thrust: thrust_vector,
             torque: self.tvc_torque.clone(),
             nitrogen_mass: mtv_effect.nitrogen_mass,
             pressurizing_nitrogen_mass: mtv_effect.pressurizing_nitrogen_mass,

@@ -113,7 +113,7 @@ impl Rocket {
 
         // Translational Dynamics
         let gravity = Vector3::new(0.0, 0.0, -9.81);
-        let total_force = outside_forces + (gravity * mass);
+        let total_force = outside_forces + (gravity * mass) + self.attitude.transform_vector(&tvc_effect.thrust);
 
         self.accel = total_force / mass;        
         self.velocity += self.accel * dt;

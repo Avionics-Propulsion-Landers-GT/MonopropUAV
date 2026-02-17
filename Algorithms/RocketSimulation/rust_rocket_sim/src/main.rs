@@ -28,8 +28,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
 
-    let position = Vector3::new(0.0, 0.0, 50.0);
-    let velocity = Vector3::new(0.0, 0.0, 10.0);
+    let position = Vector3::new(0.0, 0.0, 10.0);
+    let velocity = Vector3::new(0.0, 0.0, 0.0);
     let acceleration = Vector3::new(0.0, 0.0, 0.0);
     let attitude = UnitQuaternion::identity();
     let angular_velocity = Vector3::new(0.0, 0.0, 0.0);
@@ -51,7 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut control_input = Vector4::new(0.0, 0.0, 0.0, 0.0);
     let mut outside_forces = Vector3::new(0.0, 0.0, 0.0);
-    let mut outside_torques = Vector3::new(50.0, 0.0, 0.0);
+    let mut outside_torques = Vector3::new(5.0, 0.0, 0.0);
     let dt = 0.02; // 20 ms time step
     while rocket.step(control_input, outside_forces, outside_torques, dt) {
         // For this example, we'll just keep the control input zero and not apply any outside forces or torques.
