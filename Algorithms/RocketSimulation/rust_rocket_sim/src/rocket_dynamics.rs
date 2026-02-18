@@ -15,12 +15,19 @@ pub struct Rocket {
     pub dry_mass: f64,
     pub nitrogen_mass: f64,
     starting_nitrogen_mass: f64,
+    pub nitrogen_tank_empty_offset: Vector3<f64>, // Vector offset from frame CoM to the empty nitrogen tank CoM
+    pub nitrogen_tank_full_offset: Vector3<f64>, // Vector offset from the empty nitrogen tank CoM to the full nitrogen tank CoM
     pub pressurizing_nitrogen_mass: f64,
     starting_pressurizing_nitrogen_mass: f64,
     pub nitrous_mass: f64,
     starting_nitrous_mass: f64,
+    pub nitrous_tank_empty_offset: Vector3<f64>, // Vector offset from frame CoM to the empty nitrous tank CoM (no nitrous or nitrogen in it)
+    pub nitrous_tank_full_offset: Vector3<f64>, // Vector offset from the empty nitrous tank CoM to the nitrous tank CoM when it's full of nitrous
+    pub nitrous_tank_depleted_offset: Vector3<f64>, // Vector offset from the empty nitrous tank CoM to the nitrous tank CoM when all of the nitrous has been depleted
     pub fuel_grain_mass: f64,
     starting_fuel_grain_mass: f64,
+    pub frame_com_to_gimbal: Vector3<f64>, // Vector offset from frame CoM to the gimbal point (thrust plate)
+    pub gimbal_to_tvc_com: Vector3<f64>, // Vector offset from gimbal point to the TVC's center of mass
 
     pub inertia_tensor: Vector3<f64>, // Simplified diagonal inertia matrix
 
@@ -41,7 +48,7 @@ pub struct Rocket {
 }
 
 impl Rocket {
-    pub fn new(position: Vector3<f64>, velocity: Vector3<f64>, accel: Vector3<f64>, attitude: UnitQuaternion<f64>, ang_vel: Vector3<f64>, ang_accel: Vector3<f64>, dry_mass: f64, starting_nitrogen_mass: f64, starting_pressurizing_nitrogen_mass: f64, starting_nitrous_mass: f64, starting_fuel_grain_mass: f64, inertia_tensor: Vector3<f64>, tvc_range: f64, tvc: TVC, rcs: RCS, imu: IMU, gps: GPS, uwb: UWB, com_to_ground: Vector3<f64>) -> Self {
+    pub fn new(position: Vector3<f64>, velocity: Vector3<f64>, accel: Vector3<f64>, attitude: UnitQuaternion<f64>, ang_vel: Vector3<f64>, ang_accel: Vector3<f64>, dry_mass: f64, starting_nitrogen_mass: f64, nitrogen_tank_empty_offset: Vector3<f64>, nitrogen_tank_full_offset: Vector3<f64>, starting_pressurizing_nitrogen_mass: f64, starting_nitrous_mass: f64, nitrous_tank_empty_offset: Vector3<f64>, nitrous_tank_full_offset: Vector3<f64>, nitrous_tank_depleted_offset: Vector3<f64>, starting_fuel_grain_mass: f64, frame_com_to_gimbal: Vector3<f64>, gimbal_to_tvc_com: Vector3<f64>, inertia_tensor: Vector3<f64>, tvc_range: f64, tvc: TVC, rcs: RCS, imu: IMU, gps: GPS, uwb: UWB, com_to_ground: Vector3<f64>) -> Self {
         let mut rocket = Self {
             position,
             velocity,
@@ -52,12 +59,19 @@ impl Rocket {
             dry_mass,
             nitrogen_mass: starting_nitrogen_mass,
             starting_nitrogen_mass,
+            nitrogen_tank_empty_offset,
+            nitrogen_tank_full_offset,
             pressurizing_nitrogen_mass: starting_pressurizing_nitrogen_mass,
             starting_pressurizing_nitrogen_mass,
             nitrous_mass: starting_nitrous_mass,
             starting_nitrous_mass,
+            nitrous_tank_empty_offset,
+            nitrous_tank_full_offset,
+            nitrous_tank_depleted_offset,
             fuel_grain_mass: starting_fuel_grain_mass,
             starting_fuel_grain_mass,
+            frame_com_to_gimbal,
+            gimbal_to_tvc_com,
             inertia_tensor,
             tvc_range,
             tvc,
