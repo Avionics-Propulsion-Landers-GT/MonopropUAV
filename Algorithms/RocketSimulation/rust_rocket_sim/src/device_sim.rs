@@ -338,8 +338,7 @@ impl MTV {
 
             self.system_time = system_time;
 
-            // TODO: convert the target thrust into a target angle
-            let target_angle = 0.0;
+            let target_angle = self.get_target_angle(target_thrust);
 
             let error = target_angle - self.angle;
             let command = error * self.p_gain;
@@ -354,22 +353,44 @@ impl MTV {
             self.angle = nalgebra::clamp(self.angle, 0.0, 90.0);
         }
 
-        let mtv_effect = self.get_thrust(nitrogen_mass, pressurizing_nitrogen_mass, nitrous_mass, fuel_grain_mass);
+        let mtv_effect = self.get_thrust(nitrogen_mass, pressurizing_nitrogen_mass, nitrous_mass, fuel_grain_mass, dt);
 
         return mtv_effect;
     }
 
-    pub fn get_thrust(&mut self, nitrogen_mass:f64, pressurizing_nitrogen_mass: f64,nitrous_mass: f64, fuel_grain_mass: f64) -> MTVEffect {
+    pub fn get_target_angle(&mut self, target_thrust: f64) -> f64 {
+        // TODO: implement target angle calculation based on thrust
+        
+        // y = 0.1 * e^((x - 300) / 300) - 0.05
+        // This is the reversal of the example thrust curve. Replace with actual relation later.
+        let target_angle = 0.1 * ((target_thrust - 300.0) / 300.0).exp() - 0.05;
+        target_angle
+    }
+
+    pub fn get_thrust(&mut self, nitrogen_mass:f64, pressurizing_nitrogen_mass: f64, nitrous_mass: f64, fuel_grain_mass: f64, dt: f64) -> MTVEffect {
         // TODO: update the nitrogen, nitrous, and fuel grain masses (nitrogen is used to pressurize the tank, so nitrogen will flow out of the nitrogen tank into the nitrous tank)
         // TODO: use the current throttle angle to find the flow rate, then determine thrust
         // Remember to take into account either mass running out
         // TODO: also model the thrust decay somehow?
+
+        // y = 300 * ln((x + 0.05) / 0.1) + 300 is an example thrust curve. Replace later with true relation
+        let thrust = 300.0 * ((self.angle + 0.05) / 0.1).ln() + 300.0;
+        let nitrous_alpha = 1.0/(9.81 * 180.0);
+        let nitrogen_alpha = 1.0/(9.81 * 180.0);
+        let fuel_grain_alpha = 1.0/(9.81 * 180.0);
+
+        let new_nitrogen_mass = (nitrogen_mass - nitrogen_alpha * thrust * dt).max(0.0);
+        let new_pressurizing_nitrogen_mass = (pressurizing_nitrogen_mass + nitrogen_alpha * thrust * dt).max(0.0);
+        let new_nitrous_mass = (nitrous_mass - nitrous_alpha * thrust * dt).max(0.0);
+        let new_fuel_grain_mass = (fuel_grain_mass - fuel_grain_alpha * thrust * dt).max(0.0);
+
+
         MTVEffect {
-            nitrogen_mass,
-            pressurizing_nitrogen_mass,
-            nitrous_mass,
-            fuel_grain_mass,
-            thrust: Vector3::new(0.0, 0.0, 800.0),
+            nitrogen_mass: new_nitrogen_mass,
+            pressurizing_nitrogen_mass: new_pressurizing_nitrogen_mass,
+            nitrous_mass: new_nitrous_mass,
+            fuel_grain_mass: new_fuel_grain_mass,
+            thrust: Vector3::new(0.0, 0.0, thrust),
         }
     }
 }

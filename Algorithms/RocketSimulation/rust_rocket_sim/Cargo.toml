@@ -8,3 +8,6 @@ rerun = "0.28"
 nalgebra = "0.32"
 rand = "0.9"
 rand_distr = "0.5"
+ndarray = "0.15"
+optimization_engine = "0.6.0"
+ndarray-linalg = { version = "0.16", features = ["intel-mkl"] }
