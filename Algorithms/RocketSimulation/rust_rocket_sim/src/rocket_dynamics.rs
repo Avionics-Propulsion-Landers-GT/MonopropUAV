@@ -129,7 +129,7 @@ impl Rocket {
 
 
         self.system_time += dt;
-        let mass = self.dry_mass + self.nitrogen_mass + self.nitrous_mass + self.fuel_grain_mass;
+        let mass = self.get_mass();
 
         // Translational Dynamics
         let gravity = Vector3::new(0.0, 0.0, -9.81);
@@ -186,6 +186,31 @@ impl Rocket {
         }
 
         return true; // Indicate successful step
+    }
+
+    pub fn get_mass(&self) -> f64 {
+        self.dry_mass + self.nitrogen_tank_empty_mass + self.nitrogen_mass + self.nitrous_tank_empty_mass + self.pressurizing_nitrogen_mass + self.nitrous_mass + self.tvc_module_empty_mass + self.fuel_grain_mass
+    }
+
+    // State vector: [x, y, z, qx, qy, qz, qw, x_dot, y_dot, z_dot, wx, wy, wz]
+    // This is formatted for use in the MPC controller
+    pub fn get_state(&self) -> Array1<f64> {
+        let mut state = Array1::zeros(13);
+        state[0] = self.position.x;
+        state[1] = self.position.y;
+        state[2] = self.position.z;
+        state[3] = self.attitude.i;
+        state[4] = self.attitude.j;
+        state[5] = self.attitude.k;
+        state[6] = self.attitude.w;
+        state[7] = self.velocity.x;
+        state[8] = self.velocity.y;
+        state[9] = self.velocity.z;
+        state[10] = self.ang_vel.x;
+        state[11] = self.ang_vel.y;
+        state[12] = self.ang_vel.z;
+
+        state
     }
 }
 
