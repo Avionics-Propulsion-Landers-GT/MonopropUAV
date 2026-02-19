@@ -465,6 +465,9 @@ pub fn OpEnSolve(
     QN: &Array2<f64>,
     smoothing_weight: &Array1<f64>,
     panoc_cache: &mut PANOCCache,
+    min_thrust: f64,
+    max_thrust: f64,
+    gimbal_limit_rad: f64,
 ) -> (Array1<f64>, Array2<f64>) {
     use ndarray::ArrayView1;
 
@@ -504,12 +507,12 @@ pub fn OpEnSolve(
     let mut u_max_flat: Vec<f64> = Vec::with_capacity(n_dim_u);
     for _k in 0..N {
         // [gimbal_theta, gimbal_phi, thrust]
-        u_min_flat.push((-15.0_f64).to_radians());
-        u_max_flat.push(( 15.0_f64).to_radians());
-        u_min_flat.push((-15.0_f64).to_radians());
-        u_max_flat.push(( 15.0_f64).to_radians());
-        u_min_flat.push(300.0);
-        u_max_flat.push(1000.0);
+        u_min_flat.push(-gimbal_limit_rad);
+        u_max_flat.push(gimbal_limit_rad);
+        u_min_flat.push(-gimbal_limit_rad);
+        u_max_flat.push(gimbal_limit_rad);
+        u_min_flat.push(min_thrust);
+        u_max_flat.push(max_thrust);
     }
     let bounds = constraints::Rectangle::new(
         Some(&u_min_flat[..]),
