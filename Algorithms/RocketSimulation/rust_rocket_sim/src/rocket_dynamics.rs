@@ -1,6 +1,7 @@
 use nalgebra::{Vector3, Vector4, UnitQuaternion, Quaternion};
 
 use crate::device_sim::*;
+use ndarray::Array1;
 
 #[derive(Debug, Clone)]
 pub struct Rocket {
