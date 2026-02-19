@@ -1,8 +1,9 @@
 use clarabel::algebra::*;
 use clarabel::solver::*;
 use std::f64::consts::PI;
+use std::time::Instant;
 
-use crate::lossless::{TrajectoryResult};
+use crate::lossless::{SolveAttemptResult, SolveMetrics, SolveRunResult, TrajectoryResult};
 
 const GRAVITY: [f64; 3] = [0.0, 0.0, -9.81];
 
@@ -353,8 +354,8 @@ impl ChebyshevLosslessSolver {
     }
 
 
-    // pub fn solve_at_current_time(&mut self) -> Result<clarabel::solver::DefaultSolution<f64>, String> {
-    pub fn solve_at_current_time(&mut self, current_time: f64) -> Option<TrajectoryResult> {
+    pub fn solve_at_current_time(&mut self, current_time: f64) -> SolveAttemptResult {
+        let attempt_wall_start = Instant::now();
         let m0 = self.dry_mass + self.fuel_mass;
         
         const num_vars_per_node: usize = 11; // x (3), v (3), w (1), sigma (1), u (3)
@@ -665,18 +666,31 @@ impl ChebyshevLosslessSolver {
 
         let mut settings = DefaultSettings::default(); // Adjust tolerances here if needed
         settings.verbose = true;
+        // settings.verbose = false;
         
         let mut solver = DefaultSolver::new(&p, &q, &a_csc, &b, &cones, settings);
 
         solver.solve();
+        let metrics = SolveMetrics::from_single_attempt(
+            solver.solution.status,
+            solver.solution.iterations,
+            solver.solution.solve_time,
+            attempt_wall_start.elapsed().as_secs_f64(),
+        );
 
         if solver.solution.status == SolverStatus::Solved || solver.solution.status == SolverStatus::AlmostSolved {
             let traj_result = self.extract_result(&solver.solution, current_time);
-            Some(traj_result)
+            SolveAttemptResult {
+                trajectory: Some(traj_result),
+                metrics,
+            }
             
         } else {
             println!("{}", format!("Solver failed with status {:?}", solver.solution.status));
-            return None
+            SolveAttemptResult {
+                trajectory: None,
+                metrics,
+            }
         }
     }
 
@@ -796,7 +810,8 @@ impl ChebyshevLosslessSolver {
         - Option 2: Progressive p-refinement
             - Start with a low polynomial order and solve to find a feasible flight time, increasing the polynomial order 
     */
-    pub fn solve(&mut self) -> Option<TrajectoryResult> {
+    pub fn solve(&mut self) -> SolveRunResult {
+        let solve_wall_start = Instant::now();
         self.N = self.coarse_nodes;
 
         let vel_norm = self.initial_velocity.iter()
@@ -809,10 +824,14 @@ impl ChebyshevLosslessSolver {
         let mut current_time = t_min;
 
         let mut traj_result: Option<TrajectoryResult> = None;
+        let mut coarse_metrics = SolveMetrics::default();
+        let mut fine_metrics = SolveMetrics::default();
 
         while current_time <= t_max {
-            println!("Solving coarse step {}...", current_time);
-            match self.solve_at_current_time(current_time) {
+            println!("Solving coarse step with time {}...", current_time);
+            let attempt = self.solve_at_current_time(current_time);
+            coarse_metrics.accumulate(&attempt.metrics);
+            match attempt.trajectory {
                 Some(sol) => {
                     println!("✅ Converged successfully at time {}.", current_time);
                     traj_result = Some(sol);
@@ -825,13 +844,22 @@ impl ChebyshevLosslessSolver {
 
         if traj_result.is_none() {
             println!("No successful solve found in the given time bounds.");
-            return None;
+            let mut total_metrics = coarse_metrics;
+            total_metrics.wall_time_s = solve_wall_start.elapsed().as_secs_f64();
+            return SolveRunResult {
+                trajectory: None,
+                coarse_metrics,
+                fine_metrics,
+                total_metrics,
+            };
         }
 
         self.N = self.fine_nodes;
         while current_time <= t_max {
-            println!("Solving fine step {}...", current_time);
-            match self.solve_at_current_time(current_time) {
+            println!("Solving fine step with time {}...", current_time);
+            let attempt = self.solve_at_current_time(current_time);
+            fine_metrics.accumulate(&attempt.metrics);
+            match attempt.trajectory {
                 Some(sol) => {
                     println!("✅ Converged successfully at time {}.", current_time);
                     traj_result = Some(sol);
@@ -844,11 +872,28 @@ impl ChebyshevLosslessSolver {
         
         if traj_result.is_none() {
             println!("No successful solve found in the given time bounds.");
-            return None;
+            let mut total_metrics = coarse_metrics;
+            total_metrics.accumulate(&fine_metrics);
+            total_metrics.wall_time_s = solve_wall_start.elapsed().as_secs_f64();
+            return SolveRunResult {
+                trajectory: None,
+                coarse_metrics,
+                fine_metrics,
+                total_metrics,
+            };
         }
 
 
-        return traj_result
+        let mut total_metrics = coarse_metrics;
+        total_metrics.accumulate(&fine_metrics);
+        total_metrics.wall_time_s = solve_wall_start.elapsed().as_secs_f64();
+
+        SolveRunResult {
+            trajectory: traj_result,
+            coarse_metrics,
+            fine_metrics,
+            total_metrics,
+        }
     }
     
     pub fn csc_from_triplets(nrows: usize, ncols: usize, rows: &[usize], cols: &[usize], vals: &[f64]) -> CscMatrix<f64> {

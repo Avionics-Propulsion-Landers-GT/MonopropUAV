@@ -1,5 +1,6 @@
 use clarabel::algebra::*;
 use clarabel::solver::*;
+use std::time::Instant;
 
 const GRAVITY: [f64; 3] = [0.0, 0.0, -9.81];
 
@@ -31,6 +32,72 @@ pub struct TrajectoryResult {
     pub sigmas: Vec<f64>,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct SolveMetrics {
+    pub attempts: u32,
+    pub successes: u32,
+    pub iterations: u32,
+    pub clarabel_solve_time_s: f64,
+    pub wall_time_s: f64,
+    pub last_status: SolverStatus,
+}
+
+impl Default for SolveMetrics {
+    fn default() -> Self {
+        Self {
+            attempts: 0,
+            successes: 0,
+            iterations: 0,
+            clarabel_solve_time_s: 0.0,
+            wall_time_s: 0.0,
+            last_status: SolverStatus::Unsolved,
+        }
+    }
+}
+
+impl SolveMetrics {
+    pub fn from_single_attempt(
+        status: SolverStatus,
+        iterations: u32,
+        clarabel_solve_time_s: f64,
+        wall_time_s: f64,
+    ) -> Self {
+        Self {
+            attempts: 1,
+            successes: if status == SolverStatus::Solved || status == SolverStatus::AlmostSolved {
+                1
+            } else {
+                0
+            },
+            iterations,
+            clarabel_solve_time_s,
+            wall_time_s,
+            last_status: status,
+        }
+    }
+
+    pub fn accumulate(&mut self, other: &SolveMetrics) {
+        self.attempts += other.attempts;
+        self.successes += other.successes;
+        self.iterations += other.iterations;
+        self.clarabel_solve_time_s += other.clarabel_solve_time_s;
+        self.wall_time_s += other.wall_time_s;
+        self.last_status = other.last_status;
+    }
+}
+
+pub struct SolveAttemptResult {
+    pub trajectory: Option<TrajectoryResult>,
+    pub metrics: SolveMetrics,
+}
+
+pub struct SolveRunResult {
+    pub trajectory: Option<TrajectoryResult>,
+    pub coarse_metrics: SolveMetrics,
+    pub fine_metrics: SolveMetrics,
+    pub total_metrics: SolveMetrics,
+}
+
 impl Default for LosslessSolver {
     fn default() -> Self {
         LosslessSolver {
@@ -60,7 +127,8 @@ impl LosslessSolver {
         LosslessSolver::default()
     }
 
-    pub fn solve_at_current_time(&mut self) -> Option<TrajectoryResult> {
+    pub fn solve_at_current_time(&mut self) -> SolveAttemptResult {
+        let attempt_wall_start = Instant::now();
         let m0 = self.dry_mass + self.fuel_mass;
         
         let n_vars = 3 * (self.N + 1) // x
@@ -341,14 +409,26 @@ impl LosslessSolver {
         );
 
         solver.solve();
+        let metrics = SolveMetrics::from_single_attempt(
+            solver.solution.status,
+            solver.solution.iterations,
+            solver.solution.solve_time,
+            attempt_wall_start.elapsed().as_secs_f64(),
+        );
 
         if solver.solution.status == SolverStatus::Solved || solver.solution.status == SolverStatus::AlmostSolved {
             let traj_result = self.extract_result(&solver.solution);
-            Some(traj_result)
+            SolveAttemptResult {
+                trajectory: Some(traj_result),
+                metrics,
+            }
             
         } else {
             println!("{}", format!("Solver failed with status {:?}", solver.solution.status));
-            return None
+            SolveAttemptResult {
+                trajectory: None,
+                metrics,
+            }
         }
     }
 
@@ -446,7 +526,8 @@ impl LosslessSolver {
         }
     }
 
-    pub fn solve(&mut self) -> Option<TrajectoryResult> {
+    pub fn solve(&mut self) -> SolveRunResult {
+        let solve_wall_start = Instant::now();
         self.delta_t = self.coarse_delta_t;
 
         let vel_norm = self.initial_velocity.iter()
@@ -461,11 +542,15 @@ impl LosslessSolver {
         let coarse_n_max = (coarse_t_max / self.delta_t).floor() as i64;
 
         let mut traj_result: Option<TrajectoryResult> = None;
+        let mut coarse_metrics = SolveMetrics::default();
+        let mut fine_metrics = SolveMetrics::default();
 
         for k in coarse_n_min..coarse_n_max {
             println!("Solving step {}...", k);
             self.N = k;
-            match self.solve_at_current_time() {
+            let attempt = self.solve_at_current_time();
+            coarse_metrics.accumulate(&attempt.metrics);
+            match attempt.trajectory {
                 Some(sol) => {
                     println!("✅ Step {} converged successfully.", k);
                     traj_result = Some(sol);
@@ -477,7 +562,14 @@ impl LosslessSolver {
 
         if traj_result.is_none() {
             println!("No successful solve found in the given time bounds.");
-            return None;
+            let mut total_metrics = coarse_metrics;
+            total_metrics.wall_time_s = solve_wall_start.elapsed().as_secs_f64();
+            return SolveRunResult {
+                trajectory: None,
+                coarse_metrics,
+                fine_metrics,
+                total_metrics,
+            };
         }
 
         let fine_start = ((self.N as f64) * self.coarse_delta_t / self.fine_delta_t).ceil() as i64;
@@ -490,8 +582,10 @@ impl LosslessSolver {
         for k in fine_start..fine_n_max {
             println!("Solving step {}...", k);
             self.N = k;
-            match self.solve_at_current_time() {
-                    Some(sol) => {
+            let attempt = self.solve_at_current_time();
+            fine_metrics.accumulate(&attempt.metrics);
+            match attempt.trajectory {
+                Some(sol) => {
                     println!("✅ Fine solve converged successfully.");
                     traj_result = Some(sol);
                     break;
@@ -502,9 +596,26 @@ impl LosslessSolver {
 
         if traj_result.is_none() {
             println!("No successful solve found in the given time bounds.");
-            return None;
+            let mut total_metrics = coarse_metrics;
+            total_metrics.accumulate(&fine_metrics);
+            total_metrics.wall_time_s = solve_wall_start.elapsed().as_secs_f64();
+            return SolveRunResult {
+                trajectory: None,
+                coarse_metrics,
+                fine_metrics,
+                total_metrics,
+            };
         }
 
-        return traj_result
+        let mut total_metrics = coarse_metrics;
+        total_metrics.accumulate(&fine_metrics);
+        total_metrics.wall_time_s = solve_wall_start.elapsed().as_secs_f64();
+
+        SolveRunResult {
+            trajectory: traj_result,
+            coarse_metrics,
+            fine_metrics,
+            total_metrics,
+        }
     }
 }

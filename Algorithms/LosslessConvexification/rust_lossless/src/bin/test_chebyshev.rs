@@ -4,7 +4,6 @@ mod lossless;
 mod chebyshev_lossless;
 
 use crate::chebyshev_lossless::ChebyshevLosslessSolver;
-use crate::lossless::TrajectoryResult;
 
 fn main() {
     let mut solver = ChebyshevLosslessSolver {
@@ -28,7 +27,15 @@ fn main() {
 
     println!("Running test_chebyshev...\n");
 
-    match solver.solve() {
+    let solve_run = solver.solve();
+    println!(
+        "Metrics: coarse attempts={} fine attempts={} total wall={:.4}s",
+        solve_run.coarse_metrics.attempts,
+        solve_run.fine_metrics.attempts,
+        solve_run.total_metrics.wall_time_s
+    );
+
+    match solve_run.trajectory {
         Some(traj) => {
             println!("Sample count: positions={} velocities={} thrusts={} sigmas={}",
                 traj.positions.len(), traj.velocities.len(), traj.thrusts.len(), traj.sigmas.len());
