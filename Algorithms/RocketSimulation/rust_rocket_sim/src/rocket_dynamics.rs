@@ -49,6 +49,16 @@ pub struct Rocket {
     pub com_to_ground: Vector3<f64>, // Distance from center of mass to ground (for ground interaction)
 
     system_time: f64,
+
+    pub debug_info: RocketDebugInfo,
+}
+
+#[derive(Debug, Clone)]
+pub struct RocketDebugInfo{
+    pub thrust_vector: Vector3<f64>,
+    pub thrust_torque: Vector3<f64>,
+    pub total_force: Vector3<f64>,
+    pub total_torque: Vector3<f64>,
 }
 
 impl Rocket {
@@ -89,6 +99,12 @@ impl Rocket {
             uwb,
             com_to_ground,
             system_time: 0.0,
+            debug_info: RocketDebugInfo {
+                thrust_vector: Vector3::zeros(),
+                thrust_torque: Vector3::zeros(),
+                total_force: Vector3::zeros(),
+                total_torque: Vector3::zeros(),
+            },
         };
 
         rocket.imu.update(rocket.accel, rocket.ang_vel, rocket.attitude, rocket.system_time);
@@ -134,7 +150,11 @@ impl Rocket {
 
         // Translational Dynamics
         let gravity = Vector3::new(0.0, 0.0, -9.81);
-        let total_force = outside_forces + (gravity * mass) + self.attitude.transform_vector(&tvc_effect.thrust);
+        let thrust_vector = self.attitude.transform_vector(&tvc_effect.thrust);
+        let total_force = outside_forces + (gravity * mass) + thrust_vector;
+        println!("Gravity Force: {:?}", gravity * mass);
+        self.debug_info.thrust_vector = thrust_vector;
+        self.debug_info.total_force = total_force;
 
         self.accel = total_force / mass;        
         self.velocity += self.accel * dt;
@@ -153,6 +173,8 @@ impl Rocket {
 
         let gyro_torque = self.ang_vel.cross(&i_omega);
         let net_torque = outside_torques - gyro_torque + tvc_effect.torque + rcs_effect.torque;
+        self.debug_info.thrust_torque = tvc_effect.torque;
+        self.debug_info.total_torque = net_torque;
 
         // Angular acceleration (alpha)
         let alpha = Vector3::new(

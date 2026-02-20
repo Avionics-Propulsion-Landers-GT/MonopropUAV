@@ -10,6 +10,7 @@ pub struct MPC {
     pub n_steps: usize, // MPC horizon steps
     pub dt: f64, // time step
     pub integral_gains: (f64, f64, f64), // integral gains for x, y, z
+    pub integral_values: (f64, f64, f64), // integral values for x, y, z
     pub q: Array2<f64>, // state cost matrix
     pub r: Array2<f64>, // control cost matrix
     pub qn: Array2<f64>, // terminal state cost matrix
@@ -29,6 +30,7 @@ impl MPC {
             n_steps,
             dt,
             integral_gains,
+            integral_values: (0.0, 0.0, 0.0),
             q,
             r,
             qn,
@@ -41,39 +43,32 @@ impl MPC {
         }
     }
 
-    pub fn solve(&mut self, x0: &Array1<f64>, xref_traj: &Vec<Array1<f64>>, u_warm: &Vec<Array1<f64>>) -> Vec<Array1<f64>> {
+    pub fn solve(&mut self, x0: &Array1<f64>, xref_traj: &Vec<Array1<f64>>, u_warm: &Vec<Array1<f64>>, mass: f64) -> Vec<Array1<f64>> {
         let mut x = x0.clone(); // initial state
         let mut xref_traj = xref_traj.clone(); // reference trajectory
         let mut u_warm = u_warm.clone(); // warm start control sequence
-        let mut u_prev: Array1<f64> = Array1::zeros(self.m); // previous control input for smoothing
+        let mut u_prev: Array1<f64> = u_warm[0].clone(); // previous control input for smoothing
         let mut error_integral: (f64, f64, f64) = (0.0, 0.0, 0.0); // integral of errors for x, y, z
         let mut panoc_cache = optimization_engine::panoc::PANOCCache::new(self.m * self.n_steps, self.panoc_cache_tolerance, self.panoc_cache_lbfgs_memory);
 
-        let mut x_integral = 0.0;
-        let mut y_integral = 0.0;
-        let mut z_integral = 0.0;
         let mut control_sequence: Vec<Array1<f64>> = Vec::new();
 
         for k in 0..self.n_steps {
             let mut xref = xref_traj[k].clone();
 
-            x_integral += self.integral_gains.0 * (xref[0] - x[0]) * self.dt;
-            y_integral += self.integral_gains.1 * (xref[1] - x[1]) * self.dt;
-            z_integral += self.integral_gains.2 * (xref[2] - x[2]) * self.dt;
+            self.integral_values.0 += self.integral_gains.0 * (xref[0] - x[0]) * self.dt;
+            self.integral_values.1 += self.integral_gains.1 * (xref[1] - x[1]) * self.dt;
+            self.integral_values.2 += self.integral_gains.2 * (xref[2] - x[2]) * self.dt;
 
-            xref[0] += x_integral; // modify x reference with integral term
-            xref[1] += y_integral; // modify y reference with integral term
-            xref[2] += z_integral; // modify z reference with integral term
+            xref[0] += self.integral_values.0; // modify x reference with integral term
+            xref[1] += self.integral_values.1; // modify y reference with integral term
+            xref[2] += self.integral_values.2; // modify z reference with integral term
 
-            for i in 0..xref_traj.len() {
-                xref_traj[i][0] += x_integral;
-                xref_traj[i][1] += y_integral;
-                xref_traj[i][2] += z_integral;
-            }
+            // println!("Integral Values: {:?}", self.integral_values);
 
             // Solve MPC to get optimal control sequence
             // solve using OpEn
-            let (mut u_apply, u_warm) = mpc_crate::OpEnSolve(&x, &u_warm, &xref_traj, &self.q, &self.r, &self.qn, &self.smoothing_weight, &mut panoc_cache, self.min_thrust, self.max_thrust, self.gimbal_limit);
+            let (mut u_apply, u_warm) = mpc_crate::OpEnSolve(&x, &u_warm, &xref_traj, &self.q, &self.r, &self.qn, &self.smoothing_weight, &mut panoc_cache, mass, self.min_thrust, self.max_thrust, self.gimbal_limit);
 
             // exponential filter
             if k >= 1 {

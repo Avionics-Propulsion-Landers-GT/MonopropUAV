@@ -55,7 +55,7 @@ impl IMU {
     }
 
     pub fn update(&mut self, accel: Vector3<f64>, ang_vel: Vector3<f64>, attitude: UnitQuaternion<f64>, system_time: f64) -> IMUReading {
-        let elapsed_time = self.system_time - system_time;
+        let elapsed_time = system_time - self.system_time;
         if elapsed_time < 1.0 / self.update_rate {
             return self.last_reading.clone();
         }
@@ -138,7 +138,7 @@ impl GPS {
     }
 
     pub fn update(&mut self, position: Vector3<f64>, system_time: f64) -> GPSReading {
-        let elapsed_time = self.system_time - system_time;
+        let elapsed_time = system_time - self.system_time;
         if elapsed_time < 1.0 / self.update_rate {
             return self.last_reading.clone();
         }
@@ -191,7 +191,7 @@ impl UWB {
     }
 
     pub fn update(&mut self, position: Vector3<f64>, system_time: f64) -> UWBReading {
-        let elapsed_time = self.system_time - system_time;
+        let elapsed_time = system_time - self.system_time;
         if elapsed_time < 1.0 / self.update_rate {
             return self.last_reading.clone();
         }
@@ -250,7 +250,7 @@ impl TVCActuator {
     }
 
     pub fn update(&mut self, target_position: f64, load_force: f64, dt: f64, system_time: f64) {
-        let elapsed_time = self.system_time - system_time;
+        let elapsed_time = system_time - self.system_time;
         if elapsed_time < 1.0 / self.update_rate {
             // velocity stays constant, therefore acceleration is zero, but position does update
             self.accel = 0.0;
@@ -328,7 +328,7 @@ impl MTV {
     }
 
     pub fn update(&mut self, target_thrust: f64, nitrogen_mass: f64, pressurizing_nitrogen_mass: f64, nitrous_mass: f64, fuel_grain_mass: f64, dt: f64, system_time: f64) -> MTVEffect {
-        let elapsed_time = self.system_time - system_time;
+        let elapsed_time = system_time - self.system_time;
         if elapsed_time < 1.0 / self.update_rate {
             // angular velocity stays constant, therefore angular acceleration is zero, but angle does update
             self.ang_accel = 0.0;
@@ -339,6 +339,7 @@ impl MTV {
             self.system_time = system_time;
 
             let target_angle = self.get_target_angle(target_thrust);
+            self.angle = target_angle; // TODO: For now, we will assume the MTV can achieve the target angle within one time step. Replace with actual dynamics later.
 
             let error = target_angle - self.angle;
             let command = error * self.p_gain;
@@ -363,7 +364,8 @@ impl MTV {
         
         // y = 0.1 * e^((x - 300) / 300) - 0.05
         // This is the reversal of the example thrust curve. Replace with actual relation later.
-        let target_angle = 0.1 * ((target_thrust - 300.0) / 300.0).exp() - 0.05;
+        let target_angle = 90.0 * (0.1 * ((target_thrust - 300.0) / 300.0).exp() - 0.05);
+        println!("Target Thrust: {}, Target Angle: {}", target_thrust, target_angle);
         target_angle
     }
 
@@ -373,8 +375,19 @@ impl MTV {
         // Remember to take into account either mass running out
         // TODO: also model the thrust decay somehow?
 
+        if nitrous_mass <= 0.0 || fuel_grain_mass <= 0.0 {
+            return MTVEffect {
+                nitrogen_mass,
+                pressurizing_nitrogen_mass,
+                nitrous_mass,
+                fuel_grain_mass,
+                thrust: Vector3::zeros(),
+            };
+        }
+
         // y = 300 * ln((x + 0.05) / 0.1) + 300 is an example thrust curve. Replace later with true relation
-        let thrust = 300.0 * ((self.angle + 0.05) / 0.1).ln() + 300.0;
+        let thrust = 300.0 * ((self.angle / 90.0 + 0.05) / 0.1).ln() + 300.0;
+        println!("MTV Angle: {}, Thrust: {}", self.angle, thrust);
         let nitrous_alpha = 1.0/(9.81 * 180.0);
         let nitrogen_alpha = 1.0/(9.81 * 180.0);
         let fuel_grain_alpha = 1.0/(9.81 * 180.0);
@@ -457,17 +470,26 @@ impl TVC {
         // TODO: translate gimbal angle commands to actuator target positions and update ang vels and ang accel
         let x_target = 0.0;
         let y_target = 0.0;
-        let pitch_angle = 0.0;
-        let yaw_angle = 0.0;
+        let x_angle = command[0];
+        let y_angle = command[1];
 
         self.x_actuator.update(x_target, x_load, dt, system_time);
         self.y_actuator.update(y_target, y_load, dt, system_time);
 
         let reaction_torque = self.ang_accel * engine_inertia * -1.0;
+        
+        // command[0] = theta (MPC thinks this creates X thrust)
+        // To create X thrust, the nozzle must swing along the X axis.
+        // To swing along the X axis, we must rotate AROUND the Y axis!
+        let y_rot = UnitQuaternion::from_axis_angle(&Vector3::y_axis(), x_angle);
 
-        let pitch_rot = UnitQuaternion::from_axis_angle(&Vector3::y_axis(), pitch_angle);
-        let yaw_rot = UnitQuaternion::from_axis_angle(&Vector3::x_axis(), yaw_angle);
-        let gimbal_rotation = yaw_rot * pitch_rot;
+        // command[1] = phi (MPC thinks this creates Y thrust)
+        // To create Y thrust, we must rotate AROUND the X axis!
+        // (Note: We use -command[1] because right-hand rule around X positive swings the nozzle -Y)
+        let x_rot = UnitQuaternion::from_axis_angle(&Vector3::x_axis(), -y_angle);
+
+        // Combine them (Order matters! Match your physical gimbal design)
+        let gimbal_rotation = y_rot * x_rot;
 
         let thrust_vector = gimbal_rotation.transform_vector(&mtv_effect.thrust);
         let thrust_torque = self.tvc_lever_arm.cross(&thrust_vector);
@@ -534,7 +556,7 @@ impl RCS {
         let mut remaining_nitrogen_mass = nitrogen_mass;
         let mut actual_command = command;
 
-        let elapsed_time = self.system_time - system_time;
+        let elapsed_time = system_time - self.system_time;
         if elapsed_time < 1.0 / self.update_rate {
             actual_command = self.last_command;
         } else {
