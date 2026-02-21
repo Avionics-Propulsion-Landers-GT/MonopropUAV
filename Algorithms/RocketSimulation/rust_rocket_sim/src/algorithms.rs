@@ -64,11 +64,18 @@ impl MPC {
             xref[1] += self.integral_values.1; // modify y reference with integral term
             xref[2] += self.integral_values.2; // modify z reference with integral term
 
+            let mut xref_traj_k = xref_traj.clone();
+            for i in k..self.n_steps {
+                xref_traj_k[i][0] += self.integral_values.0; // modify future x references with integral term
+                xref_traj_k[i][1] += self.integral_values.1; // modify future y references with integral term
+                xref_traj_k[i][2] += self.integral_values.2; // modify future z references with integral term
+            }
+
             // println!("Integral Values: {:?}", self.integral_values);
 
             // Solve MPC to get optimal control sequence
             // solve using OpEn
-            let (mut u_apply, u_warm) = mpc_crate::OpEnSolve(&x, &u_warm, &xref_traj, &self.q, &self.r, &self.qn, &self.smoothing_weight, &mut panoc_cache, mass, self.min_thrust, self.max_thrust, self.gimbal_limit);
+            let (mut u_apply, u_warm) = mpc_crate::OpEnSolve(&x, &u_warm, &xref_traj_k, &self.q, &self.r, &self.qn, &self.smoothing_weight, &mut panoc_cache, mass, self.min_thrust, self.max_thrust, self.gimbal_limit);
 
             // exponential filter
             if k >= 1 {

@@ -190,7 +190,7 @@ fn get_mpc() -> MPC {
     let m = 3;  // [gimbal_theta, gimbal_phi, thrust]
     let n_steps = 10;
     let dt = 0.1;
-    let integral_gains = (0.01, 0.01, 0.2);
+    let integral_gains = (0.01, 0.01, 0.02);
     // let integral_gains = (0.0, 0.0, 0.0);
     let q = Array2::<f64>::from_diag(&Array1::from(vec![
         2000.0, 2000.0, 20000.0,   // position x, y, z
@@ -202,7 +202,7 @@ fn get_mpc() -> MPC {
     let qn = Array2::<f64>::from_diag(&Array1::from(vec![
         2000.0, 2000.0, 20000.0,   // position x, y, z
         5000.0, 5000.0, 10.0, 10.0, // quaternion qx, qy, qz, qw
-        10.0, 10.0, 10.0,        // linear velocities x_dot, y_dot, z_dot
+        10.0, 10.0, 2.0,        // linear velocities x_dot, y_dot, z_dot
         5.0, 5.0, 5.0          // angular velocities wx, wy, wz
     ]));
     let smoothing_weight = Array1::from(vec![15000.0, 15000.0, 0.0002]);
@@ -210,7 +210,7 @@ fn get_mpc() -> MPC {
     let panoc_cache_tolerance = 1e-4;
     let panoc_cache_lbfgs_memory = 20;
     let min_thrust = 400.0;
-    let max_thrust = 3000.0;
+    let max_thrust = 1000.0;
     let gimbal_limit = 15_f64.to_radians();
 
     MPC::new(n, m, n_steps, dt, integral_gains, q, r, qn, smoothing_weight, panoc_cache_tolerance, panoc_cache_lbfgs_memory, min_thrust, max_thrust, gimbal_limit)
