@@ -1,8 +1,10 @@
 mod lossless;
-use crate::lossless::LosslessSolver;
+mod chebyshev_lossless;
+use crate::chebyshev_lossless::*;
+use crate::lossless::{LosslessSolver, SolveMetrics, SolveRunResult, TrajectoryResult};
 
 fn main() {
-    let mut solver = LosslessSolver {
+    let mut _solver = LosslessSolver {
         landing_point: [0.0, 0.0, 0.0], // This is the point where you want to end up.
         initial_position: [0.0, 0.0, 50.0], // This is the point where you start from.
         initial_velocity: [0.0, 0.0, 0.0], // This is the velocity you start with.
@@ -13,25 +15,50 @@ fn main() {
         lower_thrust_bound: 1000.0 * 0.4, // This is the minimum thrust the vehicle must keep.
         upper_thrust_bound: 1000.0, // This is the maximmum thrust the vehicle can attain.
         tvc_range_rad: 15_f64.to_radians(), // This is the range from the vertical axis that the thrust vector control can deviate.
-        coarse_delta_t: 0.05, // This is the dt used to solve for the time frame of the trajectory.
-        fine_delta_t: 0.001, // This is the dt used to solve for the higher resolution trajectory.
+        coarse_delta_t: 0.5, // This is the dt used to solve for the time frame of the trajectory.
+        fine_delta_t: 0.025, // This is the dt used to solve for the higher resolution trajectory.
         use_glide_slope: false, // This determines if the glide slope constraint is used. The glide slope constraint ensures that the vehicle stays above an upward spreading cone centered on the landing point.
         glide_slope: 5_f64.to_radians(), // This is the angle of the glide slope constraint.
         N: 20, // This is the number of time steps the solver uses. It is set here, but is recalculated internally solve() is called. This is simply exposed so that the number of time steps can be accessed externally, if necessary.
         ..Default::default()
     };
-    
-    let mut traj_result = solver.solve();
-    
 
-    match traj_result {
+    let mut chebyshev_solver = ChebyshevLosslessSolver {
+        landing_point: [0.0, 0.0, 0.0], // This is the point where you want to end up.
+        initial_position: [0.0, 0.0, 50.0], // This is the point where you start from.
+        initial_velocity: [0.0, 0.0, 0.0], // This is the velocity you start with.
+        max_velocity: 500.0, // This is the maximum velocity the vehicle can/should achieve in flight.
+        dry_mass: 50.0, // This is the mass of the vehicle, without any fuel/propellant on board.
+        fuel_mass: 30.0, // This is the mass of the fuel/propellant.
+        alpha: 1.0/(9.81 * 180.0), // This is the conversion ratio from thrust to delta mass.
+        lower_thrust_bound: 1000.0 * 0.4, // This is the minimum thrust the vehicle must keep.
+        upper_thrust_bound: 1000.0, // This is the maximmum thrust the vehicle can attain.
+        tvc_range_rad: 15_f64.to_radians(), // This is the range from the vertical axis that the thrust vector control can deviate.
+        coarse_line_search_delta_t: 0.5,
+        fine_line_search_delta_t: 0.5,
+        coarse_nodes: 5, // This is the dt used to solve for the time frame of the trajectory.
+        fine_nodes: 21, // This is the dt used to solve for the higher resolution trajectory.
+        use_glide_slope: false, // This determines if the glide slope constraint is used. The glide slope constraint ensures that the vehicle stays above an upward spreading cone centered on the landing point.
+        glide_slope: 5_f64.to_radians(), // This is the angle of the glide slope constraint.
+        ..Default::default()
+    };
+    
+    // let run_name = "zoh_3";
+    let run_name = "cgl_3";
+    // let solve_run = _solver.solve();
+    let solve_run = chebyshev_solver.solve();
+    
+    append_solve_metrics_to_csv("solve_metrics.csv", run_name, &solve_run)
+        .expect("Failed to write solve metrics CSV");
+
+    match &solve_run.trajectory {
         Some(result) => {
             println!("Final position: {:?}", result.positions.last().unwrap());
             println!("Final velocity: {:?}", result.velocities.last().unwrap());
             println!("Final mass: {:?}", result.masses.last().unwrap());
             println!("Final thrust: {:?}", result.thrusts.last().unwrap());
             
-            write_trajectory_to_csv("trajectory.csv", &result)
+            write_trajectory_to_csv(&format!("trajectory_{}.csv", run_name), result)
                 .expect("Failed to write CSV");
         }
         None => {
@@ -40,9 +67,10 @@ fn main() {
     }
 }
 
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::{Write, BufWriter};
-use crate::lossless::{TrajectoryResult};
+use std::path::Path;
+
 pub fn write_trajectory_to_csv(filename: &str, traj: &TrajectoryResult) -> std::io::Result<()> {
     let file = File::create(filename)?;
     let mut writer = BufWriter::new(file);
@@ -83,4 +111,53 @@ pub fn write_trajectory_to_csv(filename: &str, traj: &TrajectoryResult) -> std::
 
     writer.flush()?;
     Ok(())
+}
+
+pub fn append_solve_metrics_to_csv(
+    filename: &str,
+    run_name: &str,
+    solve_run: &SolveRunResult,
+) -> std::io::Result<()> {
+    let file_exists = Path::new(filename).exists();
+    let file = OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(filename)?;
+    let write_header = !file_exists || file.metadata()?.len() == 0;
+
+    let mut writer = BufWriter::new(file);
+
+    if write_header {
+        writeln!(
+            writer,
+            "run_name,pass,attempts,successes,iterations,clarabel_solve_time_s,wall_time_s,last_status"
+        )?;
+    }
+
+    write_solve_metrics_row(&mut writer, run_name, "coarse", &solve_run.coarse_metrics)?;
+    write_solve_metrics_row(&mut writer, run_name, "fine", &solve_run.fine_metrics)?;
+    write_solve_metrics_row(&mut writer, run_name, "total", &solve_run.total_metrics)?;
+
+    writer.flush()?;
+    Ok(())
+}
+
+fn write_solve_metrics_row<W: Write>(
+    writer: &mut W,
+    run_name: &str,
+    pass_name: &str,
+    metrics: &SolveMetrics,
+) -> std::io::Result<()> {
+    writeln!(
+        writer,
+        "{},{},{},{},{},{:.6},{:.6},{:?}",
+        run_name,
+        pass_name,
+        metrics.attempts,
+        metrics.successes,
+        metrics.iterations,
+        metrics.clarabel_solve_time_s,
+        metrics.wall_time_s,
+        metrics.last_status
+    )
 }

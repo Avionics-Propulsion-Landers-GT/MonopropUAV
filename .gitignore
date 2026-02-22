@@ -33,3 +33,4 @@ Algorithms/MPC/target/
 Algorithms/MOC/Cargo.lock
 **/target/**
 *.lock
+*.pyc
