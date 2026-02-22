@@ -40,15 +40,15 @@ impl EKFModel for AttitudeModel {
     }
 
     fn measurement_prediction_function(&self, state: &Array1<f64>) -> Array1<f64> { 
-        let rotation_matrix = euler_to_rotation_matrix(state);
+        let rotation_matrix = Self::euler_to_rotation_matrix(state);
 
         let gyro_pred = Array1::from(vec![0.0, 0.0, 0.0]); 
 
         let gravity = Array1::from(vec![0.0, 0.0, -9.81]);
-        let accel_pred = normalize_vector(&(rotation_matrix.dot(&gravity)));
+        let accel_pred = Self::normalize_vector(&(rotation_matrix.dot(&gravity)));
 
         let mag_field = Array1::from(vec![0.00005, 0.0, 0.0]);
-        let mag_pred = normalize_vector(&(rotation_matrix.dot(&mag_field)));
+        let mag_pred = Self::normalize_vector(&(rotation_matrix.dot(&mag_field)));
 
         let mut result = Array1::zeros(9);
         result.slice_mut(s![0..3]).assign(&gyro_pred);
@@ -66,8 +66,10 @@ impl EKFModel for AttitudeModel {
         jac[[2, 2]] = 1.0;
         jac
     }
-    
-    pub fn euler_to_rotation_matrix(euler: &Array1<f64>) -> Array2<f64> {
+}
+
+impl AttitudeModel {
+    fn euler_to_rotation_matrix(euler: &Array1<f64>) -> Array2<f64> {
         let (roll, pitch, yaw) = (euler[0], euler[1], euler[2]);
 
         let cr = roll.cos();
@@ -88,7 +90,7 @@ impl EKFModel for AttitudeModel {
         .unwrap()
     }
 
-    pub fn normalize_vector(v: &Array1<f64>) -> Array1<f64> {
+    fn normalize_vector(v: &Array1<f64>) -> Array1<f64> {
         let norm = v.mapv(|x| x * x).sum().sqrt();
         if norm == 0.0 { v.clone() } else { v / norm }
     }

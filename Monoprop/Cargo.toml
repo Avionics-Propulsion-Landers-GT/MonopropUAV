@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "Common",
+    "Drone",
+    "GroundControl"
+]
+resolver = "2"

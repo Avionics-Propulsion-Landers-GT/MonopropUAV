@@ -1,0 +1,10 @@
+[package]
+name = "rust_rocket_sim"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rerun = "0.28"
+nalgebra = "0.32"
+rand = "0.9"
+rand_distr = "0.5"

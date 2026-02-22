@@ -1,0 +1,12 @@
+[package]
+name = "GroundControl"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+postcard = { version = "1.0", features = ["use-std"] }
+anyhow = "1.0"
+crossbeam-channel = "0.5"
+
+Common = { path = "../Common" }
