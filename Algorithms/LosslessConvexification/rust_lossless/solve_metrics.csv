@@ -41,3 +41,9 @@ zoh_3,total,17,2,144,0.883697,0.951814,Solved
 cgl_3,coarse,16,1,144,0.252597,0.318197,Solved
 cgl_3,fine,1,1,15,0.197020,0.203671,Solved
 cgl_3,total,17,2,159,0.449618,0.527593,Solved
+zoh_truth,coarse,1111,1,8335,1279.354208,1294.051524,Solved
+zoh_truth,fine,1,1,49,918.465373,921.694397,Solved
+zoh_truth,total,1112,2,8384,2197.819581,2217.769620,Solved
+zoh_truth,coarse,702,1,6014,556.494693,562.219249,Solved
+zoh_truth,fine,11,1,2200,4934.773513,4938.658133,AlmostSolved
+zoh_truth,total,713,2,8214,5491.268206,5501.924129,AlmostSolved
