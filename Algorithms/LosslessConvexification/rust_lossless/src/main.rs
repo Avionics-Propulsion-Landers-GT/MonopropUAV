@@ -6,9 +6,9 @@ use crate::lossless::{LosslessSolver, SolveMetrics, SolveRunResult, TrajectoryRe
 fn main() {
     let mut _solver = LosslessSolver {
         landing_point: [0.0, 0.0, 0.0], // This is the point where you want to end up.
-        initial_position: [10.0, 20.0, 50.0], // This is the point where you start from.
+        initial_position: [0.0, 0.0, 50.0], // This is the point where you start from.
         initial_velocity: [0.0, 0.0, 0.0], // This is the velocity you start with.
-        max_velocity: 500.0, // This is the maximum velocity the vehicle can/should achieve in flight.
+        max_velocity: 5.0, // This is the maximum velocity the vehicle can/should achieve in flight.
         dry_mass: 50.0, // This is the mass of the vehicle, without any fuel/propellant on board.
         fuel_mass: 30.0, // This is the mass of the fuel/propellant.
         alpha: 1.0/(9.81 * 180.0), // This is the conversion ratio from thrust to delta mass.
@@ -43,7 +43,7 @@ fn main() {
         ..Default::default()
     };
     
-    let run_name = "zoh_truth_offset";
+    let run_name = "zoh_truth_5_vel_limit";
     // let run_name = "cgl_3";
     let solve_run = _solver.solve();
     // let solve_run = chebyshev_solver.solve();
