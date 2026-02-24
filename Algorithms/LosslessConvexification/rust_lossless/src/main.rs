@@ -19,7 +19,7 @@ fn main() {
         // coarse_line_search_delta_t: 0.5, // TODO
         // fine_line_search_delta_t: 0.5,
         coarse_delta_t: 0.5, // This is the dt used to solve for the time frame of the trajectory.
-        fine_delta_t: 0.05, // This is the dt used to solve for the higher resolution trajectory.
+        fine_delta_t: 0.0125, // This is the dt used to solve for the higher resolution trajectory.
         use_glide_slope: true, // This determines if the glide slope constraint is used. The glide slope constraint ensures that the vehicle stays above an upward spreading cone centered on the landing point.
         glide_slope: 5_f64.to_radians(), // This is the angle of the glide slope constraint.
         N: 20, // This is the number of time steps the solver uses. It is set here, but is recalculated internally solve() is called. This is simply exposed so that the number of time steps can be accessed externally, if necessary.
@@ -41,17 +41,17 @@ fn main() {
         tvc_range_rad: 15_f64.to_radians(), // This is the range from the vertical axis that the thrust vector control can deviate.
         coarse_line_search_delta_t: 0.5,
         fine_line_search_delta_t: 0.05,
-        coarse_nodes: 10, // This is the dt used to solve for the time frame of the trajectory.
-        fine_nodes: 25, // This is the dt used to solve for the higher resolution trajectory.
-        use_glide_slope: true, // This determines if the glide slope constraint is used. The glide slope constraint ensures that the vehicle stays above an upward spreading cone centered on the landing point.
+        coarse_nodes: 30, // This is the dt used to solve for the time frame of the trajectory.
+        fine_nodes: 50, // This is the dt used to solve for the higher resolution trajectory.
+        use_glide_slope: false, // This determines if the glide slope constraint is used. The glide slope constraint ensures that the vehicle stays above an upward spreading cone centered on the landing point.
         glide_slope: 5_f64.to_radians(), // This is the angle of the glide slope constraint.
         ..Default::default()
     };
     
-    let run_name = "zoh_1";
-    let solve_run = _solver.solve();
-    // let run_name = "cgl_1";
-    // let solve_run = chebyshev_solver.solve();
+    // let run_name = "zoh_3";
+    // let solve_run = _solver.solve();
+    let run_name = "cgl_3";
+    let solve_run = chebyshev_solver.solve();
     
     append_solve_metrics_to_csv("solve_metrics.csv", run_name, &solve_run)
         .expect("Failed to write solve metrics CSV");
