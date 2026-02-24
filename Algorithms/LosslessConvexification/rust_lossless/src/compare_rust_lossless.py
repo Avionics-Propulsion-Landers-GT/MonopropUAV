@@ -77,6 +77,57 @@ def r2_score(ground_truth: list[float], candidate: list[float]) -> float:
     return 1.0 - (ss_res / ss_tot)
 
 
+def r2_score_vec3(
+    ground_truth_x: list[float],
+    ground_truth_y: list[float],
+    ground_truth_z: list[float],
+    candidate_x: list[float],
+    candidate_y: list[float],
+    candidate_z: list[float],
+) -> float:
+    row_count = len(ground_truth_x)
+    if row_count == 0:
+        raise ValueError("ground_truth and candidate vector components must not be empty")
+
+    lengths = [
+        len(ground_truth_y),
+        len(ground_truth_z),
+        len(candidate_x),
+        len(candidate_y),
+        len(candidate_z),
+    ]
+    if any(length != row_count for length in lengths):
+        raise ValueError("all vector components must have the same length")
+
+    mean_x = sum(ground_truth_x) / row_count
+    mean_y = sum(ground_truth_y) / row_count
+    mean_z = sum(ground_truth_z) / row_count
+
+    ss_res = 0.0
+    ss_tot = 0.0
+    for tx, ty, tz, cx, cy, cz in zip(
+        ground_truth_x,
+        ground_truth_y,
+        ground_truth_z,
+        candidate_x,
+        candidate_y,
+        candidate_z,
+    ):
+        dx = cx - tx
+        dy = cy - ty
+        dz = cz - tz
+        ss_res += dx * dx + dy * dy + dz * dz
+
+        mx = tx - mean_x
+        my = ty - mean_y
+        mz = tz - mean_z
+        ss_tot += mx * mx + my * my + mz * mz
+
+    if ss_tot == 0.0:
+        return 1.0 if ss_res == 0.0 else math.nan
+    return 1.0 - (ss_res / ss_tot)
+
+
 def compare_csvs(ground_truth_csv: Path, candidate_csv: Path, nodes: int) -> dict[str, float]:
     fields_truth, data_truth = read_numeric_csv(ground_truth_csv)
     fields_candidate, data_candidate = read_numeric_csv(candidate_csv)
@@ -94,10 +145,37 @@ def compare_csvs(ground_truth_csv: Path, candidate_csv: Path, nodes: int) -> dic
     if not comparable_columns:
         raise ValueError("No comparable columns found (excluding 't')")
 
-    return {
+    metrics = {
         name: r2_score(sampled_truth[name], sampled_candidate[name])
         for name in comparable_columns
     }
+
+    vec3_groups = [
+        ("xyz", ("x", "y", "z")),
+        ("vxyz", ("vx", "vy", "vz")),
+        ("uxyz", ("ux", "uy", "uz")),
+    ]
+    for metric_name, (c1, c2, c3) in vec3_groups:
+        missing_components = [
+            component
+            for component in (c1, c2, c3)
+            if component not in sampled_truth or component not in sampled_candidate
+        ]
+        if missing_components:
+            raise ValueError(
+                f"Missing required columns for {metric_name}: {missing_components}"
+            )
+
+        metrics[metric_name] = r2_score_vec3(
+            sampled_truth[c1],
+            sampled_truth[c2],
+            sampled_truth[c3],
+            sampled_candidate[c1],
+            sampled_candidate[c2],
+            sampled_candidate[c3],
+        )
+
+    return metrics
 
 
 def write_results(
