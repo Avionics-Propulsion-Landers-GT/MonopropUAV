@@ -6,7 +6,7 @@ use crate::lossless::{LosslessSolver, SolveMetrics, SolveRunResult, TrajectoryRe
 fn main() {
     let mut _solver = LosslessSolver {
         landing_point: [0.0, 0.0, 0.0], // This is the point where you want to end up.
-        initial_position: [0.0, 0.0, 50.0], // This is the point where you start from.
+        initial_position: [10.0, 20.0, 50.0], // This is the point where you start from.
         initial_velocity: [0.0, 0.0, 0.0], // This is the velocity you start with.
         max_velocity: 500.0, // This is the maximum velocity the vehicle can/should achieve in flight.
         dry_mass: 50.0, // This is the mass of the vehicle, without any fuel/propellant on board.
@@ -17,7 +17,7 @@ fn main() {
         tvc_range_rad: 15_f64.to_radians(), // This is the range from the vertical axis that the thrust vector control can deviate.
         coarse_delta_t: 0.01, // This is the dt used to solve for the time frame of the trajectory.
         fine_delta_t: 0.0005, // This is the dt used to solve for the higher resolution trajectory.
-        use_glide_slope: false, // This determines if the glide slope constraint is used. The glide slope constraint ensures that the vehicle stays above an upward spreading cone centered on the landing point.
+        use_glide_slope: true, // This determines if the glide slope constraint is used. The glide slope constraint ensures that the vehicle stays above an upward spreading cone centered on the landing point.
         glide_slope: 5_f64.to_radians(), // This is the angle of the glide slope constraint.
         N: 20, // This is the number of time steps the solver uses. It is set here, but is recalculated internally solve() is called. This is simply exposed so that the number of time steps can be accessed externally, if necessary.
         ..Default::default()
@@ -43,7 +43,7 @@ fn main() {
         ..Default::default()
     };
     
-    let run_name = "zoh_truth";
+    let run_name = "zoh_truth_offset";
     // let run_name = "cgl_3";
     let solve_run = _solver.solve();
     // let solve_run = chebyshev_solver.solve();
