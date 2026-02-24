@@ -30,6 +30,7 @@ pub struct TrajectoryResult {
     pub masses: Vec<f64>,
     pub thrusts: Vec<[f64; 3]>,
     pub sigmas: Vec<f64>,
+    pub time_of_flight_s: f64,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -523,6 +524,7 @@ impl LosslessSolver {
             masses,
             thrusts,
             sigmas,
+            time_of_flight_s: (self.N as f64) * self.delta_t,
         }
     }
 

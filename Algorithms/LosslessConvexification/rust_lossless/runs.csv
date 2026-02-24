@@ -3,3 +3,5 @@ run id,coarse cgl,fine cgl,ref total T,coarse M,coarse dt,fine M,fine dt
 2,4,13,9.5,14,0.5,190,0.05
 3,5,21,10,20,0.5,400,0.025
 ,,,10
+1,4,25,9.5,19,0.5,190,0.05
+2

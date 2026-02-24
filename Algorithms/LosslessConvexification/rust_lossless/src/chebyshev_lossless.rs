@@ -797,6 +797,7 @@ impl ChebyshevLosslessSolver {
             masses,
             thrusts,
             sigmas,
+            time_of_flight_s: final_time,
         }
     }
 
