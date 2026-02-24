@@ -1,0 +1,3 @@
+ground_truth_csv,candidate_csv,r2_x,r2_y,r2_z,r2_vx,r2_vy,r2_vz,r2_mass,r2_ux,r2_uy,r2_uz,r2_sigma
+trajectory_zoh_truth.csv,trajectory_zoh_1.csv,1,1,0.9913919638,1,1,0.9310328316,0.9985953544,1,1,0.8734512667,0.8837787426
+trajectory_zoh_truth.csv,trajectory_zoh_1.csv,1,1,0.9914641466,1,1,0.9339760624,0.9987956745,1,1,0.8713019996,0.8812188898
