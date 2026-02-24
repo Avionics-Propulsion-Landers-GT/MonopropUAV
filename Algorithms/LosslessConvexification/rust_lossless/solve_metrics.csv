@@ -50,3 +50,6 @@ zoh_truth,total,713,2,8214,5491.268206,5501.924129,AlmostSolved
 zoh_truth_offset,coarse,724,1,6242,569.131274,575.813641,Solved
 zoh_truth_offset,fine,1,1,107,268.939309,269.334654,Solved
 zoh_truth_offset,total,725,2,6349,838.070583,845.975306,Solved
+zoh_truth_5_vel_limit,coarse,1111,1,10177,1407.977467,1424.071329,Solved
+zoh_truth_5_vel_limit,fine,1,1,34,154.787752,155.397316,Solved
+zoh_truth_5_vel_limit,total,1112,2,10211,1562.765218,1581.346523,Solved
