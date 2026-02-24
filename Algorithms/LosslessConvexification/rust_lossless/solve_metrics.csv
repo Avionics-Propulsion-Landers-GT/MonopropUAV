@@ -47,3 +47,6 @@ zoh_truth,total,1112,2,8384,2197.819581,2217.769620,Solved
 zoh_truth,coarse,702,1,6014,556.494693,562.219249,Solved
 zoh_truth,fine,11,1,2200,4934.773513,4938.658133,AlmostSolved
 zoh_truth,total,713,2,8214,5491.268206,5501.924129,AlmostSolved
+zoh_truth_offset,coarse,724,1,6242,569.131274,575.813641,Solved
+zoh_truth_offset,fine,1,1,107,268.939309,269.334654,Solved
+zoh_truth_offset,total,725,2,6349,838.070583,845.975306,Solved
