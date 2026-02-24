@@ -62,22 +62,22 @@ def resample_columns(columns: dict[str, list[float]], indices: list[int]) -> dic
     return {name: [values[i] for i in indices] for name, values in columns.items()}
 
 
-def normalized_l2_error_score(ground_truth: list[float], candidate: list[float]) -> float:
+def r2_score(ground_truth: list[float], candidate: list[float]) -> float:
     if len(ground_truth) != len(candidate):
         raise ValueError("ground_truth and candidate lengths must match")
     if not ground_truth:
         raise ValueError("ground_truth and candidate must not be empty")
 
-    numerator = math.sqrt(
-        sum((cand - truth) ** 2 for truth, cand in zip(ground_truth, candidate))
-    )
-    denominator = math.sqrt(sum(truth * truth for truth in ground_truth))
-    if denominator == 0.0:
-        return 0.0 if numerator == 0.0 else math.nan
-    return numerator / denominator
+    mean_ref = sum(ground_truth) / len(ground_truth)
+    ss_res = sum((cand - truth) ** 2 for truth, cand in zip(ground_truth, candidate))
+    ss_tot = sum((truth - mean_ref) ** 2 for truth in ground_truth)
+
+    if ss_tot == 0.0:
+        return 1.0 if ss_res == 0.0 else math.nan
+    return 1.0 - (ss_res / ss_tot)
 
 
-def normalized_l2_error_score_vec3(
+def r2_score_vec3(
     ground_truth_x: list[float],
     ground_truth_y: list[float],
     ground_truth_z: list[float],
@@ -99,8 +99,12 @@ def normalized_l2_error_score_vec3(
     if any(length != row_count for length in lengths):
         raise ValueError("all vector components must have the same length")
 
-    squared_norm_error_sum = 0.0
-    squared_norm_truth_sum = 0.0
+    mean_x = sum(ground_truth_x) / row_count
+    mean_y = sum(ground_truth_y) / row_count
+    mean_z = sum(ground_truth_z) / row_count
+
+    ss_res = 0.0
+    ss_tot = 0.0
     for tx, ty, tz, cx, cy, cz in zip(
         ground_truth_x,
         ground_truth_y,
@@ -112,15 +116,16 @@ def normalized_l2_error_score_vec3(
         dx = cx - tx
         dy = cy - ty
         dz = cz - tz
-        squared_norm_error_sum += dx * dx + dy * dy + dz * dz
+        ss_res += dx * dx + dy * dy + dz * dz
 
-        squared_norm_truth_sum += tx * tx + ty * ty + tz * tz
+        mx = tx - mean_x
+        my = ty - mean_y
+        mz = tz - mean_z
+        ss_tot += mx * mx + my * my + mz * mz
 
-    numerator = math.sqrt(squared_norm_error_sum)
-    denominator = math.sqrt(squared_norm_truth_sum)
-    if denominator == 0.0:
-        return 0.0 if numerator == 0.0 else math.nan
-    return numerator / denominator
+    if ss_tot == 0.0:
+        return 1.0 if ss_res == 0.0 else math.nan
+    return 1.0 - (ss_res / ss_tot)
 
 
 def compare_csvs(ground_truth_csv: Path, candidate_csv: Path, nodes: int) -> dict[str, float]:
@@ -141,7 +146,7 @@ def compare_csvs(ground_truth_csv: Path, candidate_csv: Path, nodes: int) -> dic
         raise ValueError("No comparable columns found (excluding 't')")
 
     metrics = {
-        name: normalized_l2_error_score(sampled_truth[name], sampled_candidate[name])
+        name: r2_score(sampled_truth[name], sampled_candidate[name])
         for name in comparable_columns
     }
 
@@ -161,7 +166,7 @@ def compare_csvs(ground_truth_csv: Path, candidate_csv: Path, nodes: int) -> dic
                 f"Missing required columns for {metric_name}: {missing_components}"
             )
 
-        metrics[metric_name] = normalized_l2_error_score_vec3(
+        metrics[metric_name] = r2_score_vec3(
             sampled_truth[c1],
             sampled_truth[c2],
             sampled_truth[c3],
@@ -179,7 +184,7 @@ def write_results(
     candidate_csv: Path,
     metrics: dict[str, float],
 ) -> None:
-    headers = ["ground_truth_csv", "candidate_csv"] + [f"nrmse_l2_{name}" for name in metrics]
+    headers = ["ground_truth_csv", "candidate_csv"] + [f"r2_{name}" for name in metrics]
     row = [ground_truth_csv.name, candidate_csv.name] + [
         f"{metrics[name]:.10g}" for name in metrics
     ]
@@ -206,11 +211,7 @@ def write_results(
 def parse_args() -> argparse.Namespace:
     project_root = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(
-        description=(
-            "Compare two trajectory CSVs using L2-normalized error "
-            "(||candidate-ground_truth||_2 / ||ground_truth||_2) "
-            "on equally spaced samples."
-        )
+        description="Compare two trajectory CSVs using per-column R^2 on equally spaced samples."
     )
     parser.add_argument("ground_truth_csv", help="Ground-truth CSV path")
     parser.add_argument("candidate_csv", help="Candidate CSV path")
