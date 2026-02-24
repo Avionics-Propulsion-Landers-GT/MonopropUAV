@@ -205,6 +205,20 @@ impl ChebyshevLosslessSolver {
             den += w_over_diff;
         }
 
+        if den.abs() <= 1e-15 {
+            // Fallback for extreme cancellation: return nearest-node value.
+            let mut nearest_idx = 0usize;
+            let mut nearest_dist = (x - nodes[0]).abs();
+            for i in 1..nodes.len() {
+                let dist = (x - nodes[i]).abs();
+                if dist < nearest_dist {
+                    nearest_idx = i;
+                    nearest_dist = dist;
+                }
+            }
+            return values[nearest_idx];
+        }
+
         // Final interpolated value.
         num / den
     }
@@ -237,6 +251,20 @@ impl ChebyshevLosslessSolver {
             den += w_over_diff;
         }
 
+        if den.abs() <= 1e-15 {
+            // Fallback for extreme cancellation: return nearest-node vector.
+            let mut nearest_idx = 0usize;
+            let mut nearest_dist = (x - nodes[0]).abs();
+            for i in 1..nodes.len() {
+                let dist = (x - nodes[i]).abs();
+                if dist < nearest_dist {
+                    nearest_idx = i;
+                    nearest_dist = dist;
+                }
+            }
+            return values[nearest_idx];
+        }
+
         [num[0] / den, num[1] / den, num[2] / den]
     }
 
@@ -258,7 +286,16 @@ impl ChebyshevLosslessSolver {
      */
     pub fn cgl_diff_matrix(&self) -> Vec<Vec<f64>> {
         assert!(self.N >= 1, "CGL differentiation matrix requires N >= 1");
-        let tau = self.cgl_nodes();
+        let nf = self.N as f64;
+
+        // Use angles directly to compute robust node differences for large N.
+        let mut theta = Vec::with_capacity(self.N + 1);
+        let mut tau = Vec::with_capacity(self.N + 1);
+        for i in 0..=self.N {
+            let theta_i = PI * ((self.N - i) as f64) / nf;
+            theta.push(theta_i);
+            tau.push(theta_i.cos());
+        }
 
         // Build c endpoint weights (double the weight of other nodes)
         let mut c = vec![1.0_f64; self.N + 1];
@@ -280,14 +317,18 @@ impl ChebyshevLosslessSolver {
         for i in 0..=self.N {
             for j in 0..=self.N {
                 if i != j { // don't divide by zero
-                    d[i][j] = (alpha[i] / alpha[j]) / (tau[i] - tau[j]);
+                    // tau_i - tau_j = -2 sin((theta_i + theta_j)/2) sin((theta_i - theta_j)/2)
+                    // This form avoids loss of significance when nodes are close.
+                    let half_sum = 0.5 * (theta[i] + theta[j]);
+                    let half_diff = 0.5 * (theta[i] - theta[j]);
+                    let tau_diff = -2.0 * half_sum.sin() * half_diff.sin();
+                    d[i][j] = (alpha[i] / alpha[j]) / tau_diff;
                 }
             }
         }
 
         // Now fill diagonal entries with special cases
         // start and end are hardcoded, rest use formula
-        let nf = self.N as f64;
         d[0][0] = -(2.0 * nf * nf + 1.0) / 6.0;
         d[self.N][self.N] =  (2.0 * nf * nf + 1.0) / 6.0;
 
@@ -357,7 +398,10 @@ impl ChebyshevLosslessSolver {
     pub fn solve_at_current_time(&mut self, current_time: f64) -> SolveAttemptResult {
         let attempt_wall_start = Instant::now();
         let m0 = self.dry_mass + self.fuel_mass;
-        
+        const MASS_FLOOR_ABS: f64 = 1e-6;
+        const GLIDE_TAN_FLOOR: f64 = 1e-8;
+        const DYNAMICS_DROP_TOL: f64 = 1e-12;
+         
         const num_vars_per_node: usize = 11; // x (3), v (3), w (1), sigma (1), u (3)
         let num_nodes = (self.N + 1) as usize;
         let n_vars = num_vars_per_node * num_nodes;
@@ -368,6 +412,20 @@ impl ChebyshevLosslessSolver {
         let U_INDEX = SIGMA_INDEX + num_nodes;
 
         let D = self.cgl_diff_matrix();
+        let tau_nodes = self.cgl_nodes();
+        let half_tf = 0.5 * current_time;
+
+        // Balance collocation rows to reduce condition growth at higher node counts.
+        let mut dynamics_row_scale = vec![1.0_f64; self.N + 1];
+        for k in 0..=self.N {
+            let mut scale = 1.0_f64;
+            for j in 0..=self.N {
+                scale = scale.max(D[k][j].abs());
+            }
+            scale = scale.max(half_tf.abs());
+            scale = scale.max((half_tf * self.alpha).abs());
+            dynamics_row_scale[k] = scale;
+        }
         
         /*
         TODO: We still use the Second Order Cone Problem (SOCP) constraints and apply them at discrete points
@@ -410,21 +468,22 @@ impl ChebyshevLosslessSolver {
 
         for dim in 0..3 {
             for k in 0..=self.N {
+                let row_scale = dynamics_row_scale[k];
                 // The D-Matrix part (sum over j)
                 for j in 0..=self.N {
                     let d_val = D[k][j];
-                    if d_val.abs() > 1e-9 {
+                    if d_val.abs() > DYNAMICS_DROP_TOL {
                         let x_idx = X_INDEX + j * 3 + dim;
                         rows.push(row_idx);
                         cols.push(x_idx);
-                        vals.push(d_val);
+                        vals.push(d_val / row_scale);
                     }
                 }
                 // The Velocity part (-tf/2 * v_k)
                 let v_idx = V_INDEX + k * 3 + dim;
                 rows.push(row_idx);
                 cols.push(v_idx);
-                vals.push(-0.5 * current_time);
+                vals.push(-half_tf / row_scale);
 
                 b.push(0.0);
                 row_idx += 1;
@@ -436,24 +495,25 @@ impl ChebyshevLosslessSolver {
         // Chebyshev: D*v - (tf/2)*u = (tf/2)*g
         for dim in 0..3 {
             for k in 0..=self.N {
+                let row_scale = dynamics_row_scale[k];
                 // D-Matrix part
                 for j in 0..=self.N {
                     let d_val = D[k][j];
-                    if d_val.abs() > 1e-9 {
+                    if d_val.abs() > DYNAMICS_DROP_TOL {
                         let v_idx = V_INDEX + j * 3 + dim;
                         rows.push(row_idx);
                         cols.push(v_idx);
-                        vals.push(d_val);
+                        vals.push(d_val / row_scale);
                     }
                 }
                 // Control part (-tf/2 * u_k)
                 let u_idx = U_INDEX + k * 3 + dim;
                 rows.push(row_idx);
                 cols.push(u_idx);
-                vals.push(-0.5 * current_time);
+                vals.push(-half_tf / row_scale);
 
                 // RHS: (tf/2) * g
-                b.push(0.5 * current_time * GRAVITY[dim]);
+                b.push((half_tf * GRAVITY[dim]) / row_scale);
                 row_idx += 1;
             }
         }
@@ -462,20 +522,21 @@ impl ChebyshevLosslessSolver {
         // Standard form: w_{k+1} - w_k + dt * alpha * sigma_k = 0
         // Chebyshev: D*w + (tf/2)*alpha*sigma = 0
         for k in 0..=self.N {
+            let row_scale = dynamics_row_scale[k];
             for j in 0..=self.N {
                 let d_val = D[k][j];
-                if d_val.abs() > 1e-9 {
+                if d_val.abs() > DYNAMICS_DROP_TOL {
                     let w_idx = W_INDEX + j;
                     rows.push(row_idx);
                     cols.push(w_idx);
-                    vals.push(d_val);
+                    vals.push(d_val / row_scale);
                 }
             }
             let sigma_idx = SIGMA_INDEX + k;
             rows.push(row_idx);
             cols.push(sigma_idx);
-            vals.push(0.5 * current_time * self.alpha);
-            
+            vals.push((half_tf * self.alpha) / row_scale);
+             
             b.push(0.0);
             row_idx += 1;
         }
@@ -549,43 +610,27 @@ impl ChebyshevLosslessSolver {
         // ||u|| <= sigma  -->  (sigma, ux, uy, uz) in SOC
         let sin_theta = self.tvc_range_rad.sin();
         for k in 0..=self.N {
-            // Thrust magnitude constraint: ||u_k|| <= sigma_k
             let x_idx = X_INDEX + 3 * k;
             let v_idx = V_INDEX + 3 * k;
             let sigma_idx = SIGMA_INDEX + k;
             let w_idx = W_INDEX + k;
             let u_idx = U_INDEX + 3 * k;
 
-            // Row 1: -sigma + s0 = 0
-            rows.push(row_idx);
-            cols.push(sigma_idx);
-            vals.push(-1.0);
-            b.push(0.0);
-            row_idx += 1;
-
-            // Rows 2-4: -u + s = 0
-            for dim in 0..3 {
-                rows.push(row_idx);
-                cols.push(u_idx + dim);
-                vals.push(-1.0);
-                b.push(0.0);
-                row_idx += 1;
-            }
-            cones.push(SupportedConeT::SecondOrderConeT(4));
-
-
             // Calculate Time at Node k (Crucial for Linearization)
             // Chebyshev Time Map: t = (tf / 2) * (tau + 1)
-            // tau_k = -cos(pi * k / N)  -> Goes from -1 to 1
-            let tau_k = -(PI * k as f64 / self.N as f64).cos();
-            let t_current = (current_time / 2.0) * (tau_k + 1.0);
+            let tau_k = tau_nodes[k];
+            let node_time = half_tf * (tau_k + 1.0);
 
-            let z_0 = (m0 - self.alpha * self.upper_thrust_bound * t_current).ln();
-            let exp_neg_z_0 = (-z_0).exp();
-            let sigma_min_coeff = self.lower_thrust_bound * exp_neg_z_0;
-            let sigma_min_h_val = sigma_min_coeff * (1.0 + z_0);
-            let sigma_max_coeff = self.upper_thrust_bound * exp_neg_z_0;
-            let sigma_max_h_val = sigma_max_coeff * (1.0 + z_0);
+            // Clamp linearization reference mass to avoid log/reciprocal blow-ups.
+            let mass_ref_floor = self.dry_mass.max(MASS_FLOOR_ABS);
+            let mass_ref = (m0 - self.alpha * self.upper_thrust_bound * node_time)
+                .max(mass_ref_floor);
+            let inv_mass_ref = 1.0 / mass_ref;
+            let log_mass_ref = mass_ref.ln();
+            let sigma_min_coeff = self.lower_thrust_bound * inv_mass_ref;
+            let sigma_min_h_val = sigma_min_coeff * (1.0 + log_mass_ref);
+            let sigma_max_coeff = self.upper_thrust_bound * inv_mass_ref;
+            let sigma_max_h_val = sigma_max_coeff * (1.0 + log_mass_ref);
 
             // thrust bounds
             // min bound
@@ -634,7 +679,13 @@ impl ChebyshevLosslessSolver {
 
             // ---------- Glide slope SOC: ||x_k[:2]|| <= x_k[2] / tan(glide_slope) ----------
             if self.use_glide_slope {
-                rows.push((row_idx as usize) + 0); cols.push((x_idx as usize) + 2); vals.push(-1.0 / self.glide_slope.tan()); // x_k[2]
+                let glide_tan = self.glide_slope.tan();
+                let glide_tan_safe = if glide_tan >= 0.0 {
+                    glide_tan.max(GLIDE_TAN_FLOOR)
+                } else {
+                    glide_tan.min(-GLIDE_TAN_FLOOR)
+                };
+                rows.push((row_idx as usize) + 0); cols.push((x_idx as usize) + 2); vals.push(-1.0 / glide_tan_safe); // x_k[2]
                 rows.push((row_idx as usize) + 1); cols.push((x_idx as usize) + 0); vals.push(1.0); // -x_k[0]
                 rows.push((row_idx as usize) + 2); cols.push((x_idx as usize) + 1); vals.push(1.0); // -x_k[1]
                 cones.push(SupportedConeT::SecondOrderConeT(3));
