@@ -15,8 +15,6 @@ struct FineSolveRecord {
 }
 
 fn main() {
-    let runs_per_group = parse_runs_per_group();
-
     let mut _solver = LosslessSolver {
         landing_point: [0.0, 0.0, 0.0], // This is the point where you want to end up.
         // initial_position: [10.0, 20.0, 50.0], // This is the point where you start from.
@@ -32,7 +30,7 @@ fn main() {
         // coarse_line_search_delta_t: 0.5, // TODO
         // fine_line_search_delta_t: 0.5,
         coarse_delta_t: 0.5, // This is the dt used to solve for the time frame of the trajectory.
-        fine_delta_t: 0.0125, // This is the dt used to solve for the higher resolution trajectory.
+        fine_delta_t: 0.025, // This is the dt used to solve for the higher resolution trajectory.
         use_glide_slope: true, // This determines if the glide slope constraint is used. The glide slope constraint ensures that the vehicle stays above an upward spreading cone centered on the landing point.
         glide_slope: 5_f64.to_radians(), // This is the angle of the glide slope constraint.
         N: 20, // This is the number of time steps the solver uses. It is set here, but is recalculated internally solve() is called. This is simply exposed so that the number of time steps can be accessed externally, if necessary.
@@ -54,8 +52,8 @@ fn main() {
         tvc_range_rad: 15_f64.to_radians(), // This is the range from the vertical axis that the thrust vector control can deviate.
         coarse_line_search_delta_t: 0.5,
         fine_line_search_delta_t: 0.05,
-        coarse_nodes: 30, // This is the dt used to solve for the time frame of the trajectory.
-        fine_nodes: 48, // This is the dt used to solve for the higher resolution trajectory.
+        coarse_nodes: 10, // This is the dt used to solve for the time frame of the trajectory.
+        fine_nodes: 35, // This is the dt used to solve for the higher resolution trajectory.
         use_glide_slope: true, // This determines if the glide slope constraint is used. The glide slope constraint ensures that the vehicle stays above an upward spreading cone centered on the landing point.
         glide_slope: 5_f64.to_radians(), // This is the angle of the glide slope constraint.
         ..Default::default()
@@ -63,6 +61,7 @@ fn main() {
 
     let group_name = "direct_descent";
     let run_name = "med";
+    let runs_per_group = 10;
     let run_label = format!("{}_{}", group_name, run_name);
     let output_root = Path::new(group_name).join(run_name);
     std::fs::create_dir_all(&output_root).expect("Failed to create output root directory");
@@ -116,35 +115,6 @@ fn main() {
     let simple_metrics_path = output_root.join("simple_solve_metrics.csv");
     write_simple_solve_metrics_csv(&simple_metrics_path, &fine_records, runs_per_group)
         .expect("Failed to write simple solve metrics CSV");
-}
-
-fn parse_runs_per_group() -> usize {
-    let mut args = env::args().skip(1);
-    let mut runs_per_group: usize = 3;
-
-    while let Some(arg) = args.next() {
-        if arg == "--runs-per-group" {
-            let value = args
-                .next()
-                .unwrap_or_else(|| panic!("Missing value after --runs-per-group"));
-            runs_per_group = value
-                .parse::<usize>()
-                .unwrap_or_else(|_| panic!("Invalid --runs-per-group value: {}", value));
-        } else if let Ok(value) = arg.parse::<usize>() {
-            runs_per_group = value;
-        } else {
-            panic!(
-                "Unknown argument '{}'. Usage: cargo run -- [--runs-per-group N] or [N]",
-                arg
-            );
-        }
-    }
-
-    if runs_per_group == 0 {
-        panic!("runs_per_group must be greater than 0");
-    }
-
-    runs_per_group
 }
 
 pub fn write_trajectory_to_csv(path: &Path, traj: &TrajectoryResult) -> std::io::Result<()> {
