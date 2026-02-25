@@ -1,9 +1,0 @@
-group_name,run_name,fine_clarabel_solve_time_s,set_of_three_avg_fine_clarabel_solve_time_s
-cgl_direct_descent_long,cgl_direct_descent_long_1,1.609808,
-cgl_direct_descent_long,cgl_direct_descent_long_2,1.733687,
-cgl_direct_descent_long,cgl_direct_descent_long_3,1.629538,
-cgl_direct_descent_long,set_1_avg,,1.657678
-zoh_direct_descent_long,zoh_direct_descent_long_1,1.583468,
-zoh_direct_descent_long,zoh_direct_descent_long_2,1.630149,
-zoh_direct_descent_long,zoh_direct_descent_long_3,1.609431,
-zoh_direct_descent_long,set_1_avg,,1.607683
