@@ -3,6 +3,7 @@ mod chebyshev_lossless;
 use crate::chebyshev_lossless::*;
 use crate::lossless::{LosslessSolver, SolveMetrics, SolveRunResult, TrajectoryResult};
 use std::collections::BTreeMap;
+use std::env;
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::path::Path;
@@ -14,6 +15,8 @@ struct FineSolveRecord {
 }
 
 fn main() {
+    let runs_per_group = parse_runs_per_group();
+
     let mut _solver = LosslessSolver {
         landing_point: [0.0, 0.0, 0.0], // This is the point where you want to end up.
         // initial_position: [10.0, 20.0, 50.0], // This is the point where you start from.
@@ -59,59 +62,89 @@ fn main() {
     };
 
     let group_name = "direct_descent";
-    let run_name = "long2";
+    let run_name = "med";
     let run_label = format!("{}_{}", group_name, run_name);
     let output_root = Path::new(group_name).join(run_name);
     std::fs::create_dir_all(&output_root).expect("Failed to create output root directory");
     let mut fine_records: Vec<FineSolveRecord> = Vec::new();
 
-    for i in 1..=6 {
-        println!("--- Run {} ---", i);
+    let solver_groups = ["zoh", "cgl"];
+    let mut run_counter = 0usize;
 
-        let (solver_group, run_name, solve_run) = if i <= 3 {
-            let group = "zoh";
-            let name = format!("{}_{}_{}", group, run_label, i);
-            let result = _solver.solve();
-            (group, name, result)
-        } else {
-            let group = "cgl";
-            let name = format!("{}_{}_{}", group, run_label, i - 3);
-            let result = chebyshev_solver.solve();
-            (group, name, result)
-        };
+    for solver_group in solver_groups {
+        for run_idx in 1..=runs_per_group {
+            run_counter += 1;
+            println!("--- Run {} ---", run_counter);
 
-        let run_dir = output_root.join(solver_group);
-        std::fs::create_dir_all(&run_dir).expect("Failed to create run output directory");
+            let run_name = format!("{}_{}_{}", solver_group, run_label, run_idx);
+            let solve_run = if solver_group == "zoh" {
+                _solver.solve()
+            } else {
+                chebyshev_solver.solve()
+            };
 
-        let solve_metrics_path = run_dir.join("solve_metrics.csv");
-        append_solve_metrics_to_csv(&solve_metrics_path, &run_name, &solve_run)
-            .expect("Failed to write solve metrics CSV");
+            let run_dir = output_root.join(solver_group);
+            std::fs::create_dir_all(&run_dir).expect("Failed to create run output directory");
 
-        fine_records.push(FineSolveRecord {
-            group_name: run_group_name(&run_name),
-            run_name: run_name.clone(),
-            fine_clarabel_solve_time_s: solve_run.fine_metrics.clarabel_solve_time_s,
-        });
+            let solve_metrics_path = run_dir.join("solve_metrics.csv");
+            append_solve_metrics_to_csv(&solve_metrics_path, &run_name, &solve_run)
+                .expect("Failed to write solve metrics CSV");
 
-        match &solve_run.trajectory {
-            Some(result) => {
-                println!("Final position: {:?}", result.positions.last().unwrap());
-                println!("Final velocity: {:?}", result.velocities.last().unwrap());
-                println!("Final mass: {:?}", result.masses.last().unwrap());
-                println!("Final thrust: {:?}", result.thrusts.last().unwrap());
+            fine_records.push(FineSolveRecord {
+                group_name: run_group_name(&run_name),
+                run_name: run_name.clone(),
+                fine_clarabel_solve_time_s: solve_run.fine_metrics.clarabel_solve_time_s,
+            });
 
-                let trajectory_path = run_dir.join(format!("trajectory_{}.csv", run_name));
-                write_trajectory_to_csv(&trajectory_path, result).expect("Failed to write CSV");
-            }
-            None => {
-                eprintln!("Solve failed!");
+            match &solve_run.trajectory {
+                Some(result) => {
+                    println!("Final position: {:?}", result.positions.last().unwrap());
+                    println!("Final velocity: {:?}", result.velocities.last().unwrap());
+                    println!("Final mass: {:?}", result.masses.last().unwrap());
+                    println!("Final thrust: {:?}", result.thrusts.last().unwrap());
+
+                    let trajectory_path = run_dir.join(format!("trajectory_{}.csv", run_name));
+                    write_trajectory_to_csv(&trajectory_path, result).expect("Failed to write CSV");
+                }
+                None => {
+                    eprintln!("Solve failed!");
+                }
             }
         }
     }
 
     let simple_metrics_path = output_root.join("simple_solve_metrics.csv");
-    write_simple_solve_metrics_csv(&simple_metrics_path, &fine_records)
+    write_simple_solve_metrics_csv(&simple_metrics_path, &fine_records, runs_per_group)
         .expect("Failed to write simple solve metrics CSV");
+}
+
+fn parse_runs_per_group() -> usize {
+    let mut args = env::args().skip(1);
+    let mut runs_per_group: usize = 3;
+
+    while let Some(arg) = args.next() {
+        if arg == "--runs-per-group" {
+            let value = args
+                .next()
+                .unwrap_or_else(|| panic!("Missing value after --runs-per-group"));
+            runs_per_group = value
+                .parse::<usize>()
+                .unwrap_or_else(|_| panic!("Invalid --runs-per-group value: {}", value));
+        } else if let Ok(value) = arg.parse::<usize>() {
+            runs_per_group = value;
+        } else {
+            panic!(
+                "Unknown argument '{}'. Usage: cargo run -- [--runs-per-group N] or [N]",
+                arg
+            );
+        }
+    }
+
+    if runs_per_group == 0 {
+        panic!("runs_per_group must be greater than 0");
+    }
+
+    runs_per_group
 }
 
 pub fn write_trajectory_to_csv(path: &Path, traj: &TrajectoryResult) -> std::io::Result<()> {
@@ -291,13 +324,24 @@ fn run_group_name(run_name: &str) -> String {
     run_name.to_string()
 }
 
-fn write_simple_solve_metrics_csv(path: &Path, records: &[FineSolveRecord]) -> std::io::Result<()> {
+fn write_simple_solve_metrics_csv(
+    path: &Path,
+    records: &[FineSolveRecord],
+    runs_per_group: usize,
+) -> std::io::Result<()> {
+    if runs_per_group == 0 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "runs_per_group must be greater than 0",
+        ));
+    }
+
     let file = File::create(path)?;
     let mut writer = BufWriter::new(file);
 
     writeln!(
         writer,
-        "group_name,run_name,fine_clarabel_solve_time_s,set_of_three_avg_fine_clarabel_solve_time_s"
+        "group_name,run_name,fine_clarabel_solve_time_s,set_avg_fine_clarabel_solve_time_s"
     )?;
 
     let mut grouped: BTreeMap<String, Vec<&FineSolveRecord>> = BTreeMap::new();
@@ -317,13 +361,13 @@ fn write_simple_solve_metrics_csv(path: &Path, records: &[FineSolveRecord]) -> s
             )?;
         }
 
-        for (set_idx, chunk) in group_records.chunks(3).enumerate() {
-            if chunk.len() == 3 {
+        for (set_idx, chunk) in group_records.chunks(runs_per_group).enumerate() {
+            if chunk.len() == runs_per_group {
                 let avg = chunk
                     .iter()
                     .map(|record| record.fine_clarabel_solve_time_s)
                     .sum::<f64>()
-                    / 3.0;
+                    / (runs_per_group as f64);
                 writeln!(writer, "{},set_{}_avg,,{:.6}", group_name, set_idx + 1, avg)?;
             }
         }
