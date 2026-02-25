@@ -121,7 +121,17 @@ impl Rocket {
     pub fn step(&mut self, control_input: Vector4<f64>, outside_forces: Vector3<f64>, outside_torques: Vector3<f64>, dt: f64) -> bool {
         let rotated_offset = self.attitude.transform_vector(&self.com_to_ground);
         let rocket_bottom = self.position + rotated_offset;
-        if rocket_bottom.z <= 0.0 {
+        if rocket_bottom.z < 0.0 {
+            // 1. Shift the rocket UP by the exact amount it went underground.
+            // (Because rocket_bottom.z is negative, subtracting it adds positive height)
+            self.position.z -= rocket_bottom.z; // Add a small buffer of 1 cm to prevent immediate re-collision on the next frame
+
+            // 2. CRITICAL: Kill the downward velocity!
+            // If you don't do this, the math still thinks it's falling at -5m/s, 
+            // and it will just instantly clip back underground on the next frame.
+            if self.velocity.z < 0.0 { // Assuming your velocity variable is named this
+                self.velocity.z = 0.0;
+            }
             return false; // Indicate that we've hit the ground
         }
         

@@ -388,9 +388,12 @@ impl MTV {
         // y = 300 * ln((x + 0.05) / 0.1) + 300 is an example thrust curve. Replace later with true relation
         let thrust = 300.0 * ((self.angle / 90.0 + 0.05) / 0.1).ln() + 300.0;
         println!("MTV Angle: {}, Thrust: {}", self.angle, thrust);
-        let nitrous_alpha = 1.0/(9.81 * 180.0);
-        let nitrogen_alpha = 1.0/(9.81 * 180.0);
-        let fuel_grain_alpha = 1.0/(9.81 * 180.0);
+        // let nitrous_alpha = 1.0/(9.81 * 180.0);
+        // let nitrogen_alpha = 1.0/(9.81 * 180.0);
+        // let fuel_grain_alpha = 1.0/(9.81 * 180.0);
+        let nitrous_alpha = 0.0;
+        let nitrogen_alpha = 0.0;
+        let fuel_grain_alpha = 0.0;
 
         let new_nitrogen_mass = (nitrogen_mass - nitrogen_alpha * thrust * dt).max(0.0);
         let new_pressurizing_nitrogen_mass = (pressurizing_nitrogen_mass + nitrogen_alpha * thrust * dt).max(0.0);

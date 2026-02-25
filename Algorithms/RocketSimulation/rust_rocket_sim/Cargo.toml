@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 rerun = "0.28"
 nalgebra = "0.32"
+clarabel = "0.7"
 rand = "0.9"
 rand_distr = "0.5"
 ndarray = "0.15"

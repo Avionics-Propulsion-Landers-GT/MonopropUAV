@@ -34,22 +34,91 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut mpc = get_mpc();
     let rocket_init_state = rocket.get_state();
-    let hover_xref_traj = vec![rocket_init_state; mpc.n_steps + 1]; // Reference trajectory to hover at the initial position
+    // let mut hover_xref_traj = vec![rocket_init_state.clone(); mpc.n_steps + 1];
+    // 1. Setup the profile parameters
+    let mut full_profile: Vec<Array1<f64>> = Vec::new();
+    let target_altitude = 50.0;
+    let climb_rate = 3.0; // m/s
+    let mpc_dt = 0.1;
+    
+    let mut current_z = 0.0;
+    let base_state = rocket.get_state(); // Assuming starting at 0,0,0
+
+    // 2. Generate the Climb Phase
+    while current_z < target_altitude {
+        let mut state = base_state.clone();
+        state[2] = current_z;      // Target Z position
+        state[9] = climb_rate;     // Target Z velocity (Crucial!)
+        full_profile.push(state);
+        current_z += climb_rate * mpc_dt;
+    }
+
+    // 3. Generate the Hover Phase
+    // Add enough "parked" states to keep the MPC happy once it reaches the top.
+    // Let's add 20 seconds worth of hovering (200 steps).
+    for _ in 0..200 {
+        let mut state = base_state.clone();
+        state[2] = target_altitude; 
+        state[9] = 0.0; // Velocity is now 0 (Brake and hold!)
+        full_profile.push(state);
+    }
     let mut hover_u_warm = vec![Array1::from(vec![0.0, 0.0, rocket.get_mass() * 9.81]); mpc.n_steps]; // Warm start with zero control inputs
 
     let mut control_input = Vector4::new(0.0, 0.0, 0.0, 0.0);
     let mut outside_forces = Vector3::new(0.0, 0.0, 0.0);
     let mut outside_torques = Vector3::new(0.0, 0.0, 0.0);
+    let mut current_time = 0.0;
     let dt = 0.02; // 20 ms time step
+    let min_time = 10.0;
     loop {
         // For this example, we'll just keep the control input zero and not apply any outside forces or torques.
         // In a real simulation, you'd update these based on your control algorithms and environmental effects.
         let mass = rocket.get_mass();
         // hover_u_warm = vec![Array1::from(vec![0.0, 0.0, mass * 9.81]); mpc.n_steps]; // Warm start with zero control inputs
+        
+        let current_step_index = ((current_time / mpc_dt) as f64).round() as usize;
 
-        let control_sequence = mpc.solve(&rocket.get_state(), &hover_xref_traj, &hover_u_warm, mass); // Placeholder reference trajectory and warm start
+        // 2. Prepare the empty sliding window
+        let mut hover_xref_traj = Vec::with_capacity(mpc.n_steps + 1);
 
-        let control_input = Vector4::new(control_sequence[1][0], control_sequence[1][1], control_sequence[1][2], 0.0); // Convert first control input to Vector4 (assuming the 4th component is not used for now)
+        // 3. Fill the window with the immediate future
+        for i in 0..=(mpc.n_steps) {
+            let lookup_index = current_step_index + i;
+
+            // Safety check: Have we run out of pre-computed trajectory?
+            if lookup_index < full_profile.len() {
+                // Grab the exact future step
+                hover_xref_traj.push(full_profile[lookup_index].clone());
+            } else {
+                // If the simulation is still running but the profile ended, 
+                // just keep feeding it the very last state (the 50m hover).
+                hover_xref_traj.push(full_profile.last().unwrap().clone());
+            }
+        }
+
+        let control_sequence = mpc.update(&rocket.get_state(), &hover_xref_traj, &hover_u_warm, mass, current_time); // Placeholder reference trajectory and warm start
+        let last_solve_time = mpc.last_solve_time;// 1. Calculate the fractional progress between MPC steps (0.0 to 1.0)
+        let time_since_solve = current_time - last_solve_time;
+        let raw_index = (time_since_solve / mpc_dt) as usize;
+        let max_index = control_sequence.len().saturating_sub(1);
+        let current_step_index = raw_index.min(max_index);
+        let progress = (time_since_solve % mpc_dt) / mpc_dt;
+
+        // 2. Grab the current command (u0) and the next predicted command (u1)
+        let u_0 = &control_sequence[current_step_index];
+        
+        // Safety check: ensure the sequence actually has a future step to blend into
+        let u_1 = if current_step_index + 1 <= max_index {
+            &control_sequence[current_step_index + 1]
+        } else {
+            u_0
+        };
+
+        // 3. Interpolate! 
+        // Because u_0 and u_1 are ndarray::Array1<f64>, Rust lets you do the vector math directly.
+        let current_control = u_0 + progress * (u_1 - u_0);
+
+        let control_input = Vector4::new(current_control[0], current_control[1], current_control[2], 0.0); // Convert first control input to Vector4 (assuming the 4th component is not used for now)
         // let control_input = Vector4::new(0.0, 0.0, mass * 9.81, 0.0); // Override with hover control input for testing
 
         println!("Rocket State: {:?}", rocket.get_state());
@@ -58,7 +127,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Total Force: {:?}", rocket.debug_info.total_force);
         println!("Thrust Vector: {:?}", rocket.debug_info.thrust_vector);
 
-        if !rocket.step(control_input, outside_forces, outside_torques, dt) {
+        if !rocket.step(control_input, outside_forces, outside_torques, dt) && current_time > min_time {
             break;
         }
 
@@ -88,6 +157,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .with_radii([0.1]) // Size of the point representing the rocket
         )?;
 
+        current_time += dt;
         // std::thread::sleep(std::time::Duration::from_millis(20)); // Sleep to simulate real-time progression
     }
 
@@ -100,7 +170,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn get_rocket() -> Rocket {
-    let position = Vector3::new(0.0, 0.0, 50.0);
+    let position = Vector3::new(0.0, 0.0, 0.0);
     let velocity = Vector3::new(0.0, 0.0, 0.0);
     let acceleration = Vector3::new(0.0, 0.0, 0.0);
     let attitude = UnitQuaternion::identity();
@@ -190,19 +260,19 @@ fn get_mpc() -> MPC {
     let m = 3;  // [gimbal_theta, gimbal_phi, thrust]
     let n_steps = 10;
     let dt = 0.1;
-    let integral_gains = (0.01, 0.01, 0.02);
-    // let integral_gains = (0.0, 0.0, 0.0);
+    // let integral_gains = (0.01, 0.01, 0.02);
+    let integral_gains = (0.0, 0.0, 0.0);
     let q = Array2::<f64>::from_diag(&Array1::from(vec![
-        2000.0, 2000.0, 20000.0,   // position x, y, z
-        5000.0, 5000.0, 10.0, 0.0, // quaternion qx, qy, qz, qw
-        30.0, 30.0, 10.0,        // linear velocities x_dot, y_dot, z_dot
+        2000.0, 2000.0, 10000.0,   // position x, y, z
+        8000.0, 8000.0, 10.0, 0.0, // quaternion qx, qy, qz, qw
+        300.0, 300.0, 100.0,        // linear velocities x_dot, y_dot, z_dot
         10.0, 10.0, 10.0          // angular velocities wx, wy, wz
     ]));
     let r = Array2::<f64>::from_diag(&Array1::from(vec![5.0, 5.0, 0.0]));
     let qn = Array2::<f64>::from_diag(&Array1::from(vec![
-        2000.0, 2000.0, 20000.0,   // position x, y, z
-        5000.0, 5000.0, 10.0, 10.0, // quaternion qx, qy, qz, qw
-        10.0, 10.0, 2.0,        // linear velocities x_dot, y_dot, z_dot
+        2000.0, 2000.0, 10000.0,   // position x, y, z
+        10000.0, 10000.0, 10.0, 10.0, // quaternion qx, qy, qz, qw
+        400.0, 400.0, 200.0,        // linear velocities x_dot, y_dot, z_dot
         5.0, 5.0, 5.0          // angular velocities wx, wy, wz
     ]));
     let smoothing_weight = Array1::from(vec![15000.0, 15000.0, 0.0002]);
@@ -212,6 +282,8 @@ fn get_mpc() -> MPC {
     let min_thrust = 400.0;
     let max_thrust = 1000.0;
     let gimbal_limit = 15_f64.to_radians();
+    let system_time = 0.0;
+    let update_rate = 50.0;
 
-    MPC::new(n, m, n_steps, dt, integral_gains, q, r, qn, smoothing_weight, panoc_cache_tolerance, panoc_cache_lbfgs_memory, min_thrust, max_thrust, gimbal_limit)
+    MPC::new(n, m, n_steps, dt, integral_gains, q, r, qn, smoothing_weight, panoc_cache_tolerance, panoc_cache_lbfgs_memory, min_thrust, max_thrust, gimbal_limit, system_time, update_rate)
 }
