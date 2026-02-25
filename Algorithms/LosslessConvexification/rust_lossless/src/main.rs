@@ -17,11 +17,15 @@ struct FineSolveRecord {
 fn main() {
     // let intial_position = [0.0, 0.0, 50.0];
     let intial_position = [10.0, 20.0, 50.0];
+
+    // let max_velocity = 500.0;
+    let max_velocity = 5.0;
+
     let mut _solver = LosslessSolver {
         landing_point: [0.0, 0.0, 0.0], // This is the point where you want to end up.
         initial_position: intial_position,
         initial_velocity: [0.0, 0.0, 0.0], // This is the velocity you start with.
-        max_velocity: 500.0, // This is the maximum velocity the vehicle can/should achieve in flight.
+        max_velocity: max_velocity, // This is the maximum velocity the vehicle can/should achieve in flight.
         dry_mass: 50.0, // This is the mass of the vehicle, without any fuel/propellant on board.
         fuel_mass: 30.0, // This is the mass of the fuel/propellant.
         alpha: 1.0/(9.81 * 180.0), // This is the conversion ratio from thrust to delta mass.
@@ -31,7 +35,7 @@ fn main() {
         // coarse_line_search_delta_t: 0.5, // TODO
         // fine_line_search_delta_t: 0.5,
         coarse_delta_t: 0.5, // This is the dt used to solve for the time frame of the trajectory.
-        fine_delta_t: 0.0125, // This is the dt used to solve for the higher resolution trajectory.
+        fine_delta_t: 0.05, // This is the dt used to solve for the higher resolution trajectory.
         use_glide_slope: true, // This determines if the glide slope constraint is used. The glide slope constraint ensures that the vehicle stays above an upward spreading cone centered on the landing point.
         glide_slope: 5_f64.to_radians(), // This is the angle of the glide slope constraint.
         N: 20, // This is the number of time steps the solver uses. It is set here, but is recalculated internally solve() is called. This is simply exposed so that the number of time steps can be accessed externally, if necessary.
@@ -44,7 +48,7 @@ fn main() {
         landing_point: [0.0, 0.0, 0.0], // This is the point where you want to end up.
         initial_position: intial_position, // This is the point where you start from.
         initial_velocity: [0.0, 0.0, 0.0], // This is the velocity you start with.
-        max_velocity: 500.0, // This is the maximum velocity the vehicle can/should achieve in flight.
+        max_velocity: max_velocity, // This is the maximum velocity the vehicle can/should achieve in flight.
         dry_mass: 50.0, // This is the mass of the vehicle, without any fuel/propellant on board.
         fuel_mass: 30.0, // This is the mass of the fuel/propellant.
         alpha: 1.0/(9.81 * 180.0), // This is the conversion ratio from thrust to delta mass.
@@ -53,15 +57,15 @@ fn main() {
         tvc_range_rad: 15_f64.to_radians(), // This is the range from the vertical axis that the thrust vector control can deviate.
         coarse_line_search_delta_t: 0.5,
         fine_line_search_delta_t: 0.05,
-        coarse_nodes: 20, // This is the dt used to solve for the time frame of the trajectory.
-        fine_nodes: 53, // This is the dt used to solve for the higher resolution trajectory.
+        coarse_nodes: 10, // This is the dt used to solve for the time frame of the trajectory.
+        fine_nodes: 37, // This is the dt used to solve for the higher resolution trajectory.
         use_glide_slope: true, // This determines if the glide slope constraint is used. The glide slope constraint ensures that the vehicle stays above an upward spreading cone centered on the landing point.
         glide_slope: 5_f64.to_radians(), // This is the angle of the glide slope constraint.
         ..Default::default()
     };
 
-    let group_name = "offset_descent";
-    let run_name = "long";
+    let group_name = "direct_limited_descent";
+    let run_name = "short";
     let runs_per_group = 10;
     let run_label = format!("{}_{}", group_name, run_name);
     let output_root = Path::new(group_name).join(run_name);
