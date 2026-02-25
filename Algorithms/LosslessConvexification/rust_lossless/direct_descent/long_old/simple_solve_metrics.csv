@@ -1,0 +1,9 @@
+group_name,run_name,fine_clarabel_solve_time_s,set_of_three_avg_fine_clarabel_solve_time_s
+cgl_direct_decent_long,cgl_direct_decent_long_1,1.641374,
+cgl_direct_decent_long,cgl_direct_decent_long_2,1.617446,
+cgl_direct_decent_long,cgl_direct_decent_long_3,1.560277,
+cgl_direct_decent_long,set_1_avg,,1.606366
+zoh_direct_decent_long,zoh_direct_decent_long_1,1.600201,
+zoh_direct_decent_long,zoh_direct_decent_long_2,1.640321,
+zoh_direct_decent_long,zoh_direct_decent_long_3,1.579019,
+zoh_direct_decent_long,set_1_avg,,1.606514

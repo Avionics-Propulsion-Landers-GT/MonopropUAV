@@ -58,8 +58,10 @@ fn main() {
         ..Default::default()
     };
 
-    let run_label = "direct_descent_long";
-    let output_root = Path::new("direct_descent").join("long");
+    let group_name = "direct_descent";
+    let run_name = "long2";
+    let run_label = format!("{}_{}", group_name, run_name);
+    let output_root = Path::new(group_name).join(run_name);
     std::fs::create_dir_all(&output_root).expect("Failed to create output root directory");
     let mut fine_records: Vec<FineSolveRecord> = Vec::new();
 
@@ -78,7 +80,7 @@ fn main() {
             (group, name, result)
         };
 
-        let run_dir = output_root.join(solver_group).join(&run_name);
+        let run_dir = output_root.join(solver_group);
         std::fs::create_dir_all(&run_dir).expect("Failed to create run output directory");
 
         let solve_metrics_path = run_dir.join("solve_metrics.csv");
