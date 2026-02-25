@@ -4,7 +4,7 @@ mod algorithms;
 use crate::rocket_dynamics::*;
 use crate::device_sim::*;
 use crate::algorithms::*;
-use nalgebra::{Vector3, Vector4, UnitQuaternion};
+use nalgebra::{Matrix3, Vector3, Vector4, UnitQuaternion};
 use ndarray::{Array1, Array2};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -64,6 +64,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let mut hover_u_warm = vec![Array1::from(vec![0.0, 0.0, rocket.get_mass() * 9.81]); mpc.n_steps]; // Warm start with zero control inputs
 
+    let mut lossless = get_lossless();
+
     let mut control_input = Vector4::new(0.0, 0.0, 0.0, 0.0);
     let mut outside_forces = Vector3::new(0.0, 0.0, 0.0);
     let mut outside_torques = Vector3::new(0.0, 0.0, 0.0);
@@ -76,27 +78,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mass = rocket.get_mass();
         // hover_u_warm = vec![Array1::from(vec![0.0, 0.0, mass * 9.81]); mpc.n_steps]; // Warm start with zero control inputs
         
-        let current_step_index = ((current_time / mpc_dt) as f64).round() as usize;
+        let trajectory = lossless.update([rocket.position.x, rocket.position.y, rocket.position.z], [rocket.velocity.x, rocket.velocity.y, rocket.velocity.z], [0.0, 0.0, target_altitude], mass - rocket.get_dry_mass(), current_time);
 
         // 2. Prepare the empty sliding window
-        let mut hover_xref_traj = Vec::with_capacity(mpc.n_steps + 1);
+        let mut xref_traj = get_mpc_reference(&trajectory, current_time, mpc_dt, lossless.fine_delta_t, mpc.n_steps + 1);
 
-        // 3. Fill the window with the immediate future
-        for i in 0..=(mpc.n_steps) {
-            let lookup_index = current_step_index + i;
-
-            // Safety check: Have we run out of pre-computed trajectory?
-            if lookup_index < full_profile.len() {
-                // Grab the exact future step
-                hover_xref_traj.push(full_profile[lookup_index].clone());
-            } else {
-                // If the simulation is still running but the profile ended, 
-                // just keep feeding it the very last state (the 50m hover).
-                hover_xref_traj.push(full_profile.last().unwrap().clone());
-            }
-        }
-
-        let control_sequence = mpc.update(&rocket.get_state(), &hover_xref_traj, &hover_u_warm, mass, current_time); // Placeholder reference trajectory and warm start
+        let control_sequence = mpc.update(&rocket.get_state(), &xref_traj, &hover_u_warm, mass, current_time); // Placeholder reference trajectory and warm start
         let last_solve_time = mpc.last_solve_time;// 1. Calculate the fractional progress between MPC steps (0.0 to 1.0)
         let time_since_solve = current_time - last_solve_time;
         let raw_index = (time_since_solve / mpc_dt) as usize;
@@ -125,7 +112,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Rocket Mass: {}", mass);
         println!("Control Input: {:?}", control_input);
         println!("Total Force: {:?}", rocket.debug_info.total_force);
-        println!("Thrust Vector: {:?}", rocket.debug_info.thrust_vector);
+        println!("Thrust Vector: {:?}", rocket.thrust_vector);
 
         if !rocket.step(control_input, outside_forces, outside_torques, dt) && current_time > min_time {
             break;
@@ -141,7 +128,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )?;
 
         // Log Thrust Vector
-        let normalized_thrust_vector = rocket.debug_info.thrust_vector / 1000.0; // Scale for visualization
+        let normalized_thrust_vector = rocket.thrust_vector / 1000.0; // Scale for visualization
         rec.log(
             "world/thrust_vector",
             &rerun::Arrows3D::from_vectors([((normalized_thrust_vector.x) as f32, (normalized_thrust_vector.y) as f32, (normalized_thrust_vector.z) as f32)])
@@ -177,22 +164,39 @@ fn get_rocket() -> Rocket {
     let angular_velocity = Vector3::new(0.0, 0.0, 0.0);
     let angular_acceleration = Vector3::new(0.0, 0.0, 0.0);
 
-    let dry_mass = 50.0;
-    let nitrogen_tank_empty_mass = 0.0;
+    let frame_mass = 15.66;
+    let nitrogen_tank_empty_mass = 15.6;
     let starting_nitrogen_mass = 5.0;
-    let nitrogen_tank_empty_offset = Vector3::new(0.0, 0.0, 0.0);
-    let nitrogen_tank_full_offset = Vector3::new(0.0, 0.0, 0.0);
-    let nitrous_tank_empty_mass = 0.0;
-    let starting_pressurizing_nitrogen_mass = 5.0;
-    let starting_nitrous_mass = 20.0;
-    let nitrous_tank_empty_offset = Vector3::new(0.0, 0.0, 0.0);
-    let nitrous_tank_full_offset = Vector3::new(0.0, 0.0, 0.0);
-    let nitrous_tank_depleted_offset = Vector3::new(0.0, 0.0, 0.0);
-    let tvc_module_empty_mass = 0.0;
-    let starting_fuel_grain_mass = 4.0;
-    let frame_com_to_gimbal = Vector3::new(0.0, 0.0, -1.0);
-    let gimbal_to_tvc_com = Vector3::new(0.0, 0.0, 0.0);
-    let inertia_tensor = Vector3::new(15.0, 15.0, 8.0);
+    let nitrogen_tank_offset = Vector3::new(-0.02, -0.01, 0.76);
+    let nitrous_tank_empty_mass = 15.86;
+    let starting_pressurizing_nitrogen_mass = 0.0;
+    let starting_nitrous_mass = 16.0;
+    let nitrous_tank_offset = Vector3::new(-0.02, -0.01, 0.592);
+    let tvc_module_empty_mass = 8.76;
+    let starting_fuel_grain_mass = 3.0;
+    let frame_com_to_gimbal = Vector3::new(-0.02, -0.01, -0.24);
+    let gimbal_to_tvc_com = Vector3::new(0.0, 0.0, -0.25);
+    
+    let frame_moi = Matrix3::new(6.65, 0.35, -0.02,
+                                0.35, 6.65, -0.02,
+                                -0.02, -0.02, 2.3);
+    let dry_nitrogen_moi = Matrix3::new(0.9275, 0.0, 0.0,
+                                        0.0, 0.9275, 0.0,
+                                        0.0, 0.0, 1.055);
+    let wet_nitrogen_moi = Matrix3::new(1.0075, 0.0, 0.0,
+                                        0.0, 1.0075, 0.0,
+                                        0.0, 0.0, 1.055);
+    let nitrous_tank_radius = 0.0;
+    let nitrous_tank_length = 0.0;
+    let dry_nitrous_moi = Matrix3::new(1.31, 0.0, 0.0,
+                                        0.0, 1.31, 0.0,
+                                        0.0, 0.0, 0.21);
+    let dry_tvc_moi = Matrix3::new(0.64, 0.0, 0.0,
+                                    0.0, 0.64, 0.0,
+                                    0.0, 0.0, 0.06);
+    let wet_tvc_moi = Matrix3::new(0.84, 0.0, 0.0,
+                                    0.0, 0.84, 0.0,
+                                    0.0, 0.0, 0.07);
     let tvc_range = 15_f64.to_radians();
 
     let mtv_angle = 60.0;
@@ -252,7 +256,7 @@ fn get_rocket() -> Rocket {
     let com_to_ground = Vector3::new(0.0, 0.0, -1.5);
 
 
-    Rocket::new(position, velocity, acceleration, attitude, angular_velocity, angular_acceleration, dry_mass, nitrogen_tank_empty_mass, starting_nitrogen_mass, nitrogen_tank_empty_offset, nitrogen_tank_full_offset, nitrous_tank_empty_mass, starting_pressurizing_nitrogen_mass, starting_nitrous_mass, nitrous_tank_empty_offset, nitrous_tank_full_offset, nitrous_tank_depleted_offset, tvc_module_empty_mass, starting_fuel_grain_mass, frame_com_to_gimbal, gimbal_to_tvc_com, inertia_tensor, tvc_range, tvc, rcs, imu, gps, uwb, com_to_ground)
+    Rocket::new(position, velocity, acceleration, attitude, angular_velocity, angular_acceleration, frame_mass, nitrogen_tank_empty_mass, starting_nitrogen_mass, nitrogen_tank_offset, nitrous_tank_empty_mass, starting_pressurizing_nitrogen_mass, starting_nitrous_mass, nitrous_tank_offset, tvc_module_empty_mass, starting_fuel_grain_mass, frame_com_to_gimbal, gimbal_to_tvc_com, frame_moi, dry_nitrogen_moi, wet_nitrogen_moi, nitrous_tank_radius, nitrous_tank_length, dry_nitrous_moi, dry_tvc_moi, wet_tvc_moi, tvc_range, tvc, rcs, imu, gps, uwb, com_to_ground)
 }
 
 fn get_mpc() -> MPC {
@@ -263,27 +267,115 @@ fn get_mpc() -> MPC {
     // let integral_gains = (0.01, 0.01, 0.02);
     let integral_gains = (0.0, 0.0, 0.0);
     let q = Array2::<f64>::from_diag(&Array1::from(vec![
-        2000.0, 2000.0, 10000.0,   // position x, y, z
-        8000.0, 8000.0, 10.0, 0.0, // quaternion qx, qy, qz, qw
-        300.0, 300.0, 100.0,        // linear velocities x_dot, y_dot, z_dot
+        20.0, 20.0, 200.0,   // position x, y, z
+        120.0, 120.0, 0.0, 0.0, // quaternion qx, qy, qz, qw
+        30.0, 30.0, 10.0,        // linear velocities x_dot, y_dot, z_dot
         10.0, 10.0, 10.0          // angular velocities wx, wy, wz
     ]));
     let r = Array2::<f64>::from_diag(&Array1::from(vec![5.0, 5.0, 0.0]));
     let qn = Array2::<f64>::from_diag(&Array1::from(vec![
-        2000.0, 2000.0, 10000.0,   // position x, y, z
-        10000.0, 10000.0, 10.0, 10.0, // quaternion qx, qy, qz, qw
-        400.0, 400.0, 200.0,        // linear velocities x_dot, y_dot, z_dot
+        20.0, 20.0, 100.0,   // position x, y, z
+        150.0, 150.0, 10.0, 10.0, // quaternion qx, qy, qz, qw
+        40.0, 40.0, 20.0,        // linear velocities x_dot, y_dot, z_dot
         5.0, 5.0, 5.0          // angular velocities wx, wy, wz
     ]));
-    let smoothing_weight = Array1::from(vec![15000.0, 15000.0, 0.0002]);
+    let smoothing_weight = Array1::from(vec![15000.0, 15000.0, 0.0]);
     let smoothing_weight = Array1::from(vec![0.0, 0.0, 0.0]);
     let panoc_cache_tolerance = 1e-4;
     let panoc_cache_lbfgs_memory = 20;
     let min_thrust = 400.0;
     let max_thrust = 1000.0;
     let gimbal_limit = 15_f64.to_radians();
-    let system_time = 0.0;
+    let system_time = -1.0;
     let update_rate = 50.0;
 
     MPC::new(n, m, n_steps, dt, integral_gains, q, r, qn, smoothing_weight, panoc_cache_tolerance, panoc_cache_lbfgs_memory, min_thrust, max_thrust, gimbal_limit, system_time, update_rate)
+}
+
+fn get_lossless() -> Lossless {
+    let max_velocity = 50.0;
+    let dry_mass = 61.0;
+    let alpha = 1.0 / (9.81 * 180.0);
+    let lower_thrust_bound = 400.0;
+    let upper_thrust_bound = 1000.0;
+    let tvc_range_rad = 15_f64.to_radians();
+    let coarse_delta_t = 1.0;
+    let fine_delta_t = 0.5;
+    let glide_slope = 5.0_f64.to_radians();
+    let use_glide_slope = false;
+    let system_time = -1.0;
+    let update_rate = 3.0;
+
+    Lossless::new(max_velocity, dry_mass, alpha, lower_thrust_bound, upper_thrust_bound, tvc_range_rad, coarse_delta_t, fine_delta_t, glide_slope, use_glide_slope, [0.0; 3], system_time, update_rate)
+}
+
+pub fn get_mpc_reference(
+    traj: &algorithms::lossless::TrajectoryResult,
+    current_time: f64,
+    mpc_dt: f64,
+    lossless_dt: f64,
+    n_steps: usize,
+) -> Vec<Array1<f64>> {
+    let mut mpc_reference = Vec::with_capacity(n_steps + 1);
+    let num_points = traj.positions.len();
+
+    if num_points == 0 {
+        panic!("TrajectoryResult is empty!");
+    }
+
+    // Generate the state for the current time, plus each future step in the horizon
+    for i in 0..=n_steps {
+        // 1. What exact time is the MPC predicting for this step?
+        let t_target = current_time + (i as f64) * mpc_dt;
+
+        let mut interp_p = [0.0; 3];
+        let mut interp_v = [0.0; 3];
+
+        // 2. Are we past the end of the flight profile?
+        if t_target >= traj.time_of_flight_s || num_points == 1 {
+            // Park the rocket at the final coordinate
+            interp_p = traj.positions[num_points - 1];
+            interp_v = [0.0, 0.0, 0.0]; // Force target velocity to 0 to hold the hover
+            
+        } else if t_target <= 0.0 {
+            // We haven't launched yet (or t_target is 0)
+            interp_p = traj.positions[0];
+            interp_v = traj.velocities[0];
+            
+        } else {
+            // 3. Interpolate perfectly between the two closest trajectory points
+            let exact_idx = t_target / lossless_dt;
+            let base_idx = exact_idx.floor() as usize;
+            
+            // Prevent out-of-bounds on the array lookup
+            let safe_idx = base_idx.min(num_points.saturating_sub(2));
+            
+            // Calculate the fraction (0.0 to 1.0) between the two points
+            let frac = (t_target - (safe_idx as f64) * lossless_dt) / lossless_dt;
+            let clamped_frac = frac.clamp(0.0, 1.0);
+
+            let p0 = traj.positions[safe_idx];
+            let p1 = traj.positions[safe_idx + 1];
+            let v0 = traj.velocities[safe_idx];
+            let v1 = traj.velocities[safe_idx + 1];
+
+            for j in 0..3 {
+                interp_p[j] = p0[j] + clamped_frac * (p1[j] - p0[j]);
+                interp_v[j] = v0[j] + clamped_frac * (v1[j] - v0[j]);
+            }
+        }
+
+        // 4. Map the interpolated data into the 13-element MPC state array
+        // Order: [x, y, z, qx, qy, qz, qw, x_dot, y_dot, z_dot, wx, wy, wz]
+        let state = Array1::from(vec![
+            interp_p[0], interp_p[1], interp_p[2], // Target Position
+            0.0, 0.0, 0.0, 1.0,                    // Target Attitude (Upright)
+            interp_v[0], interp_v[1], interp_v[2], // Target Velocity
+            0.0, 0.0, 0.0                          // Target Angular Velocity (Zero spin)
+        ]);
+
+        mpc_reference.push(state);
+    }
+
+    mpc_reference
 }

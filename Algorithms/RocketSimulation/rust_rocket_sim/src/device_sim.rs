@@ -420,7 +420,6 @@ pub struct TVC {
     ang_accel: Vector3<f64>,
     tvc_torque: Vector3<f64>,
     pub actuator_lever_arm: f64,
-    pub tvc_lever_arm: Vector3<f64>,
     pub max_fuel_inertia: f64,
     pub min_fuel_inertia: f64,
     starting_fuel_grain_mass: f64,
@@ -453,7 +452,6 @@ impl TVC {
             ang_accel: Vector3::zeros(),
             tvc_torque: Vector3::zeros(),
             actuator_lever_arm,
-            tvc_lever_arm,
             max_fuel_inertia,
             min_fuel_inertia,
             starting_fuel_grain_mass,
@@ -463,7 +461,7 @@ impl TVC {
     // engine is 11 kg with fuel, awaiting empty mass data
     // Returns the reaction torque applied to the rocket body
     // only the first two elements of command are used, the third is thrust
-    pub fn update(&mut self, command: Vector3<f64>, nitrogen_mass: f64, pressurizing_nitrogen_mass: f64, nitrous_mass: f64, fuel_grain_mass: f64, dt: f64, system_time: f64) -> TVCEffect {
+    pub fn update(&mut self, command: Vector3<f64>, tvc_lever_arm: Vector3<f64>, nitrogen_mass: f64, pressurizing_nitrogen_mass: f64, nitrous_mass: f64, fuel_grain_mass: f64, dt: f64, system_time: f64) -> TVCEffect {
         let mtv_effect = self.mtv.update(command[2], nitrogen_mass, pressurizing_nitrogen_mass,nitrous_mass, fuel_grain_mass, dt, system_time);
 
         let engine_inertia = self.min_fuel_inertia + (self.max_fuel_inertia - self.min_fuel_inertia) * (fuel_grain_mass / self.starting_fuel_grain_mass);
@@ -495,7 +493,7 @@ impl TVC {
         let gimbal_rotation = y_rot * x_rot;
 
         let thrust_vector = gimbal_rotation.transform_vector(&mtv_effect.thrust);
-        let thrust_torque = self.tvc_lever_arm.cross(&thrust_vector);
+        let thrust_torque = tvc_lever_arm.cross(&thrust_vector);
 
         self.tvc_torque = reaction_torque + thrust_torque;
 
