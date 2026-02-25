@@ -2,6 +2,16 @@ mod lossless;
 mod chebyshev_lossless;
 use crate::chebyshev_lossless::*;
 use crate::lossless::{LosslessSolver, SolveMetrics, SolveRunResult, TrajectoryResult};
+use std::collections::BTreeMap;
+use std::fs::{File, OpenOptions};
+use std::io::{BufWriter, Write};
+use std::path::Path;
+
+struct FineSolveRecord {
+    group_name: String,
+    run_name: String,
+    fine_clarabel_solve_time_s: f64,
+}
 
 fn main() {
     let mut _solver = LosslessSolver {
@@ -42,42 +52,68 @@ fn main() {
         coarse_line_search_delta_t: 0.5,
         fine_line_search_delta_t: 0.05,
         coarse_nodes: 30, // This is the dt used to solve for the time frame of the trajectory.
-        fine_nodes: 50, // This is the dt used to solve for the higher resolution trajectory.
+        fine_nodes: 48, // This is the dt used to solve for the higher resolution trajectory.
         use_glide_slope: true, // This determines if the glide slope constraint is used. The glide slope constraint ensures that the vehicle stays above an upward spreading cone centered on the landing point.
         glide_slope: 5_f64.to_radians(), // This is the angle of the glide slope constraint.
         ..Default::default()
     };
-    
-    // let run_name = "zoh_3";
-    // let solve_run = _solver.solve();
-    let run_name = "cgl_3";
-    let solve_run = chebyshev_solver.solve();
-    
-    append_solve_metrics_to_csv("solve_metrics.csv", run_name, &solve_run)
-        .expect("Failed to write solve metrics CSV");
 
-    match &solve_run.trajectory {
-        Some(result) => {
-            println!("Final position: {:?}", result.positions.last().unwrap());
-            println!("Final velocity: {:?}", result.velocities.last().unwrap());
-            println!("Final mass: {:?}", result.masses.last().unwrap());
-            println!("Final thrust: {:?}", result.thrusts.last().unwrap());
-            
-            write_trajectory_to_csv(&format!("trajectory_{}.csv", run_name), result)
-                .expect("Failed to write CSV");
-        }
-        None => {
-            eprintln!("Solve failed!");
+    let run_label = "direct_descent_long";
+    let output_root = Path::new("direct_descent").join("long");
+    std::fs::create_dir_all(&output_root).expect("Failed to create output root directory");
+    let mut fine_records: Vec<FineSolveRecord> = Vec::new();
+
+    for i in 1..=6 {
+        println!("--- Run {} ---", i);
+
+        let (solver_group, run_name, solve_run) = if i <= 3 {
+            let group = "zoh";
+            let name = format!("{}_{}_{}", group, run_label, i);
+            let result = _solver.solve();
+            (group, name, result)
+        } else {
+            let group = "cgl";
+            let name = format!("{}_{}_{}", group, run_label, i - 3);
+            let result = chebyshev_solver.solve();
+            (group, name, result)
+        };
+
+        let run_dir = output_root.join(solver_group).join(&run_name);
+        std::fs::create_dir_all(&run_dir).expect("Failed to create run output directory");
+
+        let solve_metrics_path = run_dir.join("solve_metrics.csv");
+        append_solve_metrics_to_csv(&solve_metrics_path, &run_name, &solve_run)
+            .expect("Failed to write solve metrics CSV");
+
+        fine_records.push(FineSolveRecord {
+            group_name: run_group_name(&run_name),
+            run_name: run_name.clone(),
+            fine_clarabel_solve_time_s: solve_run.fine_metrics.clarabel_solve_time_s,
+        });
+
+        match &solve_run.trajectory {
+            Some(result) => {
+                println!("Final position: {:?}", result.positions.last().unwrap());
+                println!("Final velocity: {:?}", result.velocities.last().unwrap());
+                println!("Final mass: {:?}", result.masses.last().unwrap());
+                println!("Final thrust: {:?}", result.thrusts.last().unwrap());
+
+                let trajectory_path = run_dir.join(format!("trajectory_{}.csv", run_name));
+                write_trajectory_to_csv(&trajectory_path, result).expect("Failed to write CSV");
+            }
+            None => {
+                eprintln!("Solve failed!");
+            }
         }
     }
+
+    let simple_metrics_path = output_root.join("simple_solve_metrics.csv");
+    write_simple_solve_metrics_csv(&simple_metrics_path, &fine_records)
+        .expect("Failed to write simple solve metrics CSV");
 }
 
-use std::fs::{File, OpenOptions};
-use std::io::{Write, BufWriter};
-use std::path::Path;
-
-pub fn write_trajectory_to_csv(filename: &str, traj: &TrajectoryResult) -> std::io::Result<()> {
-    let file = File::create(filename)?;
+pub fn write_trajectory_to_csv(path: &Path, traj: &TrajectoryResult) -> std::io::Result<()> {
+    let file = File::create(path)?;
     let mut writer = BufWriter::new(file);
 
     // ADDED: "thrust_force" to the header
@@ -119,7 +155,7 @@ pub fn write_trajectory_to_csv(filename: &str, traj: &TrajectoryResult) -> std::
 }
 
 pub fn append_solve_metrics_to_csv(
-    filename: &str,
+    path: &Path,
     run_name: &str,
     solve_run: &SolveRunResult,
 ) -> std::io::Result<()> {
@@ -128,13 +164,13 @@ pub fn append_solve_metrics_to_csv(
     const SOLVE_METRICS_HEADER_V2: &str =
         "run_name,pass,attempts,successes,iterations,clarabel_solve_time_s,wall_time_s,last_status,time_of_flight_s";
 
-    ensure_solve_metrics_header(filename, SOLVE_METRICS_HEADER_V1, SOLVE_METRICS_HEADER_V2)?;
+    ensure_solve_metrics_header(path, SOLVE_METRICS_HEADER_V1, SOLVE_METRICS_HEADER_V2)?;
 
-    let file_exists = Path::new(filename).exists();
+    let file_exists = path.exists();
     let file = OpenOptions::new()
         .append(true)
         .create(true)
-        .open(filename)?;
+        .open(path)?;
     let write_header = !file_exists || file.metadata()?.len() == 0;
 
     let mut writer = BufWriter::new(file);
@@ -174,11 +210,10 @@ pub fn append_solve_metrics_to_csv(
 }
 
 fn ensure_solve_metrics_header(
-    filename: &str,
+    path: &Path,
     old_header: &str,
     new_header: &str,
 ) -> std::io::Result<()> {
-    let path = Path::new(filename);
     if !path.exists() || path.metadata()?.len() == 0 {
         return Ok(());
     }
@@ -213,7 +248,8 @@ fn ensure_solve_metrics_header(
         std::io::ErrorKind::InvalidData,
         format!(
             "Unsupported solve metrics CSV header in {}: {}",
-            filename, existing_header
+            path.display(),
+            existing_header
         ),
     ))
 }
@@ -242,4 +278,55 @@ fn write_solve_metrics_row<W: Write>(
         metrics.last_status,
         time_of_flight_str
     )
+}
+
+fn run_group_name(run_name: &str) -> String {
+    if let Some((prefix, suffix)) = run_name.rsplit_once('_') {
+        if suffix.parse::<usize>().is_ok() {
+            return prefix.to_string();
+        }
+    }
+    run_name.to_string()
+}
+
+fn write_simple_solve_metrics_csv(path: &Path, records: &[FineSolveRecord]) -> std::io::Result<()> {
+    let file = File::create(path)?;
+    let mut writer = BufWriter::new(file);
+
+    writeln!(
+        writer,
+        "group_name,run_name,fine_clarabel_solve_time_s,set_of_three_avg_fine_clarabel_solve_time_s"
+    )?;
+
+    let mut grouped: BTreeMap<String, Vec<&FineSolveRecord>> = BTreeMap::new();
+    for record in records {
+        grouped
+            .entry(record.group_name.clone())
+            .or_default()
+            .push(record);
+    }
+
+    for (group_name, group_records) in grouped {
+        for record in &group_records {
+            writeln!(
+                writer,
+                "{},{},{:.6},",
+                group_name, record.run_name, record.fine_clarabel_solve_time_s
+            )?;
+        }
+
+        for (set_idx, chunk) in group_records.chunks(3).enumerate() {
+            if chunk.len() == 3 {
+                let avg = chunk
+                    .iter()
+                    .map(|record| record.fine_clarabel_solve_time_s)
+                    .sum::<f64>()
+                    / 3.0;
+                writeln!(writer, "{},set_{}_avg,,{:.6}", group_name, set_idx + 1, avg)?;
+            }
+        }
+    }
+
+    writer.flush()?;
+    Ok(())
 }
