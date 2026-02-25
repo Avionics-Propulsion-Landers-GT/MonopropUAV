@@ -574,7 +574,7 @@ impl ChebyshevLosslessSolver {
             rows.push(row_idx);
             cols.push(X_INDEX + 3 * (num_nodes - 1) + dim);
             vals.push(1.0);
-            b.push(0.0); // Target Pos
+            b.push(self.landing_point[dim]); // Target Pos
             row_idx += 1;
             
             // vN
@@ -678,7 +678,9 @@ impl ChebyshevLosslessSolver {
 
 
             // ---------- Glide slope SOC: ||x_k[:2]|| <= x_k[2] / tan(glide_slope) ----------
-            if self.use_glide_slope {
+            // Avoid enforcing glide-slope at the terminal collocation node, where
+            // terminal equalities already pin state and the SOC can become degenerate.
+            if self.use_glide_slope && k < self.N {
                 let glide_tan = self.glide_slope.tan();
                 let glide_tan_safe = if glide_tan >= 0.0 {
                     glide_tan.max(GLIDE_TAN_FLOOR)
