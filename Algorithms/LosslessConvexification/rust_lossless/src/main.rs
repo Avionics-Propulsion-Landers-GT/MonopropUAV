@@ -33,7 +33,7 @@ fn main() {
     let max_velocity = 500.0;
     // let max_velocity = 5.0;
 
-    let min_time_s: f64 = 7.20;
+    let min_time_s: f64 = 7.00;
 
     let mut zoh_solver = LosslessSolver {
         landing_point: [0.0, 0.0, 0.0],
@@ -50,7 +50,7 @@ fn main() {
         coarse_line_search_delta_t: 0.1,
         fine_line_search_delta_t: 0.01,
         coarse_delta_t: 0.01,
-        fine_delta_t: 0.0062,
+        fine_delta_t: 0.5,
         use_glide_slope: true,
         glide_slope: 5_f64.to_radians(),
         N: 20,
@@ -72,7 +72,7 @@ fn main() {
         coarse_line_search_delta_t: 0.1,
         fine_line_search_delta_t: 0.01,
         coarse_nodes: 15,
-        fine_nodes: 68,
+        fine_nodes: 5,
         use_glide_slope: true,
         glide_slope: 5_f64.to_radians(),
         ..Default::default()
@@ -80,7 +80,7 @@ fn main() {
 
     let group_name = "offset_descent";
     let truth_name = "trajectory_zoh_truth_offset.csv";
-    let run_type = "long";
+    let run_type = "extreme_short";
     let solver_groups_to_run: Vec<&str> = vec!["zoh", "cgl"];
     // let solver_groups_to_run: Vec<&str> = vec!["cgl"];
     // let solver_groups_to_run: Vec<&str> = vec!["zoh"];
