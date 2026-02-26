@@ -1,0 +1,253 @@
+import argparse
+import csv
+import math
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+
+
+METHODS = ("zoh", "cgl")
+METHOD_COLORS = {"zoh": "#1F77B4", "cgl": "#E66101"}
+RUN_TYPE_REMAP = {
+    "ultra_short": "coarse",
+    "short": "fine",
+    "long": "very_fine",
+}
+TARGET_RUN_TYPES = ("coarse", "fine", "very_fine")
+RUN_TYPE_ORDER = {
+    "coarse": 0,
+    "fine": 1,
+    "very_fine": 2,
+}
+RUN_TYPE_LABELS = {
+    "coarse": "Coarse",
+    "fine": "Fine",
+    "very_fine": "Very Fine",
+}
+
+
+def parse_args() -> argparse.Namespace:
+    default_root = Path(__file__).resolve().parents[1]
+    parser = argparse.ArgumentParser(
+        description=(
+            "Create avg solve-time bar chart grouped by group_name, then run_type, "
+            "with side-by-side method bars and std-error error bars."
+        )
+    )
+    parser.add_argument(
+        "--input",
+        type=Path,
+        default=default_root / "clean_group_graph_data.csv",
+        help=f"Input clean CSV path (default: {default_root / 'clean_group_graph_data.csv'})",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=default_root / "figures" / "avg_solve_time_grouped.png",
+        help=(
+            "Output figure path "
+            f"(default: {default_root / 'figures' / 'avg_solve_time_grouped.png'})"
+        ),
+    )
+    return parser.parse_args()
+
+
+def parse_float(raw_value: str) -> float | None:
+    text = (raw_value or "").strip()
+    if not text:
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def normalize_run_type(run_type: str) -> str:
+    raw = (run_type or "").strip().lower()
+    return RUN_TYPE_REMAP.get(raw, raw)
+
+
+def load_data(
+    path: Path,
+) -> tuple[dict[tuple[str, str, str], tuple[float, float]], list[str], dict[str, list[str]]]:
+    with path.open(newline="") as f:
+        reader = csv.DictReader(f)
+        if not reader.fieldnames:
+            raise ValueError(f"{path} has no header row")
+        required = {"group_name", "run_type", "method", "avg_solve_time", "std_error_solve_time"}
+        missing = required.difference(reader.fieldnames)
+        if missing:
+            raise ValueError(f"{path} is missing required columns: {sorted(missing)}")
+
+        data: dict[tuple[str, str, str], tuple[float, float]] = {}
+        group_to_run_types: dict[str, set[str]] = {}
+
+        for row in reader:
+            group = (row.get("group_name") or "").strip()
+            run_type = normalize_run_type(row.get("run_type", ""))
+            method = (row.get("method") or "").strip().lower()
+            if not group or run_type not in TARGET_RUN_TYPES or method not in METHODS:
+                continue
+
+            avg = parse_float(row.get("avg_solve_time", ""))
+            stderr = parse_float(row.get("std_error_solve_time", ""))
+            if avg is None:
+                continue
+            if stderr is None:
+                stderr = 0.0
+
+            data[(group, run_type, method)] = (avg, stderr)
+            group_to_run_types.setdefault(group, set()).add(run_type)
+
+    groups = sorted(group_to_run_types.keys())
+    ordered_group_run_types: dict[str, list[str]] = {}
+    for group in groups:
+        run_types = sorted(
+            group_to_run_types[group],
+            key=lambda item: RUN_TYPE_ORDER.get(item, len(RUN_TYPE_ORDER)),
+        )
+        ordered_group_run_types[group] = run_types
+
+    return data, groups, ordered_group_run_types
+
+
+def make_plot(
+    data: dict[tuple[str, str, str], tuple[float, float]],
+    groups: list[str],
+    group_run_types: dict[str, list[str]],
+    output_path: Path,
+) -> None:
+    if not groups:
+        raise RuntimeError("No usable rows found for avg solve-time plotting")
+
+    plt.rcParams.update(
+        {
+            "figure.dpi": 300,
+            "savefig.dpi": 300,
+            "font.size": 11,
+            "axes.labelsize": 12,
+            "axes.titlesize": 14,
+            "legend.fontsize": 10,
+        }
+    )
+
+    bar_width = 0.34
+    run_type_spacing = 1.15
+    group_spacing = 0.95
+    method_offsets = {"zoh": -bar_width / 2.0, "cgl": bar_width / 2.0}
+
+    cluster_positions: list[tuple[float, str, str]] = []
+    group_ranges: dict[str, tuple[float, float]] = {}
+    cursor = 0.0
+    for group in groups:
+        run_types = group_run_types[group]
+        if not run_types:
+            continue
+        start_x = cursor
+        for run_type in run_types:
+            cluster_positions.append((cursor, group, run_type))
+            cursor += run_type_spacing
+        end_x = cursor - run_type_spacing
+        group_ranges[group] = (start_x, end_x)
+        cursor += group_spacing
+
+    fig_width = max(12.0, 1.05 * len(cluster_positions) + 3.0)
+    fig, ax = plt.subplots(figsize=(fig_width, 6.0))
+    all_y_values: list[float] = []
+
+    for method in METHODS:
+        x_vals = []
+        y_vals = []
+        y_errs_lower = []
+        y_errs_upper = []
+        for x_center, group, run_type in cluster_positions:
+            pair = data.get((group, run_type, method))
+            if pair is None:
+                continue
+            avg, stderr = pair
+            if avg <= 0:
+                continue
+            x_vals.append(x_center + method_offsets[method])
+            y_vals.append(avg)
+            all_y_values.append(avg)
+
+            # Keep lower error above zero for log-scale rendering.
+            lower_err = min(stderr, avg * 0.95)
+            y_errs_lower.append(lower_err)
+            y_errs_upper.append(stderr)
+
+        if not x_vals:
+            continue
+
+        ax.bar(
+            x_vals,
+            y_vals,
+            width=bar_width,
+            color=METHOD_COLORS[method],
+            edgecolor="black",
+            linewidth=0.6,
+            yerr=[y_errs_lower, y_errs_upper],
+            capsize=4,
+            error_kw={"elinewidth": 1.0, "ecolor": "black"},
+            label=method.upper(),
+        )
+
+    if not all_y_values:
+        raise RuntimeError("No positive avg_solve_time values available for log-scale plotting")
+
+    xticks = [x for x, _, _ in cluster_positions]
+    xlabels = [RUN_TYPE_LABELS.get(run_type, run_type) for _, _, run_type in cluster_positions]
+    ax.set_xticks(xticks)
+    ax.set_xticklabels(xlabels, rotation=25, ha="right")
+
+    ax.set_title("Average Solve Time by Group, Run Type, and Method")
+    ax.set_ylabel("Average Solve Time (s, log scale)")
+    ax.set_xlabel("Run Type")
+    ax.set_yscale("log")
+    y_min = min(all_y_values) * 0.8
+    y_max = max(all_y_values) * 1.35
+    ax.set_ylim(bottom=max(y_min, 1e-9), top=y_max)
+    ax.grid(axis="y", linestyle="--", linewidth=0.8, alpha=0.35)
+    ax.set_axisbelow(True)
+    ax.legend(title="Method", loc="upper right")
+
+    y_bottom, y_top = ax.get_ylim()
+    group_label_y = y_bottom * (10 ** (-0.20 * (math.log10(y_top) - math.log10(y_bottom))))
+    for idx, group in enumerate(groups):
+        if group not in group_ranges:
+            continue
+        x_start, x_end = group_ranges[group]
+        x_center = (x_start + x_end) / 2.0
+        ax.text(
+            x_center,
+            group_label_y,
+            group,
+            ha="center",
+            va="top",
+            fontsize=10.5,
+            fontweight="semibold",
+            clip_on=False,
+        )
+        if idx < len(groups) - 1:
+            split_x = x_end + (group_spacing / 2.0) + (run_type_spacing / 2.0)
+            ax.axvline(split_x, color="gray", linestyle=":", linewidth=0.9, alpha=0.75)
+
+    fig.subplots_adjust(bottom=0.28)
+    fig.tight_layout()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, bbox_inches="tight")
+    plt.close(fig)
+
+
+def main() -> None:
+    args = parse_args()
+    input_path = args.input.resolve()
+    output_path = args.output.resolve()
+
+    data, groups, group_run_types = load_data(input_path)
+    make_plot(data, groups, group_run_types, output_path)
+    print(f"Saved {output_path}")
+
+
+if __name__ == "__main__":
+    main()

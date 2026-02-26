@@ -7,12 +7,19 @@ from pathlib import Path
 
 
 METHOD_ORDER = {"zoh": 0, "cgl": 1}
+RUN_TYPE_REMAP = {
+    "ultra_short": "coarse",
+    "very_short": "less_coarse",
+    "short": "fine",
+    "med": "less_fine",
+    "long": "very_fine",
+}
 RUN_TYPE_ORDER = {
-    "ultra_short": 0,
-    "very_short": 1,
-    "short": 2,
-    "med": 3,
-    "long": 4,
+    "coarse": 0,
+    "less_coarse": 1,
+    "less_fine": 2,
+    "fine": 3,
+    "very_fine": 4,
     "extreme_long": 5,
 }
 
@@ -50,6 +57,11 @@ def method_from_candidate(candidate_csv: str) -> str:
     if not match:
         raise ValueError(f"Could not parse method from candidate CSV '{candidate_csv}'")
     return match.group(1)
+
+
+def normalize_run_type(run_type: str) -> str:
+    raw = (run_type or "").strip().lower()
+    return RUN_TYPE_REMAP.get(raw, raw)
 
 
 def read_rows(csv_path: Path) -> list[dict[str, str]]:
@@ -162,6 +174,21 @@ def read_simple_solve_stats(
     return stats
 
 
+def resolve_simple_group_data(
+    simple_stats: dict[str, dict[str, str]],
+    method: str,
+    group_name: str,
+    raw_run_type: str,
+    normalized_run_type: str,
+) -> dict[str, str]:
+    for run_type_candidate in (raw_run_type, normalized_run_type):
+        key = f"{method}_{group_name}_{run_type_candidate}"
+        data = simple_stats.get(key, {})
+        if data:
+            return data
+    return {}
+
+
 def main() -> None:
     args = parse_args()
     root = args.root.resolve()
@@ -181,23 +208,52 @@ def main() -> None:
             rows = read_rows(comparison_csv)
             for row in rows:
                 candidate_csv = (row.get("candidate_csv") or "").strip()
-                run_type = (row.get("run_type") or "").strip()
+                raw_run_type = (row.get("run_type") or "").strip()
+                run_type = normalize_run_type(raw_run_type)
                 method = method_from_candidate(candidate_csv)
 
-                simple_cache_key = (comparison_csv.parent, run_type)
+                simple_cache_key = (comparison_csv.parent, raw_run_type)
                 if simple_cache_key not in simple_stats_cache:
                     simple_stats_cache[simple_cache_key] = read_simple_solve_stats(
-                        comparison_csv.parent / run_type
+                        comparison_csv.parent / raw_run_type
                     )
-                simple_group_name = f"{method}_{group_name}_{run_type}"
-                simple_data = simple_stats_cache[simple_cache_key].get(
-                    simple_group_name, {}
+                simple_stats = simple_stats_cache[simple_cache_key]
+
+                simple_data = resolve_simple_group_data(
+                    simple_stats,
+                    method,
+                    group_name,
+                    raw_run_type,
+                    run_type,
                 )
+                zoh_data = resolve_simple_group_data(
+                    simple_stats,
+                    "zoh",
+                    group_name,
+                    raw_run_type,
+                    run_type,
+                )
+                cgl_data = resolve_simple_group_data(
+                    simple_stats,
+                    "cgl",
+                    group_name,
+                    raw_run_type,
+                    run_type,
+                )
+
                 avg_solve_time = simple_data.get("avg_solve_time", "")
                 std_error_solve_time = simple_data.get("std_error_solve_time", "")
                 time_of_flight_s = simple_data.get("time_of_flight_s", "")
-                zoh_fine_dt_s = simple_data.get("zoh_fine_dt_s", "")
-                cgl_fine_nodes = simple_data.get("cgl_fine_nodes", "")
+                if not time_of_flight_s:
+                    time_of_flight_s = zoh_data.get("time_of_flight_s", "") or cgl_data.get(
+                        "time_of_flight_s", ""
+                    )
+                zoh_fine_dt_s = zoh_data.get("zoh_fine_dt_s", "") or simple_data.get(
+                    "zoh_fine_dt_s", ""
+                )
+                cgl_fine_nodes = cgl_data.get("cgl_fine_nodes", "") or simple_data.get(
+                    "cgl_fine_nodes", ""
+                )
 
                 collected.append(
                     {
