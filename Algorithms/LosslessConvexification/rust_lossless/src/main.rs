@@ -27,9 +27,13 @@ struct SimpleMetricsContext {
 }
 
 fn main() {
-    let initial_position = [0.0, 0.0, 50.0];
+    //  let initial_position = [0.0, 0.0, 50.0];
+    let initial_position = [10.0, 20.0, 50.0];
+
+    // let max_velocity = 500.0;
     let max_velocity = 5.0;
-    let min_time_s: f64 = 11.0;
+
+    let min_time_s: f64 = 11.5;
 
     let mut zoh_solver = LosslessSolver {
         landing_point: [0.0, 0.0, 0.0],
@@ -46,7 +50,7 @@ fn main() {
         coarse_line_search_delta_t: 0.1,
         fine_line_search_delta_t: 0.01,
         coarse_delta_t: 0.1,
-        fine_delta_t: 0.3,
+        fine_delta_t: 0.4,
         use_glide_slope: true,
         glide_slope: 5_f64.to_radians(),
         N: 20,
@@ -74,8 +78,8 @@ fn main() {
         ..Default::default()
     };
 
-    let group_name = "direct_limited_descent";
-    let truth_name = "trajectory_zoh_truth_5_vel_limit.csv";
+    let group_name = "offset_limited_descent";
+    let truth_name = "trajectory_zoh_truth_5_vel_limit_offset.csv";
     let run_type = "ultra_short";
     let solver_groups_to_run: Vec<&str> = vec!["zoh", "cgl"];
     // let solver_groups_to_run: Vec<&str> = vec!["cgl"];
