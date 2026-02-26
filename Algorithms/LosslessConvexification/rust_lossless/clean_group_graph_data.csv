@@ -1,3 +1,7 @@
 group_name,run_type,method,rmse_xyz,rmse_sigma,avg_solve_time,std_error_solve_time,time_of_flight_s,zoh_fine_dt_s,cgl_fine_nodes
+direct_limited_descent,short,zoh,0.2381583433,0.06484945879,1.348687,0.008766,11.100000,0.050000,32
+direct_limited_descent,med,zoh,0.1176086418,0.02392289206,2.924172,0.014582,11.100000,0.025000,42
 direct_limited_descent,long,zoh,0.05774865029,0.009661694459,5.674318,0.030213,11.100000,0.012500,60
-direct_limited_descent,long,cgl,0.2569144375,1.946105887,5.665498,0.031941,11.100000,0.012500,60
+direct_limited_descent,short,cgl,0.3140792666,1.562849949,1.470143,0.002648,11.120000,0.050000,34
+direct_limited_descent,med,cgl,0.2306901828,2.270196152,2.600210,0.005651,11.130000,0.025000,44
+direct_limited_descent,long,cgl,0.2891552119,1.531344707,5.665498,0.031941,11.100000,0.012500,60

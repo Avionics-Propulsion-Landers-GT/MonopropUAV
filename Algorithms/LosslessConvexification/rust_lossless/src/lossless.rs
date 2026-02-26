@@ -18,6 +18,8 @@ pub struct LosslessSolver {
     pub upper_thrust_bound: f64,
     pub tvc_range_rad: f64,
     pub min_time_s: f64,
+    pub coarse_line_search_delta_t: f64,
+    pub fine_line_search_delta_t: f64,
     pub coarse_delta_t: f64,
     pub fine_delta_t: f64,
     pub delta_t: f64,
@@ -119,6 +121,8 @@ impl Default for LosslessSolver {
             upper_thrust_bound: 0.0,
             tvc_range_rad: (15.0_f64).to_radians(),
             min_time_s: 6.4,
+            coarse_line_search_delta_t: 1.0,
+            fine_line_search_delta_t: 1.0,
             coarse_delta_t: 1.0,
             fine_delta_t: 1.0,
             delta_t: 1.0,
@@ -542,6 +546,7 @@ impl LosslessSolver {
 
         let coarse_n_min = (t_min / self.delta_t).ceil() as i64;
         let coarse_n_max = (t_max / self.delta_t).floor() as i64;
+        let coarse_n_step = ((self.coarse_line_search_delta_t / self.delta_t).round() as i64).max(1);
 
         let mut traj_result: Option<TrajectoryResult> = None;
         let mut coarse_metrics = SolveMetrics::default();
@@ -549,7 +554,7 @@ impl LosslessSolver {
         let mut coarse_time_of_flight_s: Option<f64> = None;
         let mut fine_time_of_flight_s: Option<f64> = None;
 
-        for k in coarse_n_min..coarse_n_max {
+        for k in (coarse_n_min..=coarse_n_max).step_by(coarse_n_step as usize) {
             println!("Solving step {}...", k);
             self.N = k;
             let attempt = self.solve_at_current_time();
@@ -581,11 +586,11 @@ impl LosslessSolver {
 
         let fine_start = ((self.N as f64) * self.coarse_delta_t / self.fine_delta_t).ceil() as i64;
         self.delta_t = self.fine_delta_t;
-        
-        let fine_n_max = (t_max / self.delta_t).floor() as i64;
         let fine_n_min = (t_min / self.delta_t).ceil() as i64;
-        
-        for k in (fine_n_min..fine_start).rev() {
+        let fine_n_step = ((self.fine_line_search_delta_t / self.delta_t).round() as i64).max(1);
+
+        let mut k = fine_start - fine_n_step;
+        while k >= fine_n_min {
             println!("Solving step {}...", k);
             self.N = k;
             let attempt = self.solve_at_current_time();
@@ -602,6 +607,7 @@ impl LosslessSolver {
                     break;
                 }
             }
+            k -= fine_n_step;
         }
 
         if traj_result.is_none() {
