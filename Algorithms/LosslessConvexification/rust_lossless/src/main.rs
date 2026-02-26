@@ -49,7 +49,7 @@ fn main() {
         min_time_s,
         coarse_line_search_delta_t: 0.1,
         fine_line_search_delta_t: 0.01,
-        coarse_delta_t: 0.01,
+        coarse_delta_t: 0.5,
         fine_delta_t: 0.5,
         use_glide_slope: true,
         glide_slope: 5_f64.to_radians(),
