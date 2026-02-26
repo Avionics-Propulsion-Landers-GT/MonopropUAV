@@ -23,7 +23,8 @@ def parse_args() -> argparse.Namespace:
         description=(
             "Collect all group_comparison_results.csv files into a clean graphing CSV "
             "with columns: group_name, run_type, method, rmse_xyz, rmse_sigma, "
-            "avg_solve_time, std_error_solve_time, time_of_flight_s."
+            "avg_solve_time, std_error_solve_time, time_of_flight_s, "
+            "zoh_fine_dt_s, cgl_fine_nodes."
         )
     )
     parser.add_argument(
@@ -86,7 +87,9 @@ def standard_error(values: list[float]) -> float:
     return math.sqrt(variance) / math.sqrt(len(values))
 
 
-def read_simple_solve_stats(run_type_dir: Path) -> dict[str, tuple[str, str]]:
+def read_simple_solve_stats(
+    run_type_dir: Path,
+) -> dict[str, dict[str, str]]:
     exact = run_type_dir / "simple_solve_metrics.csv"
     if exact.exists() and exact.is_file():
         target = exact
@@ -105,59 +108,58 @@ def read_simple_solve_stats(run_type_dir: Path) -> dict[str, tuple[str, str]]:
             return {}
         rows = list(reader)
 
-    values_by_group: dict[str, list[float]] = {}
+    grouped: dict[str, dict[str, object]] = {}
     for row in rows:
         group = (row.get("group_name") or "").strip()
         run_name = (row.get("run_name") or "").strip()
-        fine_time_raw = (row.get("fine_clarabel_solve_time_s") or "").strip()
-        if not group or not fine_time_raw:
+        if not group:
             continue
+        entry = grouped.setdefault(
+            group,
+            {
+                "values": [],
+                "time_of_flight_s": "",
+                "zoh_fine_dt_s": "",
+                "cgl_fine_nodes": "",
+            },
+        )
+
+        for column in ("time_of_flight_s", "zoh_fine_dt_s", "cgl_fine_nodes"):
+            value = (row.get(column) or "").strip()
+            if value and not entry[column]:
+                entry[column] = value
+
         if run_name.startswith("set_") and run_name.endswith("_avg"):
+            continue
+
+        fine_time_raw = (row.get("fine_clarabel_solve_time_s") or "").strip()
+        if not fine_time_raw:
             continue
         try:
             fine_time = float(fine_time_raw)
         except ValueError:
             continue
-        values_by_group.setdefault(group, []).append(fine_time)
+        entry["values"].append(fine_time)
 
-    stats: dict[str, tuple[str, str]] = {}
-    for group, values in values_by_group.items():
-        if not values:
-            continue
-        avg = sum(values) / len(values)
-        stderr = standard_error(values)
-        stats[group] = (f"{avg:.6f}", f"{stderr:.6f}")
+    stats: dict[str, dict[str, str]] = {}
+    for group, entry in grouped.items():
+        values = entry["values"]
+        if values:
+            avg = sum(values) / len(values)
+            stderr = standard_error(values)
+            avg_str = f"{avg:.6f}"
+            stderr_str = f"{stderr:.6f}"
+        else:
+            avg_str = ""
+            stderr_str = ""
+        stats[group] = {
+            "avg_solve_time": avg_str,
+            "std_error_solve_time": stderr_str,
+            "time_of_flight_s": str(entry["time_of_flight_s"]),
+            "zoh_fine_dt_s": str(entry["zoh_fine_dt_s"]),
+            "cgl_fine_nodes": str(entry["cgl_fine_nodes"]),
+        }
     return stats
-
-
-def read_last_fine_time_of_flight(
-    method_dir: Path, method: str, group_name: str, run_type: str
-) -> str:
-    solve_metrics_path = method_dir / "solve_metrics.csv"
-    if not solve_metrics_path.exists() or not solve_metrics_path.is_file():
-        return ""
-
-    with solve_metrics_path.open(newline="") as f:
-        reader = csv.DictReader(f)
-        if not reader.fieldnames:
-            return ""
-        required = {"run_name", "pass", "time_of_flight_s"}
-        if not required.issubset(reader.fieldnames):
-            return ""
-
-        prefix = f"{method}_{group_name}_{run_type}_"
-        last_time_of_flight = ""
-        for row in reader:
-            if (row.get("pass") or "").strip() != "fine":
-                continue
-            run_name = (row.get("run_name") or "").strip()
-            if not run_name.startswith(prefix):
-                continue
-            tof_raw = (row.get("time_of_flight_s") or "").strip()
-            if tof_raw:
-                last_time_of_flight = tof_raw
-
-    return last_time_of_flight
 
 
 def main() -> None:
@@ -167,8 +169,7 @@ def main() -> None:
 
     collected: list[dict[str, str]] = []
     skipped_files = 0
-    simple_stats_cache: dict[tuple[Path, str], dict[str, tuple[str, str]]] = {}
-    tof_cache: dict[tuple[Path, str, str], str] = {}
+    simple_stats_cache: dict[tuple[Path, str], dict[str, dict[str, str]]] = {}
 
     comparison_files = sorted(root.rglob("group_comparison_results.csv"))
     for comparison_csv in comparison_files:
@@ -189,19 +190,14 @@ def main() -> None:
                         comparison_csv.parent / run_type
                     )
                 simple_group_name = f"{method}_{group_name}_{run_type}"
-                avg_solve_time, std_error_solve_time = simple_stats_cache[
-                    simple_cache_key
-                ].get(simple_group_name, ("", ""))
-
-                tof_key = (comparison_csv.parent, run_type, method)
-                if tof_key not in tof_cache:
-                    tof_cache[tof_key] = read_last_fine_time_of_flight(
-                        comparison_csv.parent / run_type / method,
-                        method,
-                        group_name,
-                        run_type,
-                    )
-                time_of_flight_s = tof_cache[tof_key]
+                simple_data = simple_stats_cache[simple_cache_key].get(
+                    simple_group_name, {}
+                )
+                avg_solve_time = simple_data.get("avg_solve_time", "")
+                std_error_solve_time = simple_data.get("std_error_solve_time", "")
+                time_of_flight_s = simple_data.get("time_of_flight_s", "")
+                zoh_fine_dt_s = simple_data.get("zoh_fine_dt_s", "")
+                cgl_fine_nodes = simple_data.get("cgl_fine_nodes", "")
 
                 collected.append(
                     {
@@ -213,6 +209,8 @@ def main() -> None:
                         "avg_solve_time": avg_solve_time,
                         "std_error_solve_time": std_error_solve_time,
                         "time_of_flight_s": time_of_flight_s,
+                        "zoh_fine_dt_s": zoh_fine_dt_s,
+                        "cgl_fine_nodes": cgl_fine_nodes,
                     }
                 )
         except ValueError as exc:
@@ -237,6 +235,8 @@ def main() -> None:
                 "avg_solve_time",
                 "std_error_solve_time",
                 "time_of_flight_s",
+                "zoh_fine_dt_s",
+                "cgl_fine_nodes",
             ],
         )
         writer.writeheader()
