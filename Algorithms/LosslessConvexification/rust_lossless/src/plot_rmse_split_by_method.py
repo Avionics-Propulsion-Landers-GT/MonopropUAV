@@ -138,6 +138,7 @@ def plot_metric(
 
     fig_width = max(12.0, 1.2 * n_groups + 8.0)
     fig, ax = plt.subplots(figsize=(fig_width, 5.8))
+    bar_containers = []
 
     for run_type in RUN_TYPES:
         color = RUN_TYPE_COLORS[run_type]
@@ -152,7 +153,7 @@ def plot_metric(
             for group in groups
         ]
 
-        ax.bar(
+        zoh_container = ax.bar(
             [x + offset for x in left_centers],
             zoh_vals,
             width=bar_width,
@@ -161,7 +162,7 @@ def plot_metric(
             linewidth=0.6,
             label=RUN_TYPE_LABELS[run_type],
         )
-        ax.bar(
+        cgl_container = ax.bar(
             [x + offset for x in right_centers],
             cgl_vals,
             width=bar_width,
@@ -169,6 +170,7 @@ def plot_metric(
             edgecolor="black",
             linewidth=0.6,
         )
+        bar_containers.extend([zoh_container, cgl_container])
 
     tick_positions = left_centers + right_centers
     tick_labels = [f"{group}\nZOH" for group in groups] + [f"{group}\nCGL" for group in groups]
@@ -208,6 +210,24 @@ def plot_metric(
     ax.set_xlabel("Group and Method")
     ax.grid(axis="y", linestyle="--", linewidth=0.8, alpha=0.35)
     ax.set_axisbelow(True)
+
+    y_min, y_max = ax.get_ylim()
+    y_offset = (y_max - y_min) * 0.012
+    for container in bar_containers:
+        for bar in container:
+            height = bar.get_height()
+            if not math.isfinite(height):
+                continue
+            ax.text(
+                bar.get_x() + bar.get_width() / 2.0,
+                height + y_offset,
+                f"{height:.3f}",
+                ha="center",
+                va="bottom",
+                fontsize=7,
+                rotation=90,
+            )
+
     ax.legend(
         title="Run Type",
         ncol=1,

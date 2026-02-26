@@ -154,6 +154,7 @@ def make_plot(
     fig_width = max(12.0, 1.05 * len(cluster_positions) + 3.0)
     fig, ax = plt.subplots(figsize=(fig_width, 6.0))
     all_y_values: list[float] = []
+    bar_containers = []
 
     for method in METHODS:
         x_vals = []
@@ -179,7 +180,7 @@ def make_plot(
         if not x_vals:
             continue
 
-        ax.bar(
+        container = ax.bar(
             x_vals,
             y_vals,
             width=bar_width,
@@ -191,6 +192,7 @@ def make_plot(
             error_kw={"elinewidth": 1.0, "ecolor": "black"},
             label=method.upper(),
         )
+        bar_containers.append(container)
 
     if not all_y_values:
         raise RuntimeError("No positive avg_solve_time values available for log-scale plotting")
@@ -205,10 +207,34 @@ def make_plot(
     ax.set_xlabel("Run Type")
     ax.set_yscale("log")
     y_min = min(all_y_values) * 0.8
-    y_max = max(all_y_values) * 1.35
+    y_max = max(all_y_values) * 4
     ax.set_ylim(bottom=max(y_min, 1e-9), top=y_max)
+
+    # Add explicit headroom so bars and labels do not crowd the top border.
+    y_bottom, y_top = ax.get_ylim()
+    ax.set_ylim(y_bottom, y_top * 1.18)
+    y_max = ax.get_ylim()[1]
+
     ax.grid(axis="y", linestyle="--", linewidth=0.8, alpha=0.35)
     ax.set_axisbelow(True)
+
+    # Put numeric values just above each bar with a multiplicative offset for log axes.
+    for container in bar_containers:
+        for bar in container:
+            height = bar.get_height()
+            if height <= 0:
+                continue
+            label_y = min(height * 1.07, y_max * 0.98)
+            ax.text(
+                bar.get_x() + bar.get_width() / 2.0,
+                label_y,
+                f"{height:.3f}",
+                ha="center",
+                va="bottom",
+                fontsize=7.5,
+                rotation=90,
+            )
+
     ax.legend(title="Method", loc="upper right")
 
     y_bottom, y_top = ax.get_ylim()
