@@ -8,7 +8,7 @@ def parse_args() -> argparse.Namespace:
     project_root = Path(__file__).resolve().parents[1]
     default_clean_output = project_root / "clean_group_graph_data.csv"
     default_figures_dir = project_root / "figures"
-    default_table_output = project_root / "tables" / "run_config_summary_table.png"
+    default_table_output = project_root / "figures" / "tables" / "run_config_summary_table.png"
     default_avg_plot_output = project_root / "figures" / "avg_solve_time_grouped.png"
 
     parser = argparse.ArgumentParser(

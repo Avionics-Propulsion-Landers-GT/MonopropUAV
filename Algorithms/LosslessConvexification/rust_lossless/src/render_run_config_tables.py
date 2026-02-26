@@ -39,10 +39,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=Path,
-        default=default_root / "tables" / "run_config_summary_table.png",
+        default=default_root / "figures" / "tables" / "run_config_summary_table.png",
         help=(
             "Output image path "
-            f"(default: {default_root / 'tables' / 'run_config_summary_table.png'})"
+            f"(default: {default_root / 'figures' / 'tables' / 'run_config_summary_table.png'})"
         ),
     )
     return parser.parse_args()
