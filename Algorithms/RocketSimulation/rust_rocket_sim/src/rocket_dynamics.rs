@@ -1,6 +1,8 @@
 use nalgebra::{Matrix3, Vector3, Vector4, UnitQuaternion, Quaternion};
 
 use crate::device_sim::*;
+use crate::sloshing_sim::*;
+use crate::fluid_dynamics::*;
 use ndarray::Array1;
 
 #[derive(Debug, Clone)]
@@ -35,6 +37,7 @@ pub struct Rocket {
     pub wet_nitrogen_moi: Matrix3<f64>,
     pub nitrous_tank_radius: f64,
     pub nitrous_tank_length: f64,
+    pub nitrous_level: f64,
     pub dry_nitrous_moi: Matrix3<f64>,
     pub dry_tvc_moi: Matrix3<f64>,
     pub wet_tvc_moi: Matrix3<f64>,
@@ -49,6 +52,13 @@ pub struct Rocket {
     pub imu: IMU,
     pub gps: GPS,
     pub uwb: UWB,
+
+    pub sloshing_model: SloshModel,
+
+    pub nist_data: NistData,
+    pub nitrogen_iso_data: IsoData,
+    pub nitrous_iso_data: IsoData,
+    pub port_d: f64,
 
     pub com_to_ground: Vector3<f64>, // Distance from center of mass to ground (for ground interaction)
 
@@ -65,7 +75,7 @@ pub struct RocketDebugInfo{
 }
 
 impl Rocket {
-    pub fn new(position: Vector3<f64>, velocity: Vector3<f64>, accel: Vector3<f64>, attitude: UnitQuaternion<f64>, ang_vel: Vector3<f64>, ang_accel: Vector3<f64>, frame_mass: f64, nitrogen_tank_empty_mass: f64, starting_nitrogen_mass: f64, nitrogen_tank_offset: Vector3<f64>, nitrous_tank_empty_mass: f64, starting_pressurizing_nitrogen_mass: f64, starting_nitrous_mass: f64, nitrous_tank_offset: Vector3<f64>, tvc_module_empty_mass: f64, starting_fuel_grain_mass: f64, frame_com_to_gimbal: Vector3<f64>, gimbal_to_tvc_com: Vector3<f64>, frame_moi: Matrix3<f64>, dry_nitrogen_moi: Matrix3<f64>, wet_nitrogen_moi: Matrix3<f64>, nitrous_tank_radius: f64, nitrous_tank_length: f64, dry_nitrous_moi: Matrix3<f64>, dry_tvc_moi: Matrix3<f64>, wet_tvc_moi: Matrix3<f64>, tvc_range: f64, tvc: TVC, rcs: RCS, imu: IMU, gps: GPS, uwb: UWB, com_to_ground: Vector3<f64>) -> Self {
+    pub fn new(position: Vector3<f64>, velocity: Vector3<f64>, accel: Vector3<f64>, attitude: UnitQuaternion<f64>, ang_vel: Vector3<f64>, ang_accel: Vector3<f64>, frame_mass: f64, nitrogen_tank_empty_mass: f64, starting_nitrogen_mass: f64, nitrogen_tank_offset: Vector3<f64>, nitrous_tank_empty_mass: f64, starting_pressurizing_nitrogen_mass: f64, starting_nitrous_mass: f64, nitrous_tank_offset: Vector3<f64>, tvc_module_empty_mass: f64, starting_fuel_grain_mass: f64, frame_com_to_gimbal: Vector3<f64>, gimbal_to_tvc_com: Vector3<f64>, frame_moi: Matrix3<f64>, dry_nitrogen_moi: Matrix3<f64>, wet_nitrogen_moi: Matrix3<f64>, nitrous_tank_radius: f64, nitrous_tank_length: f64, nitrous_level: f64, dry_nitrous_moi: Matrix3<f64>, dry_tvc_moi: Matrix3<f64>, wet_tvc_moi: Matrix3<f64>, tvc_range: f64, tvc: TVC, rcs: RCS, imu: IMU, gps: GPS, uwb: UWB, sloshing_model: SloshModel, nist_data: NistData, nitrogen_iso_data: IsoData, nitrous_iso_data: IsoData, port_d: f64, com_to_ground: Vector3<f64>) -> Self {
         let mut rocket = Self {
             position,
             velocity,
@@ -94,6 +104,7 @@ impl Rocket {
             wet_nitrogen_moi,
             nitrous_tank_radius,
             nitrous_tank_length,
+            nitrous_level,
             dry_nitrous_moi,
             dry_tvc_moi,
             wet_tvc_moi,
@@ -104,6 +115,11 @@ impl Rocket {
             imu,
             gps,
             uwb,
+            sloshing_model,
+            nist_data,
+            nitrogen_iso_data,
+            nitrous_iso_data,
+            port_d,
             com_to_ground,
             system_time: 0.0,
             debug_info: RocketDebugInfo {
@@ -135,6 +151,8 @@ impl Rocket {
             // 2. CRITICAL: Kill the downward velocity!
             // If you don't do this, the math still thinks it's falling at -5m/s, 
             // and it will just instantly clip back underground on the next frame.
+            self.velocity.x = 0.0;
+            self.velocity.y = 0.0;
             if self.velocity.z < 0.0 { // Assuming your velocity variable is named this
                 self.velocity.z = 0.0;
             }
@@ -163,6 +181,35 @@ impl Rocket {
         let rcs_effect = self.rcs.update(rcs_command, self.nitrogen_mass, dt, self.system_time);
         self.nitrogen_mass = rcs_effect.nitrogen_mass;
 
+        
+        // Fluid dynamics update
+        let thrust_command = control_input[2];
+        let is_rcs_on = control_input[3] != 0.0;
+        let n2o_mass = self.nitrous_mass;
+        let port_d = self.port_d;
+        let a = 0.0000722;
+        let n = 0.67;
+        let fluid_dynamics_dt = dt;
+        let sat_n2o = &self.nist_data;
+        let isobaric_n2o = &self.nitrous_iso_data;
+        let runtank_vol = 0.032;
+        let tank_d = 0.254;
+        // Input some fluid properties
+        let temp = 301.15; // Temp in Kelvin --> 82.4F
+        // Interpolate N2O Density
+        let rho_n2o = interp1(&self.nitrous_iso_data.t_iso, &self.nitrous_iso_data.rho_iso, temp);
+        // Interpolate N2 Density
+        let rho_n2 = interp1(&self.nitrogen_iso_data.t_iso, &self.nitrogen_iso_data.rho_iso, temp);
+        let n2_mass_total = self.nitrogen_mass + self.pressurizing_nitrogen_mass;
+        let n2_mass_flowrate_rcs = 0.0085 * 2.0;
+        let fluid_dynamics_output = fluid_dynamics_update(thrust_command, is_rcs_on, n2o_mass, port_d, a, n, fluid_dynamics_dt, &sat_n2o, &isobaric_n2o, runtank_vol, tank_d, rho_n2o, rho_n2, n2_mass_total, n2_mass_flowrate_rcs);
+
+        self.fuel_grain_mass = fluid_dynamics_output.new_fuel_mass;
+        self.nitrous_mass = fluid_dynamics_output.new_n2o_mass;
+        self.nitrous_level = fluid_dynamics_output.new_n2o_level;
+        self.nitrogen_mass = fluid_dynamics_output.new_n2_mass_storagetanks;
+        self.pressurizing_nitrogen_mass = fluid_dynamics_output.new_n2_mass_runtank;
+        self.port_d = fluid_dynamics_output.new_port_d;
 
         self.system_time += dt;
         let mass = self.get_mass();
@@ -237,7 +284,10 @@ impl Rocket {
         let nitrogen_com = self.nitrogen_tank_offset;
 
         // TODO: implement full nitrous com calculations
-        let nitrous_com = self.nitrous_tank_offset;
+        let liquid_nitrous_tank_com_offset = Vector3::new(0.0, 0.0, (self.nitrous_level - self.nitrous_tank_length) / 2.0);
+        let pressurizing_nitrogen_tank_com_offset = Vector3::new(0.0, 0.0, (self.nitrous_tank_length - self.nitrous_level) / 2.0);
+        let nitrous_tank_mass = self.nitrous_tank_empty_mass + self.pressurizing_nitrogen_mass + self.nitrous_mass;
+        let nitrous_com = self.nitrous_tank_offset + (self.nitrous_mass / (nitrous_tank_mass)) * liquid_nitrous_tank_com_offset + (self.pressurizing_nitrogen_mass / (nitrous_tank_mass)) * pressurizing_nitrogen_tank_com_offset;
         
         let thrust_direction = thrust_vector.normalize();
         let vertical = Vector3::new(0.0, 0.0, 1.0);
@@ -246,7 +296,7 @@ impl Rocket {
 
 
         let combined_com = (nitrogen_com * (self.nitrogen_tank_empty_mass + self.nitrogen_mass) / total_mass
-                            + nitrous_com * (self.nitrous_tank_empty_mass + self.pressurizing_nitrogen_mass + self.nitrous_mass) / total_mass
+                            + nitrous_com * (nitrous_tank_mass) / total_mass
                             + tvc_com * (self.tvc_module_empty_mass + self.fuel_grain_mass) / total_mass);
         
         combined_com
@@ -256,6 +306,10 @@ impl Rocket {
         let nitrogen_moi = self.transform_moi(self.weight_matrices(self.nitrogen_mass / self.starting_nitrogen_mass, self.wet_nitrogen_moi, self.dry_nitrogen_moi), self.nitrogen_tank_offset + com_offset, self.nitrogen_tank_empty_mass + self.nitrogen_mass);
         
         // TODO: implement full nitrous moi calculations
+        let liquid_nitrous_tank_com_offset = Vector3::new(0.0, 0.0, (self.nitrous_level - self.nitrous_tank_length) / 2.0);
+        let pressurizing_nitrogen_tank_com_offset = Vector3::new(0.0, 0.0, (self.nitrous_tank_length - self.nitrous_level) / 2.0);
+        let liquid_nitrous_moi = self.transform_moi(self.get_cylinder_moi(self.nitrous_tank_radius, self.nitrous_tank_length, self.nitrous_mass), -liquid_nitrous_tank_com_offset, self.nitrous_mass);
+        let pressurizing_nitrogen_moi = self.transform_moi(self.get_cylinder_moi(self.nitrous_tank_radius, self.nitrous_tank_length, self.pressurizing_nitrogen_mass), -pressurizing_nitrogen_tank_com_offset, self.pressurizing_nitrogen_mass);
         let nitrous_moi = self.transform_moi(self.dry_nitrous_moi, self.nitrous_tank_offset + com_offset, self.nitrous_tank_empty_mass + self.pressurizing_nitrogen_mass + self.nitrous_mass);
         
         let thrust_direction = thrust_vector.normalize();
@@ -273,6 +327,13 @@ impl Rocket {
         moi
     }
 
+    pub fn get_cylinder_moi(&self, radius: f64, height: f64, mass: f64) -> Matrix3<f64> {
+        Matrix3::new((mass * (3.0 * radius.powi(2) + height.powi(2))) / 12.0, 0.0, 0.0,
+                    0.0, (mass * (3.0 * radius.powi(2) + height.powi(2))) / 12.0, 0.0,
+                    0.0, 0.0, 0.5 * mass * radius.powi(2))
+    }
+
+    // d is a vector from old center of rotation to new center of rotation
     pub fn transform_moi(&self, moi: Matrix3<f64>, d: Vector3<f64>, mass: f64) -> Matrix3<f64> {
         let y2_z2 = mass * (d.y * d.y + d.z * d.z);
         let x2_z2 = mass * (d.x * d.x + d.z * d.z);
