@@ -1,0 +1,4 @@
+run_name,pass,attempts,successes,iterations,clarabel_solve_time_s,wall_time_s,last_status,time_of_flight_s
+cgl_direct_limited_descent_short_1,coarse,0,0,0,0.000000,0.000000,Unsolved,
+cgl_direct_limited_descent_short_1,fine,1,1,27,1.106556,1.118834,Solved,11.120000
+cgl_direct_limited_descent_short_1,total,1,1,27,1.106556,7.919489,Solved,11.120000

@@ -44,7 +44,7 @@ fn main() {
         tvc_range_rad: 15_f64.to_radians(),
         min_time_s,
         coarse_delta_t: 0.05,
-        fine_delta_t: 0.025,
+        fine_delta_t: 0.05,
         use_glide_slope: true,
         glide_slope: 5_f64.to_radians(),
         N: 20,
@@ -66,7 +66,7 @@ fn main() {
         coarse_line_search_delta_t: 0.1,
         fine_line_search_delta_t: 0.01,
         coarse_nodes: 15,
-        fine_nodes: 44,
+        fine_nodes: 30,
         use_glide_slope: true,
         glide_slope: 5_f64.to_radians(),
         ..Default::default()
@@ -74,8 +74,9 @@ fn main() {
 
     let group_name = "direct_limited_descent";
     let truth_name = "trajectory_zoh_truth_5_vel_limit.csv";
-    let run_type = "med";
-    let solver_groups_to_run: Vec<&str> = vec!["cgl"];
+    let run_type = "short";
+    let solver_groups_to_run: Vec<&str> = vec!["zoh", "cgl"];
+    // let solver_groups_to_run: Vec<&str> = vec!["cgl"];
     let fine_timing_samples_per_group = 10;
     let comparison_nodes = 100;
 
