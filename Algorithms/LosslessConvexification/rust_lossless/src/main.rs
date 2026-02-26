@@ -31,6 +31,7 @@ struct SimpleMetricsContext {
 fn main() {
     let initial_position = [0.0, 0.0, 50.0];
     let max_velocity = 5.0;
+    let min_time_s: f64 = 10.0;
 
     let mut zoh_solver = LosslessSolver {
         landing_point: [0.0, 0.0, 0.0],
@@ -43,7 +44,8 @@ fn main() {
         lower_thrust_bound: 1000.0 * 0.4,
         upper_thrust_bound: 1000.0,
         tvc_range_rad: 15_f64.to_radians(),
-        coarse_delta_t: 0.2,
+        min_time_s,
+        coarse_delta_t: 0.05,
         fine_delta_t: 0.0125,
         use_glide_slope: true,
         glide_slope: 5_f64.to_radians(),
@@ -62,7 +64,8 @@ fn main() {
         lower_thrust_bound: 1000.0 * 0.4,
         upper_thrust_bound: 1000.0,
         tvc_range_rad: 15_f64.to_radians(),
-        coarse_line_search_delta_t: 0.2,
+        min_time_s,
+        coarse_line_search_delta_t: 0.05,
         fine_line_search_delta_t: 0.05,
         coarse_nodes: 15,
         fine_nodes: 55,
@@ -106,6 +109,10 @@ fn main() {
         };
 
         let solve_metrics_path = run_dir.join("solve_metrics.csv");
+        if solve_metrics_path.exists() {
+            std::fs::remove_file(&solve_metrics_path)
+                .expect("Failed to clear existing solve_metrics.csv");
+        }
         append_solve_metrics_to_csv(&solve_metrics_path, &trajectory_run_name, &solve_run)
             .expect("Failed to write solve metrics CSV");
 
@@ -277,7 +284,7 @@ pub fn append_solve_metrics_to_csv(
     let write_header = !file_exists || file.metadata()?.len() == 0;
 
     let mut writer = BufWriter::new(file);
-    let time_of_flight_s = solve_run
+    let total_time_of_flight_s = solve_run
         .trajectory
         .as_ref()
         .map(|trajectory| trajectory.time_of_flight_s);
@@ -291,21 +298,21 @@ pub fn append_solve_metrics_to_csv(
         run_name,
         "coarse",
         &solve_run.coarse_metrics,
-        time_of_flight_s,
+        solve_run.coarse_time_of_flight_s,
     )?;
     write_solve_metrics_row(
         &mut writer,
         run_name,
         "fine",
         &solve_run.fine_metrics,
-        time_of_flight_s,
+        solve_run.fine_time_of_flight_s,
     )?;
     write_solve_metrics_row(
         &mut writer,
         run_name,
         "total",
         &solve_run.total_metrics,
-        time_of_flight_s,
+        total_time_of_flight_s,
     )?;
 
     writer.flush()?;

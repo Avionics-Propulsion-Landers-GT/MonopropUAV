@@ -1,9 +1,9 @@
 group_name,run_name,method,fine_clarabel_solve_time_s,time_of_flight_s,zoh_coarse_dt_s,zoh_fine_dt_s,cgl_coarse_search_delta_t_s,cgl_fine_search_delta_t_s,cgl_coarse_nodes,cgl_fine_nodes,set_avg_fine_clarabel_solve_time_s,set_std_error_fine_clarabel_solve_time_s
-cgl_direct_limited_descent_long,cgl_direct_limited_descent_long_1,cgl,2.854535,11.150000,0.200000,0.012500,0.200000,0.050000,15,55,,
-cgl_direct_limited_descent_long,cgl_direct_limited_descent_long_2,cgl,2.999066,11.150000,0.200000,0.012500,0.200000,0.050000,15,55,,
-cgl_direct_limited_descent_long,cgl_direct_limited_descent_long_3,cgl,3.052397,11.150000,0.200000,0.012500,0.200000,0.050000,15,55,,
-cgl_direct_limited_descent_long,set_1_avg,cgl,,11.150000,0.200000,0.012500,0.200000,0.050000,15,55,2.968666,0.059106
-zoh_direct_limited_descent_long,zoh_direct_limited_descent_long_1,zoh,5.817482,11.100000,0.200000,0.012500,0.200000,0.050000,15,55,,
-zoh_direct_limited_descent_long,zoh_direct_limited_descent_long_2,zoh,6.012285,11.100000,0.200000,0.012500,0.200000,0.050000,15,55,,
-zoh_direct_limited_descent_long,zoh_direct_limited_descent_long_3,zoh,6.066179,11.100000,0.200000,0.012500,0.200000,0.050000,15,55,,
-zoh_direct_limited_descent_long,set_1_avg,zoh,,11.100000,0.200000,0.012500,0.200000,0.050000,15,55,5.965316,0.075536
+cgl_direct_limited_descent_long,cgl_direct_limited_descent_long_1,cgl,2.553758,11.300000,0.050000,0.012500,0.050000,0.050000,15,55,,
+cgl_direct_limited_descent_long,cgl_direct_limited_descent_long_2,cgl,2.441135,11.300000,0.050000,0.012500,0.050000,0.050000,15,55,,
+cgl_direct_limited_descent_long,cgl_direct_limited_descent_long_3,cgl,2.484428,11.300000,0.050000,0.012500,0.050000,0.050000,15,55,,
+cgl_direct_limited_descent_long,set_1_avg,cgl,,11.300000,0.050000,0.012500,0.050000,0.050000,15,55,2.493107,0.032800
+zoh_direct_limited_descent_long,zoh_direct_limited_descent_long_1,zoh,5.854755,11.100000,0.050000,0.012500,0.050000,0.050000,15,55,,
+zoh_direct_limited_descent_long,zoh_direct_limited_descent_long_2,zoh,5.790544,11.100000,0.050000,0.012500,0.050000,0.050000,15,55,,
+zoh_direct_limited_descent_long,zoh_direct_limited_descent_long_3,zoh,5.850100,11.100000,0.050000,0.012500,0.050000,0.050000,15,55,,
+zoh_direct_limited_descent_long,set_1_avg,zoh,,11.100000,0.050000,0.012500,0.050000,0.050000,15,55,5.831800,0.020671

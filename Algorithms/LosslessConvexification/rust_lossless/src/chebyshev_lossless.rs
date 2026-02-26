@@ -85,6 +85,7 @@ pub struct ChebyshevLosslessSolver {
     pub lower_thrust_bound: f64,
     pub upper_thrust_bound: f64,
     pub tvc_range_rad: f64,
+    pub min_time_s: f64,
     pub coarse_line_search_delta_t: f64,
     pub fine_line_search_delta_t: f64,
     pub coarse_nodes: usize,
@@ -110,6 +111,7 @@ impl Default for ChebyshevLosslessSolver {
             lower_thrust_bound: 0.0,
             upper_thrust_bound: 0.0,
             tvc_range_rad: (15.0_f64).to_radians(),
+            min_time_s: 6.4,
             coarse_line_search_delta_t: 1.0,
             fine_line_search_delta_t: 1.0,
             coarse_nodes: 1,
@@ -868,19 +870,15 @@ impl ChebyshevLosslessSolver {
         let solve_wall_start = Instant::now();
         self.N = self.coarse_nodes;
 
-        let vel_norm = self.initial_velocity.iter()
-            .map(|v| v * v)
-            .sum::<f64>()
-            .sqrt();
-        
-        // let t_min = self.dry_mass * vel_norm / self.upper_thrust_bound;
-        let t_min = 6.4;
+        let t_min = self.min_time_s;
         let t_max = self.fuel_mass / (self.alpha * self.lower_thrust_bound);
         let mut current_time = t_min;
 
         let mut traj_result: Option<TrajectoryResult> = None;
         let mut coarse_metrics = SolveMetrics::default();
         let mut fine_metrics = SolveMetrics::default();
+        let mut coarse_time_of_flight_s: Option<f64> = None;
+        let mut fine_time_of_flight_s: Option<f64> = None;
 
         while current_time <= t_max {
             println!("Solving coarse step with time {}...", current_time);
@@ -889,6 +887,7 @@ impl ChebyshevLosslessSolver {
             match attempt.trajectory {
                 Some(sol) => {
                     println!("✅ Converged successfully at time {}.", current_time);
+                    coarse_time_of_flight_s = Some(sol.time_of_flight_s);
                     traj_result = Some(sol);
                     break;
                 },
@@ -906,16 +905,19 @@ impl ChebyshevLosslessSolver {
                 coarse_metrics,
                 fine_metrics,
                 total_metrics,
+                coarse_time_of_flight_s,
+                fine_time_of_flight_s,
             };
         }
-
         self.N = self.fine_nodes;
-        while current_time >= t_min {
-            println!("Solving fine step with time {}...", current_time);
-            let attempt = self.solve_at_current_time(current_time);
+        let mut fine_time = current_time - self.fine_line_search_delta_t;
+        while fine_time >= t_min {
+            println!("Solving fine step with time {}...", fine_time);
+            let attempt = self.solve_at_current_time(fine_time);
             match attempt.trajectory {
                 Some(sol) => {
-                    println!("✅ Converged successfully at time {}.", current_time);
+                    println!("Converged successfully at time {}.", fine_time);
+                    fine_time_of_flight_s = Some(sol.time_of_flight_s);
                     traj_result = Some(sol);
                     fine_metrics.accumulate(&attempt.metrics);
                     // break;
@@ -925,7 +927,7 @@ impl ChebyshevLosslessSolver {
                     break;
                 },
             }
-            current_time -= self.fine_line_search_delta_t;
+            fine_time -= self.fine_line_search_delta_t;
         }
         
         if traj_result.is_none() {
@@ -938,6 +940,8 @@ impl ChebyshevLosslessSolver {
                 coarse_metrics,
                 fine_metrics,
                 total_metrics,
+                coarse_time_of_flight_s,
+                fine_time_of_flight_s,
             };
         }
 
@@ -951,6 +955,8 @@ impl ChebyshevLosslessSolver {
             coarse_metrics,
             fine_metrics,
             total_metrics,
+            coarse_time_of_flight_s,
+            fine_time_of_flight_s,
         }
     }
     
@@ -984,5 +990,6 @@ impl ChebyshevLosslessSolver {
         CscMatrix::new(nrows, ncols, colptr, rowval, nzval)
     }
 }
+
 
 

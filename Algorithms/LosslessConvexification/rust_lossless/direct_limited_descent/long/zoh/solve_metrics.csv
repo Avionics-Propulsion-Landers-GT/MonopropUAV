@@ -1,4 +1,4 @@
 run_name,pass,attempts,successes,iterations,clarabel_solve_time_s,wall_time_s,last_status,time_of_flight_s
-zoh_direct_limited_descent_long_1,coarse,26,1,198,1.700570,1.829486,Solved,11.100000
-zoh_direct_limited_descent_long_1,fine,24,24,537,80.770498,81.443951,Solved,11.100000
-zoh_direct_limited_descent_long_1,total,50,25,735,82.471068,90.431958,Solved,11.100000
+zoh_direct_limited_descent_long_1,coarse,23,1,374,13.922655,14.167132,Solved,11.100000
+zoh_direct_limited_descent_long_1,fine,0,0,0,0.000000,0.000000,Unsolved,
+zoh_direct_limited_descent_long_1,total,23,1,374,13.922655,21.213980,Unsolved,11.100000

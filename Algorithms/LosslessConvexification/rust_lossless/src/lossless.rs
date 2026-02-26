@@ -17,6 +17,7 @@ pub struct LosslessSolver {
     pub lower_thrust_bound: f64,
     pub upper_thrust_bound: f64,
     pub tvc_range_rad: f64,
+    pub min_time_s: f64,
     pub coarse_delta_t: f64,
     pub fine_delta_t: f64,
     pub delta_t: f64,
@@ -98,6 +99,8 @@ pub struct SolveRunResult {
     pub coarse_metrics: SolveMetrics,
     pub fine_metrics: SolveMetrics,
     pub total_metrics: SolveMetrics,
+    pub coarse_time_of_flight_s: Option<f64>,
+    pub fine_time_of_flight_s: Option<f64>,
 }
 
 impl Default for LosslessSolver {
@@ -115,6 +118,7 @@ impl Default for LosslessSolver {
             lower_thrust_bound: 0.0,
             upper_thrust_bound: 0.0,
             tvc_range_rad: (15.0_f64).to_radians(),
+            min_time_s: 6.4,
             coarse_delta_t: 1.0,
             fine_delta_t: 1.0,
             delta_t: 1.0,
@@ -533,13 +537,7 @@ impl LosslessSolver {
         let solve_wall_start = Instant::now();
         self.delta_t = self.coarse_delta_t;
 
-        let vel_norm = self.initial_velocity.iter()
-            .map(|v| v * v)
-            .sum::<f64>()
-            .sqrt();
-        
-        // let t_min = self.dry_mass * vel_norm / self.upper_thrust_bound;
-        let t_min = 6.4;
+        let t_min = self.min_time_s;
         let t_max = self.fuel_mass / (self.alpha * self.lower_thrust_bound);
 
         let coarse_n_min = (t_min / self.delta_t).ceil() as i64;
@@ -548,6 +546,8 @@ impl LosslessSolver {
         let mut traj_result: Option<TrajectoryResult> = None;
         let mut coarse_metrics = SolveMetrics::default();
         let mut fine_metrics = SolveMetrics::default();
+        let mut coarse_time_of_flight_s: Option<f64> = None;
+        let mut fine_time_of_flight_s: Option<f64> = None;
 
         for k in coarse_n_min..coarse_n_max {
             println!("Solving step {}...", k);
@@ -557,6 +557,7 @@ impl LosslessSolver {
             match attempt.trajectory {
                 Some(sol) => {
                     println!("✅ Step {} converged successfully.", k);
+                    coarse_time_of_flight_s = Some(sol.time_of_flight_s);
                     traj_result = Some(sol);
                     break;
                 },
@@ -573,22 +574,44 @@ impl LosslessSolver {
                 coarse_metrics,
                 fine_metrics,
                 total_metrics,
+                coarse_time_of_flight_s,
+                fine_time_of_flight_s,
             };
         }
 
-        let fine_start = ((self.N as f64) * self.coarse_delta_t / self.fine_delta_t).ceil() as i64;
         self.delta_t = self.fine_delta_t;
-        
-        let fine_n_max = (t_max / self.delta_t).floor() as i64;
         let fine_n_min = (t_min / self.delta_t).ceil() as i64;
-        
-        for k in (fine_n_min..fine_start).rev() {
+
+        let coarse_time_s =
+            coarse_time_of_flight_s.unwrap_or((self.N as f64) * self.coarse_delta_t);
+        let mut fine_n_start = (coarse_time_s / self.delta_t).floor() as i64;
+        let fine_start_time_s = (fine_n_start as f64) * self.delta_t;
+        if fine_start_time_s >= coarse_time_s - 1e-9 {
+            fine_n_start -= 1;
+        }
+
+        if fine_n_start < fine_n_min {
+            let mut total_metrics = coarse_metrics;
+            total_metrics.accumulate(&fine_metrics);
+            total_metrics.wall_time_s = solve_wall_start.elapsed().as_secs_f64();
+            return SolveRunResult {
+                trajectory: traj_result,
+                coarse_metrics,
+                fine_metrics,
+                total_metrics,
+                coarse_time_of_flight_s,
+                fine_time_of_flight_s,
+            };
+        }
+
+        for k in (fine_n_min..(fine_n_start + 1)).rev() {
             println!("Solving step {}...", k);
             self.N = k;
             let attempt = self.solve_at_current_time();
             match attempt.trajectory {
                 Some(sol) => {
                     println!("✅ Fine solve converged successfully.");
+                    fine_time_of_flight_s = Some(sol.time_of_flight_s);
                     traj_result = Some(sol);
                     fine_metrics.accumulate(&attempt.metrics);
                     // break;
@@ -610,6 +633,8 @@ impl LosslessSolver {
                 coarse_metrics,
                 fine_metrics,
                 total_metrics,
+                coarse_time_of_flight_s,
+                fine_time_of_flight_s,
             };
         }
 
@@ -622,6 +647,8 @@ impl LosslessSolver {
             coarse_metrics,
             fine_metrics,
             total_metrics,
+            coarse_time_of_flight_s,
+            fine_time_of_flight_s,
         }
     }
 }
