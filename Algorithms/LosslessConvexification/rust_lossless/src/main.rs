@@ -64,9 +64,9 @@ fn main() {
         tvc_range_rad: 15_f64.to_radians(),
         min_time_s,
         coarse_line_search_delta_t: 0.1,
-        fine_line_search_delta_t: 0.0125,
+        fine_line_search_delta_t: 0.01,
         coarse_nodes: 15,
-        fine_nodes: 56,
+        fine_nodes: 60,
         use_glide_slope: true,
         glide_slope: 5_f64.to_radians(),
         ..Default::default()
