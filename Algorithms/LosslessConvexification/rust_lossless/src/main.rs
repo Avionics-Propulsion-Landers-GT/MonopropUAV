@@ -79,7 +79,7 @@ fn main() {
     };
 
     let group_name = "offset_descent";
-    let truth_name = "trajectory_zoh_truth.csv";
+    let truth_name = "trajectory_zoh_truth_offset.csv";
     let run_type = "ultra_short";
     let solver_groups_to_run: Vec<&str> = vec!["zoh", "cgl"];
     // let solver_groups_to_run: Vec<&str> = vec!["cgl"];
