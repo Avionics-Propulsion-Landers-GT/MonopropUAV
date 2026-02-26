@@ -23,7 +23,7 @@ fn main() {
 
     // Initial state: at origin, level, stationary, quaternion [0,0,0,1]
     let mut x = Array1::<f64>::zeros(n);
-    x[2] = 5.0;
+    x[2] = 0.0;
     x[6] = 1.0; // qw = 1 (unit quaternion)
 
     // Hover at set point
@@ -34,9 +34,9 @@ fn main() {
     let mut z_integral = 0.0;
     let mut y_integral = 0.0;
     let mut x_integral = 0.0;
-    let ki_z = 0.2;
-    let ki_y = 0.01;
-    let ki_x = 0.01;
+    let ki_z = 0.0; //0.2, 0.01, 0.01
+    let ki_y = 0.0;
+    let ki_x = 0.0;
 
     // Reference trajectory
     let mut xref_traj = Array2::from_shape_fn((n_steps + 1, n), |(_, j)| xref[j]);
@@ -53,18 +53,18 @@ fn main() {
 
     // Costs: penalize position, orientation, velocities, angular rates
     let q_vec = vec![
-        20.0, 20.0, 200.0,   // position x, y, z
-        0.0, 0.0, 0.0, 0.0, // quaternion qx, qy, qz, qw
-        3.0, 3.0, 1.0,        // linear velocities x_dot, y_dot, z_dot
-        1.0, 1.0, 1.0          // angular velocities wx, wy, wz
+        10.0, 10.0, 80.0,   // position x, y, z
+        220.0, 220.0, 220.0, 220.0, // quaternion qx, qy, qz, qw
+        30.0, 30.0, 10.0,        // linear velocities x_dot, y_dot, z_dot
+        10.0, 10.0, 10.0          // angular velocities wx, wy, wz
     ];
     let q = Array2::<f64>::from_diag(&Array1::from(q_vec.clone()));
-    let r = Array2::<f64>::from_diag(&Array1::from(vec![0000.0, 0000.0, 0.00]));
+    let r = Array2::<f64>::from_diag(&Array1::from(vec![5.0, 5.0, 0.00]));
     // let qn = q.clone();
     let qn = Array2::<f64>::from_diag(&Array1::from(vec![
-        200.0, 200.0, 5000.0,   // position x, y, z
-        10.0, 10.0, 10.0, 10.0, // quaternion qx, qy, qz, qw
-        10.0, 10.0, 10.0,        // linear velocities x_dot, y_dot, z_dot
+        10.0, 10.0, 80.0,   // position x, y, z
+        300.0, 300.0, 300.0, 300.0, // quaternion qx, qy, qz, qw
+        40.0, 40.0, 20.0,        // linear velocities x_dot, y_dot, z_dot
         5.0, 5.0, 5.0          // angular velocities wx, wy, wz
     ]));
 
@@ -97,7 +97,7 @@ fn main() {
             let f_k = k as f64;
             xref[0] = -0.0 * (f_k*dt)/10.0;
             xref[1] = 0.0 * (f_k*dt)/10.0;
-            xref[2] = 25.0 * (f_k*dt)/10.0 + 3.0;
+            xref[2] = 20.0 * (f_k*dt)/10.0 + 3.0;
 
             xref_traj = Array2::from_shape_fn((n_steps + 1, n), |(_, j)| xref[j]);
             xref_traj_vec = xref_traj.axis_iter(ndarray::Axis(0)).map(|row| row.to_owned()).collect();
@@ -109,7 +109,7 @@ fn main() {
             let f_k = k as f64;
             xref[0] = 0.0 * ((f_k*dt)-15.0)/10.0;
             xref[1] = 0.0 * ((f_k*dt)-15.0)/10.0;
-            xref[2] = 25.0 - 25.0 * ((f_k*dt)-15.0)/10.0;
+            xref[2] = 20.0 - 20.0 * ((f_k*dt)-15.0)/10.0;
 
             xref_traj = Array2::from_shape_fn((n_steps + 1, n), |(_, j)| xref[j]);
             xref_traj_vec = xref_traj.axis_iter(ndarray::Axis(0)).map(|row| row.to_owned()).collect();
@@ -118,7 +118,7 @@ fn main() {
         
         xref[0] = 0.0;
         xref[1] = 0.0;
-        xref[2] = 5.0;
+        xref[2] = 25.0;
 
         let z_error = xref[2] - x[2];
         z_integral += z_error * dt;
@@ -149,7 +149,7 @@ fn main() {
         // let (u_warm_vec, x_new, mut u_apply) = mpc_main(&x, &mut u_warm_vec, &xref_traj_vec, &q, &r, &qn, &u_min, &u_max, 2, 0.05);
         
         // OR we solve using OpEn
-        let (mut u_apply, u_warm) = mpc_crate::OpEnSolve(&x, &u_warm.axis_iter(ndarray::Axis(0)).map(|row| row.to_owned()).collect(), &xref_traj_vec, &q, &r, &qn, &smoothing_weight, &mut panoc_cache, thrust_min, thrust_max, gimbal_limit);
+        let (mut u_apply, u_warm) = mpc_crate::OpEnSolve(&x, &u_warm.axis_iter(ndarray::Axis(0)).map(|row| row.to_owned()).collect(), &xref_traj_vec, &q, &r, &qn, &smoothing_weight, &mut panoc_cache, m_rocket ,thrust_min, thrust_max, gimbal_limit);
 
         // exponential filter
         if k >= 1 {
@@ -160,7 +160,7 @@ fn main() {
 
         u_history.push(u_apply.clone());
 
-        m_rocket = m_rocket - 0.001 * u_apply[2] * dt; // decrease mass directly proportional to thrust
+        m_rocket = m_rocket - 0.00 * u_apply[2] * dt; // decrease mass directly proportional to thrust
         println!("Time step: {}, Mass: {}", k as f64 * dt, m_rocket);
 
         // Simulate dynamics for one time step
