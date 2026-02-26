@@ -459,6 +459,103 @@ pub fn smoothing_cost_grad(U: &Array1<f64>, weight: &Array1<f64>, m: usize) -> A
     grad
 }
 
+// Fixed OpEn solver function
+pub fn OpEnSolve(
+    x0: &Array1<f64>,
+    U: &Vec<Array1<f64>>,
+    xref_traj: &Vec<Array1<f64>>,
+    Q: &Array2<f64>,
+    R: &Array2<f64>,
+    QN: &Array2<f64>,
+    smoothing_weight: &Array1<f64>,
+    panoc_cache: &mut PANOCCache,
+    mass: f64,
+    min_thrust: f64,
+    max_thrust: f64,
+    gimbal_limit_rad: f64,
+) -> (Array1<f64>, Array2<f64>) {
+    use ndarray::ArrayView1;
+
+    let N = U.len();
+    let m = U[0].len();
+    let n_dim_u = N * m;
+
+    // Build nominal flat U for bound shifting
+    let mut u_nom_flat: Vec<f64> = Vec::with_capacity(n_dim_u);
+    for k in 0..N {
+        u_nom_flat.extend_from_slice(U[k].as_slice().unwrap());
+    }
+    let u_nom = Array1::from(u_nom_flat.clone());
+
+    // Linearize about current rollout, assemble QP in delta-U space
+    let xs = rollout(x0, U, mass);
+    let (A_seq, B_seq) = linearize_trajectory(&xs, U, mass);
+    let (H, g, _dU_min, _dU_max, _Su, _Q_bar, _R_bar) =
+        assemble_qp_increment(&xs, U, xref_traj, &A_seq, &B_seq, Q, R, QN,
+                              &Array1::zeros(m), &Array1::zeros(m));
+
+    // Gradient and cost are in delta-U space: min 0.5 dU^T H dU + g^T dU
+    let df = |du_slice: &[f64], grad_slice: &mut [f64]| -> Result<(), SolverError> {
+        let du = Array1::from(du_slice.to_vec());
+        let grad = QP_gradient(&H, &g, &du);
+        let smooth_grad = smoothing_cost_grad(&du, smoothing_weight, m);
+        let total_grad = &grad + &smooth_grad;
+        grad_slice.copy_from_slice(total_grad.as_slice().unwrap());
+        Ok(())
+    };
+
+    let f = |du_slice: &[f64], cost: &mut f64| -> Result<(), SolverError> {
+        let du = Array1::from(du_slice.to_vec());
+        let smooth_cost = smoothing_cost(&du, smoothing_weight, m);
+        *cost = QP_cost(&H, &g, &du) + smooth_cost;
+        Ok(())
+    };
+
+    // Box bounds shifted into delta-U space: dU_min = u_min - u_nom, dU_max = u_max - u_nom
+    let mut du_min_flat: Vec<f64> = Vec::with_capacity(n_dim_u);
+    let mut du_max_flat: Vec<f64> = Vec::with_capacity(n_dim_u);
+    for k in 0..N {
+        let u_nom_k = &U[k];
+        du_min_flat.push(-gimbal_limit_rad - u_nom_k[0]);
+        du_max_flat.push( gimbal_limit_rad - u_nom_k[0]);
+        du_min_flat.push(-gimbal_limit_rad - u_nom_k[1]);
+        du_max_flat.push( gimbal_limit_rad - u_nom_k[1]);
+        du_min_flat.push(min_thrust - u_nom_k[2]);
+        du_max_flat.push(max_thrust - u_nom_k[2]);
+    }
+    let bounds = constraints::Rectangle::new(
+        Some(&du_min_flat[..]),
+        Some(&du_max_flat[..]),
+    );
+
+    let problem = Problem::new(&bounds, df, f);
+    let mut panoc = PANOCOptimizer::new(problem, panoc_cache).with_max_iter(150);
+
+    // Initialize at zero — meaning "start from the warm-start U, apply no delta"
+    let mut du_flat: Vec<f64> = vec![0.0; n_dim_u];
+    let _status = panoc.solve(&mut du_flat).unwrap();
+
+    // Recover absolute U: U_new = U_warm + dU, clamped to hard bounds
+    let du_seq = Array1::from(du_flat);
+    let u_seq = &u_nom + &du_seq;
+
+    // Clamp final result to absolute bounds (safety)
+    let u_seq_clamped: Vec<f64> = (0..N).flat_map(|k| {
+        let base = k * m;
+        vec![
+            u_seq[base + 0].clamp(-gimbal_limit_rad, gimbal_limit_rad),
+            u_seq[base + 1].clamp(-gimbal_limit_rad, gimbal_limit_rad),
+            u_seq[base + 2].clamp(min_thrust, max_thrust),
+        ]
+    }).collect();
+
+    let u_seq_arr = Array1::from(u_seq_clamped);
+    let u_apply = u_seq_arr.slice(s![0..m]).to_owned();
+    let U_seq = Array2::from_shape_vec((N, m), u_seq_arr.to_vec()).unwrap();
+
+    (u_apply, U_seq)
+}
+/*
 pub fn OpEnSolve(
     x0: &Array1<f64>,
     U: &Vec<Array1<f64>>,
@@ -544,6 +641,7 @@ pub fn OpEnSolve(
 
     (u_apply, U_seq)
 }
+*/
 
 // Main MPC function to be called externally
 pub fn mpc_main(x: &Array1<f64>, U_warm: &mut Vec<Array1<f64>>, xref_traj: &Vec<Array1<f64>>, Q: &Array2<f64>, R: &Array2<f64>, QN: &Array2<f64>, u_min: &Array1<f64>, u_max: &Array1<f64>, sqp_iters: usize, alpha_pgd: f64, mass: f64) -> (Vec<Array1<f64>>, Array1<f64>, Array1<f64>) {
