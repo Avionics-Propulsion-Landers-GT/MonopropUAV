@@ -68,13 +68,21 @@ def load_data(path: Path) -> dict[str, dict[tuple[str, str, str], float]]:
         reader = csv.DictReader(f)
         if not reader.fieldnames:
             raise ValueError(f"{path} has no header row")
-        required = {"group_name", "run_type", "method", "rmse_xyz", "rmse_sigma"}
+        required = {"group_name", "run_type", "method", "rmse_xyz", "rmse_sigma", "rmse_uxyz"}
         missing = required.difference(reader.fieldnames)
         if missing:
             raise ValueError(f"{path} is missing required columns: {sorted(missing)}")
 
-        sums: dict[str, dict[tuple[str, str, str], float]] = {"rmse_xyz": {}, "rmse_sigma": {}}
-        counts: dict[str, dict[tuple[str, str, str], int]] = {"rmse_xyz": {}, "rmse_sigma": {}}
+        sums: dict[str, dict[tuple[str, str, str], float]] = {
+            "rmse_xyz": {},
+            "rmse_sigma": {},
+            "rmse_uxyz": {},
+        }
+        counts: dict[str, dict[tuple[str, str, str], int]] = {
+            "rmse_xyz": {},
+            "rmse_sigma": {},
+            "rmse_uxyz": {},
+        }
 
         for row in reader:
             method = (row.get("method") or "").strip().lower()
@@ -84,15 +92,19 @@ def load_data(path: Path) -> dict[str, dict[tuple[str, str, str], float]]:
                 continue
 
             key = (method, group_name, run_type)
-            for metric in ("rmse_xyz", "rmse_sigma"):
+            for metric in ("rmse_xyz", "rmse_sigma", "rmse_uxyz"):
                 value = parse_float(row.get(metric, ""))
                 if value is None:
                     continue
                 sums[metric][key] = sums[metric].get(key, 0.0) + value
                 counts[metric][key] = counts[metric].get(key, 0) + 1
 
-    means: dict[str, dict[tuple[str, str, str], float]] = {"rmse_xyz": {}, "rmse_sigma": {}}
-    for metric in ("rmse_xyz", "rmse_sigma"):
+    means: dict[str, dict[tuple[str, str, str], float]] = {
+        "rmse_xyz": {},
+        "rmse_sigma": {},
+        "rmse_uxyz": {},
+    }
+    for metric in ("rmse_xyz", "rmse_sigma", "rmse_uxyz"):
         for key, total in sums[metric].items():
             count = counts[metric][key]
             means[metric][key] = total / count
@@ -204,7 +216,12 @@ def plot_metric(
         fontweight="semibold",
     )
 
-    metric_label = "RMSE XYZ" if metric_name == "rmse_xyz" else "RMSE Sigma"
+    metric_label_map = {
+        "rmse_xyz": "RMSE XYZ",
+        "rmse_sigma": "RMSE Sigma",
+        "rmse_uxyz": "RMSE UXYZ",
+    }
+    metric_label = metric_label_map.get(metric_name, metric_name)
     ax.set_title(f"{metric_label} by Method, Group, and Run Type")
     ax.set_ylabel(metric_label)
     ax.set_xlabel("Group and Method")
@@ -254,11 +271,14 @@ def main() -> None:
 
     xyz_path = output_dir / "rmse_xyz_split_by_method.png"
     sigma_path = output_dir / "rmse_sigma_split_by_method.png"
+    uxyz_path = output_dir / "rmse_uxyz_split_by_method.png"
     plot_metric("rmse_xyz", values_by_metric["rmse_xyz"], xyz_path)
     plot_metric("rmse_sigma", values_by_metric["rmse_sigma"], sigma_path)
+    plot_metric("rmse_uxyz", values_by_metric["rmse_uxyz"], uxyz_path)
 
     print(f"Saved {xyz_path}")
     print(f"Saved {sigma_path}")
+    print(f"Saved {uxyz_path}")
 
 
 if __name__ == "__main__":

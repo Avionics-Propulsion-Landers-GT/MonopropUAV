@@ -29,7 +29,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Collect all group_comparison_results.csv files into a clean graphing CSV "
-            "with columns: group_name, run_type, method, rmse_xyz, rmse_sigma, "
+            "with columns: group_name, run_type, method, rmse_xyz, rmse_sigma, rmse_uxyz, "
             "avg_solve_time, std_error_solve_time, time_of_flight_s, "
             "zoh_fine_dt_s, cgl_fine_nodes."
         )
@@ -74,7 +74,7 @@ def read_rows(csv_path: Path) -> list[dict[str, str]]:
         if not reader.fieldnames:
             raise ValueError(f"{csv_path} has no header row")
 
-        required = {"run_type", "candidate_csv", "rmse_xyz", "rmse_sigma"}
+        required = {"run_type", "candidate_csv", "rmse_xyz", "rmse_sigma", "rmse_uxyz"}
         missing = required.difference(reader.fieldnames)
         if missing:
             raise ValueError(
@@ -267,6 +267,7 @@ def main() -> None:
                         "method": method,
                         "rmse_xyz": (row.get("rmse_xyz") or "").strip(),
                         "rmse_sigma": (row.get("rmse_sigma") or "").strip(),
+                        "rmse_uxyz": (row.get("rmse_uxyz") or "").strip(),
                         "avg_solve_time": avg_solve_time,
                         "std_error_solve_time": std_error_solve_time,
                         "time_of_flight_s": time_of_flight_s,
@@ -293,6 +294,7 @@ def main() -> None:
                 "method",
                 "rmse_xyz",
                 "rmse_sigma",
+                "rmse_uxyz",
                 "avg_solve_time",
                 "std_error_solve_time",
                 "time_of_flight_s",
