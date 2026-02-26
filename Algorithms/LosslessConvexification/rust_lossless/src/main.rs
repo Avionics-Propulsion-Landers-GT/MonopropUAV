@@ -18,8 +18,8 @@ fn main() {
     let intial_position = [0.0, 0.0, 50.0];
     // let intial_position = [10.0, 20.0, 50.0];
 
-    let max_velocity = 500.0;
-    // let max_velocity = 5.0;
+    // let max_velocity = 500.0;
+    let max_velocity = 5.0;
 
     let mut _solver = LosslessSolver {
         landing_point: [0.0, 0.0, 0.0], // This is the point where you want to end up.
@@ -58,21 +58,21 @@ fn main() {
         coarse_line_search_delta_t: 0.5,
         fine_line_search_delta_t: 0.05,
         coarse_nodes: 10, // This is the dt used to solve for the time frame of the trajectory.
-        fine_nodes: 20, // This is the dt used to solve for the higher resolution trajectory.
+        fine_nodes: 8, // This is the dt used to solve for the higher resolution trajectory.
         use_glide_slope: true, // This determines if the glide slope constraint is used. The glide slope constraint ensures that the vehicle stays above an upward spreading cone centered on the landing point.
         glide_slope: 5_f64.to_radians(), // This is the angle of the glide slope constraint.
         ..Default::default()
     };
 
-    let group_name = "direct_descent";
-    let run_name = "very_short";
+    let group_name = "direct_limited_descent";
+    let run_name = "ultra_short";
     let runs_per_group = 10;
     let run_label = format!("{}_{}", group_name, run_name);
     let output_root = Path::new(group_name).join(run_name);
     std::fs::create_dir_all(&output_root).expect("Failed to create output root directory");
     let mut fine_records: Vec<FineSolveRecord> = Vec::new();
 
-    let solver_groups = ["cgl"];
+    let solver_groups = ["zoh","cgl"];
     let mut run_counter = 0usize;
 
     for solver_group in solver_groups {
