@@ -556,12 +556,12 @@ impl LosslessSolver {
             coarse_metrics.accumulate(&attempt.metrics);
             match attempt.trajectory {
                 Some(sol) => {
-                    println!("✅ Step {} converged successfully.", k);
+                    println!("✅ Step {} converged successfully with tof {:.2} s.", k, sol.time_of_flight_s);
                     coarse_time_of_flight_s = Some(sol.time_of_flight_s);
                     traj_result = Some(sol);
                     break;
                 },
-                None => println!(""),
+                None => println!("Failed to converge at step {}.", k),
             }
         }
 
@@ -579,45 +579,26 @@ impl LosslessSolver {
             };
         }
 
+        let fine_start = ((self.N as f64) * self.coarse_delta_t / self.fine_delta_t).ceil() as i64;
         self.delta_t = self.fine_delta_t;
+        
+        let fine_n_max = (t_max / self.delta_t).floor() as i64;
         let fine_n_min = (t_min / self.delta_t).ceil() as i64;
-
-        let coarse_time_s =
-            coarse_time_of_flight_s.unwrap_or((self.N as f64) * self.coarse_delta_t);
-        let mut fine_n_start = (coarse_time_s / self.delta_t).floor() as i64;
-        let fine_start_time_s = (fine_n_start as f64) * self.delta_t;
-        if fine_start_time_s >= coarse_time_s - 1e-9 {
-            fine_n_start -= 1;
-        }
-
-        if fine_n_start < fine_n_min {
-            let mut total_metrics = coarse_metrics;
-            total_metrics.accumulate(&fine_metrics);
-            total_metrics.wall_time_s = solve_wall_start.elapsed().as_secs_f64();
-            return SolveRunResult {
-                trajectory: traj_result,
-                coarse_metrics,
-                fine_metrics,
-                total_metrics,
-                coarse_time_of_flight_s,
-                fine_time_of_flight_s,
-            };
-        }
-
-        for k in (fine_n_min..(fine_n_start + 1)).rev() {
+        
+        for k in (fine_n_min..fine_start).rev() {
             println!("Solving step {}...", k);
             self.N = k;
             let attempt = self.solve_at_current_time();
             match attempt.trajectory {
                 Some(sol) => {
-                    println!("✅ Fine solve converged successfully.");
+                    println!("✅ Fine solve converged successfully with tof {:.2} s.", sol.time_of_flight_s);
                     fine_time_of_flight_s = Some(sol.time_of_flight_s);
                     traj_result = Some(sol);
                     fine_metrics.accumulate(&attempt.metrics);
                     // break;
                 },
                 None => {
-                    println!("");
+                    println!("Failed to converge at step {}.", k);
                     break;
                 }
             }
