@@ -6,19 +6,21 @@ import matplotlib.pyplot as plt
 
 
 RUN_TYPE_REMAP = {
+    "extreme_short": "very_coarse",
     "ultra_short": "coarse",
     "short": "fine",
     "long": "very_fine",
 }
 RUN_TYPE_ORDER = {
-    "coarse": 0,
-    "fine": 1,
-    "very_fine": 2,
-    "very_short": 3,
-    "med": 4,
-    "extreme_long": 5,
+    "very_coarse": 0,
+    "coarse": 1,
+    "fine": 2,
+    "very_fine": 3,
+    "very_short": 4,
+    "med": 5,
+    "extreme_long": 6,
 }
-TARGET_RUN_TYPES = {"coarse", "fine", "very_fine"}
+TARGET_RUN_TYPES = {"very_coarse", "coarse", "fine", "very_fine"}
 
 
 def parse_args() -> argparse.Namespace:
@@ -168,7 +170,7 @@ def render_table_image(rows: list[dict[str, str]], output_path: Path) -> None:
 
     table = ax.table(
         cellText=cell_rows,
-        colLabels=["Run", "Time of Flight (s)", "ZOH Fine dt (s)", "CGL Fine Nodes"],
+        colLabels=["Run", "Time of Flight (s)", "ZOH dt (s)", "CGL Nodes"],
         colWidths=[0.46, 0.18, 0.18, 0.18],
         cellLoc="center",
         loc="center",
