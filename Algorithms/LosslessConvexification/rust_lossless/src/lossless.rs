@@ -538,11 +538,12 @@ impl LosslessSolver {
             .sum::<f64>()
             .sqrt();
         
-        let coarse_t_min = self.dry_mass * vel_norm / self.upper_thrust_bound;
-        let coarse_t_max = self.fuel_mass / (self.alpha * self.lower_thrust_bound);
+        // let t_min = self.dry_mass * vel_norm / self.upper_thrust_bound;
+        let t_min = 6.4;
+        let t_max = self.fuel_mass / (self.alpha * self.lower_thrust_bound);
 
-        let coarse_n_min = (coarse_t_min / self.delta_t).ceil() as i64;
-        let coarse_n_max = (coarse_t_max / self.delta_t).floor() as i64;
+        let coarse_n_min = (t_min / self.delta_t).ceil() as i64;
+        let coarse_n_max = (t_max / self.delta_t).floor() as i64;
 
         let mut traj_result: Option<TrajectoryResult> = None;
         let mut coarse_metrics = SolveMetrics::default();
@@ -578,22 +579,24 @@ impl LosslessSolver {
         let fine_start = ((self.N as f64) * self.coarse_delta_t / self.fine_delta_t).ceil() as i64;
         self.delta_t = self.fine_delta_t;
         
-        let fine_t_max = self.fuel_mass / (self.alpha * self.lower_thrust_bound);
-
-        let fine_n_max = (fine_t_max / self.delta_t).floor() as i64;
+        let fine_n_max = (t_max / self.delta_t).floor() as i64;
+        let fine_n_min = (t_min / self.delta_t).ceil() as i64;
         
-        for k in fine_start..fine_n_max {
+        for k in (fine_n_min..fine_start).rev() {
             println!("Solving step {}...", k);
             self.N = k;
             let attempt = self.solve_at_current_time();
-            fine_metrics.accumulate(&attempt.metrics);
             match attempt.trajectory {
                 Some(sol) => {
                     println!("✅ Fine solve converged successfully.");
                     traj_result = Some(sol);
-                    break;
+                    fine_metrics.accumulate(&attempt.metrics);
+                    // break;
                 },
-                None => println!(""),
+                None => {
+                    println!("");
+                    break;
+                }
             }
         }
 

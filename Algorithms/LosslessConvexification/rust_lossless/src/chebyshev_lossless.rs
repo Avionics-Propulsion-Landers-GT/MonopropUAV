@@ -873,7 +873,8 @@ impl ChebyshevLosslessSolver {
             .sum::<f64>()
             .sqrt();
         
-        let t_min = self.dry_mass * vel_norm / self.upper_thrust_bound;
+        // let t_min = self.dry_mass * vel_norm / self.upper_thrust_bound;
+        let t_min = 6.4;
         let t_max = self.fuel_mass / (self.alpha * self.lower_thrust_bound);
         let mut current_time = t_min;
 
@@ -909,19 +910,22 @@ impl ChebyshevLosslessSolver {
         }
 
         self.N = self.fine_nodes;
-        while current_time <= t_max {
+        while current_time >= t_min {
             println!("Solving fine step with time {}...", current_time);
             let attempt = self.solve_at_current_time(current_time);
-            fine_metrics.accumulate(&attempt.metrics);
             match attempt.trajectory {
                 Some(sol) => {
                     println!("✅ Converged successfully at time {}.", current_time);
                     traj_result = Some(sol);
+                    fine_metrics.accumulate(&attempt.metrics);
+                    // break;
+                },
+                None => {
+                    println!("");
                     break;
                 },
-                None => println!(""),
             }
-            current_time += self.fine_line_search_delta_t;
+            current_time -= self.fine_line_search_delta_t;
         }
         
         if traj_result.is_none() {

@@ -57,7 +57,7 @@ fn main() {
         tvc_range_rad: 15_f64.to_radians(), // This is the range from the vertical axis that the thrust vector control can deviate.
         coarse_line_search_delta_t: 0.2,
         fine_line_search_delta_t: 0.05,
-        coarse_nodes: 35, // This is the dt used to solve for the time frame of the trajectory.
+        coarse_nodes: 15, // This is the dt used to solve for the time frame of the trajectory.
         fine_nodes: 55, // This is the dt used to solve for the higher resolution trajectory.
         use_glide_slope: true, // This determines if the glide slope constraint is used. The glide slope constraint ensures that the vehicle stays above an upward spreading cone centered on the landing point.
         glide_slope: 5_f64.to_radians(), // This is the angle of the glide slope constraint.
