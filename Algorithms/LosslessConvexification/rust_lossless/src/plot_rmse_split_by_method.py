@@ -196,6 +196,8 @@ def plot_metric(
     y_min, y_max = ax.get_ylim()
     # if metric_name == "rmse_sigma":
     ax.set_ylim(y_min, y_max * 1.18)
+    if metric_name == "rmse_uxyz":
+        ax.set_ylim(y_min, y_max * 1.5)
     y_top = ax.get_ylim()[1]
     ax.text(
         sum(left_centers) / len(left_centers),
