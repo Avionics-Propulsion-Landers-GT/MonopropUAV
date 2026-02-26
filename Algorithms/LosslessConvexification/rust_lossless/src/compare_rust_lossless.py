@@ -115,13 +115,18 @@ def rmse_score_vec3(
 
 
 def compare_csvs(ground_truth_csv: Path, candidate_csv: Path, nodes: int) -> dict[str, float]:
+    if nodes <= 0:
+        raise ValueError("nodes must be positive")
+
     fields_truth, data_truth = read_numeric_csv(ground_truth_csv)
     fields_candidate, data_candidate = read_numeric_csv(candidate_csv)
 
-    indices_truth = select_equally_spaced_indices(len(data_truth[fields_truth[0]]), nodes)
-    indices_candidate = select_equally_spaced_indices(
-        len(data_candidate[fields_candidate[0]]), nodes
-    )
+    truth_rows = len(data_truth[fields_truth[0]])
+    candidate_rows = len(data_candidate[fields_candidate[0]])
+    effective_nodes = min(nodes, truth_rows, candidate_rows)
+
+    indices_truth = select_equally_spaced_indices(truth_rows, effective_nodes)
+    indices_candidate = select_equally_spaced_indices(candidate_rows, effective_nodes)
     sampled_truth = resample_columns(data_truth, indices_truth)
     sampled_candidate = resample_columns(data_candidate, indices_candidate)
 
@@ -205,7 +210,10 @@ def parse_args() -> argparse.Namespace:
         "--nodes",
         type=int,
         default=100,
-        help="Number of equally spaced rows to sample from each CSV (default: 100)",
+        help=(
+            "Max number of equally spaced rows to sample per comparison "
+            "(capped by the shorter CSV, default: 100)"
+        ),
     )
     parser.add_argument(
         "--output",

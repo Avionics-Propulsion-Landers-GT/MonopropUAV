@@ -3,6 +3,9 @@ import csv
 import re
 from pathlib import Path
 
+RUN_TYPE_ORDER = {"ultra_short": 0, "very_short": 1, "short": 2, "med": 3, "long": 4}
+METHOD_ORDER = {"zoh": 0, "cgl": 1}
+
 
 def resolve_directory_path(raw_path: str, project_root: Path) -> Path:
     candidate = Path(raw_path)
@@ -36,6 +39,13 @@ def read_comparison_rows(csv_path: Path) -> tuple[list[str], list[dict[str, str]
     return reader.fieldnames, rows
 
 
+def method_from_candidate(candidate_csv: str) -> str:
+    match = re.match(r"^trajectory_([^_]+)_", candidate_csv)
+    if not match:
+        raise ValueError(f"Could not parse method from candidate CSV '{candidate_csv}'")
+    return match.group(1)
+
+
 def pick_candidate_row(
     rows: list[dict[str, str]],
     group_name: str,
@@ -67,7 +77,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Collect one zoh and one cgl comparison result from each run type "
-            "(default: short, long, med) into a single group_comparison_results.csv."
+            "(default: ultra_short, very_short, short, med, long) into a single "
+            "group_comparison_results.csv."
         )
     )
     parser.add_argument(
@@ -77,8 +88,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--run-types",
         nargs="+",
-        default=["short", "long", "med"],
-        help="Run types to include (default: short long med)",
+        default=["ultra_short", "very_short", "short", "med", "long"],
+        help="Run types to include (default: ultra_short very_short short med long)",
     )
     parser.add_argument(
         "--run-id",
@@ -121,13 +132,22 @@ def main() -> None:
     for run_type in args.run_types:
         run_type_dir = group_dir / run_type
         if not run_type_dir.exists() or not run_type_dir.is_dir():
-            raise FileNotFoundError(f"Run type directory not found: {run_type_dir}")
+            print(f"Skipping run type '{run_type}': directory not found: {run_type_dir}")
+            continue
 
         comparison_path = run_type_dir / args.comparison_file
         if not comparison_path.exists() or not comparison_path.is_file():
-            raise FileNotFoundError(f"Comparison CSV not found: {comparison_path}")
+            print(
+                f"Skipping run type '{run_type}': "
+                f"comparison CSV not found: {comparison_path}"
+            )
+            continue
 
-        headers, rows = read_comparison_rows(comparison_path)
+        try:
+            headers, rows = read_comparison_rows(comparison_path)
+        except ValueError as exc:
+            print(f"Skipping run type '{run_type}': {exc}")
+            continue
 
         if output_headers is None:
             output_headers = ["run_type"] + headers
@@ -139,11 +159,26 @@ def main() -> None:
             )
 
         for method in ("zoh", "cgl"):
-            picked = pick_candidate_row(rows, group_name, run_type, method, args.run_id)
+            try:
+                picked = pick_candidate_row(rows, group_name, run_type, method, args.run_id)
+            except ValueError as exc:
+                print(f"Skipping {method} for run type '{run_type}': {exc}")
+                continue
             selected_rows.append({"run_type": run_type, **picked})
 
     if output_headers is None:
-        raise RuntimeError("No rows selected")
+        print("No valid run types found. Nothing to write.")
+        return
+
+    selected_rows.sort(
+        key=lambda row: (
+            METHOD_ORDER.get(
+                method_from_candidate(row.get("candidate_csv", "")),
+                len(METHOD_ORDER),
+            ),
+            RUN_TYPE_ORDER.get(row["run_type"], len(RUN_TYPE_ORDER)),
+        )
+    )
 
     with output_path.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=output_headers)

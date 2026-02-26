@@ -35,7 +35,10 @@ def parse_args() -> argparse.Namespace:
         "--nodes",
         type=int,
         default=100,
-        help="Number of equally spaced rows to sample from each CSV (default: 100)",
+        help=(
+            "Max number of equally spaced rows to sample per comparison "
+            "(capped by the shorter CSV, default: 100)"
+        ),
     )
     parser.add_argument(
         "--glob",

@@ -64,7 +64,7 @@ def plot_trajectory(csv_path: Path) -> None:
     plt.savefig(output_path, dpi=300)
     print(f"Saved {output_path.name}")
 
-    plt.show()
+    # plt.show()
     plt.close(fig)
 
 
