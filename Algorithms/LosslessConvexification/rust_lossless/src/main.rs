@@ -33,7 +33,7 @@ fn main() {
     let max_velocity = 500.0;
     // let max_velocity = 5.0;
 
-    let min_time_s: f64 = 7.00;
+    let min_time_s: f64 = 6.00;
 
     let mut zoh_solver = LosslessSolver {
         landing_point: [0.0, 0.0, 0.0],
