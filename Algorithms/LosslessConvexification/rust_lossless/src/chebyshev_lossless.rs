@@ -414,7 +414,7 @@ impl ChebyshevLosslessSolver {
     }
 
     pub fn solve_at_current_time(&mut self, current_time: f64) -> SolveAttemptResult {
-        let current_time = Self::round_to_precision(current_time, 6); // Avoid floating point precision issues in time stepping
+        // let current_time = Self::round_to_precision(current_time, 6); // Avoid floating point precision issues in time stepping
         let attempt_wall_start = Instant::now();
         let m0 = self.dry_mass + self.fuel_mass;
         const MASS_FLOOR_ABS: f64 = 1e-6;
@@ -940,37 +940,38 @@ impl ChebyshevLosslessSolver {
         let mut coarse_time_of_flight_s: Option<f64> = None;
         let mut fine_time_of_flight_s: Option<f64> = None;
 
-        while current_time <= t_max {
-            println!("Solving coarse step with time {}...", current_time);
-            let attempt = self.solve_at_current_time(current_time);
-            coarse_metrics.accumulate(&attempt.metrics);
-            match attempt.trajectory {
-                Some(sol) => {
-                    println!("✅ Converged successfully at time {}.", current_time);
-                    coarse_time_of_flight_s = Some(sol.time_of_flight_s);
-                    traj_result = Some(sol);
-                    break;
-                }
-                None => println!(""),
-            }
-            current_time += self.coarse_line_search_delta_t;
-        }
+        
+        // while current_time <= t_max {
+        //     println!("Solving coarse step with time {}...", current_time);
+        //     let attempt = self.solve_at_current_time(current_time);
+        //     coarse_metrics.accumulate(&attempt.metrics);
+        //     match attempt.trajectory {
+        //         Some(sol) => {
+        //             println!("✅ Converged successfully at time {}.", current_time);
+        //             coarse_time_of_flight_s = Some(sol.time_of_flight_s);
+        //             traj_result = Some(sol);
+        //             break;
+        //         }
+        //         None => println!(""),
+        //     }
+        //     current_time += self.coarse_line_search_delta_t;
+        // }
 
-        if traj_result.is_none() {
-            println!("No successful solve found in the given time bounds.");
-            let mut total_metrics = coarse_metrics;
-            total_metrics.wall_time_s = solve_wall_start.elapsed().as_secs_f64();
-            return SolveRunResult {
-                trajectory: None,
-                coarse_metrics,
-                fine_metrics,
-                total_metrics,
-                coarse_time_of_flight_s,
-                fine_time_of_flight_s,
-            };
-        }
+        // if traj_result.is_none() {
+        //     println!("No successful solve found in the given time bounds.");
+        //     let mut total_metrics = coarse_metrics;
+        //     total_metrics.wall_time_s = solve_wall_start.elapsed().as_secs_f64();
+        //     return SolveRunResult {
+        //         trajectory: None,
+        //         coarse_metrics,
+        //         fine_metrics,
+        //         total_metrics,
+        //         coarse_time_of_flight_s,
+        //         fine_time_of_flight_s,
+        //     };
+        // }
         self.N = self.fine_nodes;
-        while current_time >= t_min {
+        while current_time <= t_max {
             println!("Solving fine step with time {}...", current_time);
             let attempt = self.solve_at_current_time(current_time);
             match attempt.trajectory {
@@ -979,14 +980,14 @@ impl ChebyshevLosslessSolver {
                     fine_time_of_flight_s = Some(sol.time_of_flight_s);
                     traj_result = Some(sol);
                     fine_metrics.accumulate(&attempt.metrics);
-                    // break;
+                    break;
                 }
                 None => {
                     println!("");
-                    break;
+                    // break;
                 }
             }
-            current_time -= self.fine_line_search_delta_t;
+            current_time += self.fine_line_search_delta_t;
         }
 
         if traj_result.is_none() {

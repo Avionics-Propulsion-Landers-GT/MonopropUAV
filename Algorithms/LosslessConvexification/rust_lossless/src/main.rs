@@ -22,16 +22,14 @@ struct FineSolveRecord {
 struct SimpleMetricsContext {
     zoh_coarse_dt_s: f64,
     zoh_fine_dt_s: f64,
-    cgl_coarse_search_delta_t_s: f64,
     cgl_fine_search_delta_t_s: f64,
-    cgl_coarse_nodes: usize,
     cgl_fine_nodes: usize,
 }
 
 fn main() {
     let initial_position = [0.0, 0.0, 50.0];
     let max_velocity = 5.0;
-    let min_time_s: f64 = 10.0;
+    let min_time_s: f64 = 11.0;
 
     let mut zoh_solver = LosslessSolver {
         landing_point: [0.0, 0.0, 0.0],
@@ -65,10 +63,10 @@ fn main() {
         upper_thrust_bound: 1000.0,
         tvc_range_rad: 15_f64.to_radians(),
         min_time_s,
-        coarse_line_search_delta_t: 0.05,
-        fine_line_search_delta_t: 0.05,
+        coarse_line_search_delta_t: 0.1,
+        fine_line_search_delta_t: 0.0125,
         coarse_nodes: 15,
-        fine_nodes: 55,
+        fine_nodes: 65,
         use_glide_slope: true,
         glide_slope: 5_f64.to_radians(),
         ..Default::default()
@@ -88,9 +86,7 @@ fn main() {
     let simple_metrics_context = SimpleMetricsContext {
         zoh_coarse_dt_s: zoh_solver.coarse_delta_t,
         zoh_fine_dt_s: zoh_solver.fine_delta_t,
-        cgl_coarse_search_delta_t_s: chebyshev_solver.coarse_line_search_delta_t,
         cgl_fine_search_delta_t_s: chebyshev_solver.fine_line_search_delta_t,
-        cgl_coarse_nodes: chebyshev_solver.coarse_nodes,
         cgl_fine_nodes: chebyshev_solver.fine_nodes,
     };
 
@@ -413,7 +409,7 @@ fn write_simple_solve_metrics_csv(
 
     writeln!(
         writer,
-        "group_name,run_name,method,fine_clarabel_solve_time_s,time_of_flight_s,zoh_coarse_dt_s,zoh_fine_dt_s,cgl_coarse_search_delta_t_s,cgl_fine_search_delta_t_s,cgl_coarse_nodes,cgl_fine_nodes,set_avg_fine_clarabel_solve_time_s,set_std_error_fine_clarabel_solve_time_s"
+        "group_name,run_name,method,fine_clarabel_solve_time_s,time_of_flight_s,zoh_coarse_dt_s,zoh_fine_dt_s,cgl_fine_search_delta_t_s,cgl_fine_nodes,set_avg_fine_clarabel_solve_time_s,set_std_error_fine_clarabel_solve_time_s"
     )?;
 
     let mut grouped: BTreeMap<String, Vec<&FineSolveRecord>> = BTreeMap::new();
@@ -428,7 +424,7 @@ fn write_simple_solve_metrics_csv(
         for record in &group_records {
             writeln!(
                 writer,
-                "{},{},{},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{},{},,",
+                "{},{},{},{:.6},{:.6},{:.6},{:.6},{:.6},{},,",
                 group_name,
                 record.run_name,
                 record.method,
@@ -436,9 +432,7 @@ fn write_simple_solve_metrics_csv(
                 record.time_of_flight_s,
                 context.zoh_coarse_dt_s,
                 context.zoh_fine_dt_s,
-                context.cgl_coarse_search_delta_t_s,
                 context.cgl_fine_search_delta_t_s,
-                context.cgl_coarse_nodes,
                 context.cgl_fine_nodes,
             )?;
         }
@@ -473,16 +467,14 @@ fn write_simple_solve_metrics_csv(
 
             writeln!(
                 writer,
-                "{},set_{}_avg,{},,{:.6},{:.6},{:.6},{:.6},{:.6},{},{},{:.6},{:.6}",
+                "{},set_{}_avg,{},,{:.6},{:.6},{:.6},{:.6},{},{:.6},{:.6}",
                 group_name,
                 set_idx + 1,
                 method,
                 time_of_flight_s,
                 context.zoh_coarse_dt_s,
                 context.zoh_fine_dt_s,
-                context.cgl_coarse_search_delta_t_s,
                 context.cgl_fine_search_delta_t_s,
-                context.cgl_coarse_nodes,
                 context.cgl_fine_nodes,
                 avg,
                 std_error

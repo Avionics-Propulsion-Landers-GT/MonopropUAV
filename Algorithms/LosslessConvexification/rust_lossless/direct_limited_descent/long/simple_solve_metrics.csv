@@ -1,5 +1,7 @@
 group_name,run_name,method,fine_clarabel_solve_time_s,time_of_flight_s,zoh_coarse_dt_s,zoh_fine_dt_s,cgl_coarse_search_delta_t_s,cgl_fine_search_delta_t_s,cgl_coarse_nodes,cgl_fine_nodes,set_avg_fine_clarabel_solve_time_s,set_std_error_fine_clarabel_solve_time_s
-zoh_direct_limited_descent_long,zoh_direct_limited_descent_long_1,zoh,6.384762,11.100000,0.050000,0.012500,0.050000,0.050000,15,55,,
-zoh_direct_limited_descent_long,zoh_direct_limited_descent_long_2,zoh,6.354661,11.100000,0.050000,0.012500,0.050000,0.050000,15,55,,
-zoh_direct_limited_descent_long,zoh_direct_limited_descent_long_3,zoh,5.848452,11.100000,0.050000,0.012500,0.050000,0.050000,15,55,,
-zoh_direct_limited_descent_long,set_1_avg,zoh,,11.100000,0.050000,0.012500,0.050000,0.050000,15,55,6.195958,0.173971
+cgl_direct_limited_descent_long,cgl_direct_limited_descent_long_1,cgl,7.568368,11.125000,0.050000,0.012500,0.100000,0.012500,15,70,,
+cgl_direct_limited_descent_long,cgl_direct_limited_descent_long_2,cgl,7.769758,11.125000,0.050000,0.012500,0.100000,0.012500,15,70,,
+cgl_direct_limited_descent_long,set_1_avg,cgl,,11.125000,0.050000,0.012500,0.100000,0.012500,15,70,7.669063,0.100695
+zoh_direct_limited_descent_long,zoh_direct_limited_descent_long_1,zoh,5.618965,11.100000,0.050000,0.012500,0.100000,0.012500,15,70,,
+zoh_direct_limited_descent_long,zoh_direct_limited_descent_long_2,zoh,5.634850,11.100000,0.050000,0.012500,0.100000,0.012500,15,70,,
+zoh_direct_limited_descent_long,set_1_avg,zoh,,11.100000,0.050000,0.012500,0.100000,0.012500,15,70,5.626908,0.007943
