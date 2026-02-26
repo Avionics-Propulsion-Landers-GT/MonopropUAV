@@ -30,10 +30,10 @@ fn main() {
      let initial_position = [0.0, 0.0, 50.0];
     // let initial_position = [10.0, 20.0, 50.0];
 
-    let max_velocity = 500.0;
-    // let max_velocity = 5.0;
+    // let max_velocity = 500.0;
+    let max_velocity = 5.0;
 
-    let min_time_s: f64 = 7.00;
+    let min_time_s: f64 = 10.00;
 
     let mut zoh_solver = LosslessSolver {
         landing_point: [0.0, 0.0, 0.0],
@@ -50,7 +50,7 @@ fn main() {
         coarse_line_search_delta_t: 0.1,
         fine_line_search_delta_t: 0.01,
         coarse_delta_t: 0.5,
-        fine_delta_t: 0.4,
+        fine_delta_t: 0.5,
         use_glide_slope: true,
         glide_slope: 5_f64.to_radians(),
         N: 20,
@@ -72,18 +72,18 @@ fn main() {
         coarse_line_search_delta_t: 0.1,
         fine_line_search_delta_t: 0.01,
         coarse_nodes: 15,
-        fine_nodes: 5,
+        fine_nodes: 8,
         use_glide_slope: true,
         glide_slope: 5_f64.to_radians(),
         ..Default::default()
     };
 
-    let group_name = "direct_descent";
-    let truth_name = "trajectory_zoh_truth.csv";
+    let group_name = "direct_limited_descent";
+    let truth_name = "trajectory_zoh_truth_5_vel_limit.csv";
     let run_type = "extreme_short";
-    let solver_groups_to_run: Vec<&str> = vec!["zoh", "cgl"];
+    // let solver_groups_to_run: Vec<&str> = vec!["zoh", "cgl"];
     // let solver_groups_to_run: Vec<&str> = vec!["cgl"];
-    // let solver_groups_to_run: Vec<&str> = vec!["zoh"];
+    let solver_groups_to_run: Vec<&str> = vec!["zoh"];
     let fine_timing_samples_per_group = 10;
     let comparison_nodes = 100;
 

@@ -589,7 +589,7 @@ impl LosslessSolver {
         let fine_n_min = (t_min / self.delta_t).ceil() as i64;
         let fine_n_step = ((self.fine_line_search_delta_t / self.delta_t).round() as i64).max(1);
 
-        let mut k = fine_start - fine_n_step;
+        let mut k = fine_start;
         while k >= fine_n_min {
             println!("Solving step {}...", k);
             self.N = k;
