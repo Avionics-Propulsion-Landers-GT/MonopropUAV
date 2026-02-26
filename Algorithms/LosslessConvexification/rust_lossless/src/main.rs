@@ -5,7 +5,7 @@ use crate::chebyshev_lossless::ChebyshevLosslessSolver;
 use crate::lossless::{
     LosslessSolver, SolveAttemptResult, SolveMetrics, SolveRunResult, TrajectoryResult,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
@@ -44,7 +44,7 @@ fn main() {
         tvc_range_rad: 15_f64.to_radians(),
         min_time_s,
         coarse_delta_t: 0.05,
-        fine_delta_t: 0.0125,
+        fine_delta_t: 0.025,
         use_glide_slope: true,
         glide_slope: 5_f64.to_radians(),
         N: 20,
@@ -66,7 +66,7 @@ fn main() {
         coarse_line_search_delta_t: 0.1,
         fine_line_search_delta_t: 0.01,
         coarse_nodes: 15,
-        fine_nodes: 60,
+        fine_nodes: 44,
         use_glide_slope: true,
         glide_slope: 5_f64.to_radians(),
         ..Default::default()
@@ -74,7 +74,8 @@ fn main() {
 
     let group_name = "direct_limited_descent";
     let truth_name = "trajectory_zoh_truth_5_vel_limit.csv";
-    let run_type = "long";
+    let run_type = "med";
+    let solver_groups_to_run: Vec<&str> = vec!["cgl"];
     let fine_timing_samples_per_group = 10;
     let comparison_nodes = 100;
 
@@ -92,7 +93,16 @@ fn main() {
 
     let mut fine_records: Vec<FineSolveRecord> = Vec::new();
 
-    for solver_group in ["zoh", "cgl"] {
+    for solver_group in &solver_groups_to_run {
+        let solver_group = *solver_group;
+        if solver_group != "zoh" && solver_group != "cgl" {
+            eprintln!(
+                "Unsupported solver group '{}'. Expected 'zoh' and/or 'cgl'.",
+                solver_group
+            );
+            continue;
+        }
+
         println!("=== Solving {} ===", solver_group);
         let run_dir = output_root.join(solver_group);
         std::fs::create_dir_all(&run_dir).expect("Failed to create run output directory");
@@ -157,11 +167,14 @@ fn main() {
     }
 
     let simple_metrics_path = output_root.join("simple_solve_metrics.csv");
-    write_simple_solve_metrics_csv(
+    merge_simple_solve_metrics_csv(
         &simple_metrics_path,
         &fine_records,
         fine_timing_samples_per_group,
         &simple_metrics_context,
+        &solver_groups_to_run,
+        group_name,
+        run_type,
     )
     .expect("Failed to write simple solve metrics CSV");
 
@@ -407,10 +420,86 @@ fn write_simple_solve_metrics_csv(
     let file = File::create(path)?;
     let mut writer = BufWriter::new(file);
 
-    writeln!(
-        writer,
-        "group_name,run_name,method,fine_clarabel_solve_time_s,time_of_flight_s,zoh_coarse_dt_s,zoh_fine_dt_s,cgl_fine_search_delta_t_s,cgl_fine_nodes,set_avg_fine_clarabel_solve_time_s,set_std_error_fine_clarabel_solve_time_s"
-    )?;
+    writeln!(writer, "{}", simple_solve_metrics_header())?;
+
+    let rows = build_simple_solve_metrics_rows(records, timing_samples_per_group, context)?;
+    for row in rows {
+        writeln!(writer, "{}", row.join(","))?;
+    }
+
+    writer.flush()?;
+    Ok(())
+}
+
+fn merge_simple_solve_metrics_csv(
+    path: &Path,
+    records: &[FineSolveRecord],
+    timing_samples_per_group: usize,
+    context: &SimpleMetricsContext,
+    methods_to_replace: &[&str],
+    group_name: &str,
+    run_type: &str,
+) -> std::io::Result<()> {
+    let methods_set: HashSet<&str> = methods_to_replace.iter().copied().collect();
+    let target_groups: HashSet<String> = methods_set
+        .iter()
+        .map(|method| format!("{}_{}_{}", method, group_name, run_type))
+        .collect();
+
+    let mut preserved_rows: Vec<Vec<String>> = Vec::new();
+    if path.exists() && path.metadata()?.len() > 0 {
+        let contents = std::fs::read_to_string(path)?;
+        let mut lines = contents.lines();
+        if let Some(header_line) = lines.next() {
+            let existing_headers = split_simple_csv_line(header_line);
+            for line in lines {
+                if line.trim().is_empty() {
+                    continue;
+                }
+                let fields = split_simple_csv_line(line);
+                if let Some(normalized_row) =
+                    normalize_simple_metrics_row(&existing_headers, &fields)
+                {
+                    let existing_group_name = normalized_row.get(0).cloned().unwrap_or_default();
+                    let existing_method = normalized_row.get(2).cloned().unwrap_or_default();
+                    let should_replace = methods_set.contains(existing_method.as_str())
+                        && target_groups.contains(&existing_group_name);
+                    if !should_replace {
+                        preserved_rows.push(normalized_row);
+                    }
+                }
+            }
+        }
+    }
+
+    let new_rows = build_simple_solve_metrics_rows(records, timing_samples_per_group, context)?;
+
+    let file = File::create(path)?;
+    let mut writer = BufWriter::new(file);
+    writeln!(writer, "{}", simple_solve_metrics_header())?;
+
+    for row in preserved_rows {
+        writeln!(writer, "{}", row.join(","))?;
+    }
+    for row in new_rows {
+        writeln!(writer, "{}", row.join(","))?;
+    }
+
+    writer.flush()?;
+    Ok(())
+}
+
+fn build_simple_solve_metrics_rows(
+    records: &[FineSolveRecord],
+    timing_samples_per_group: usize,
+    context: &SimpleMetricsContext,
+) -> std::io::Result<Vec<Vec<String>>> {
+    if timing_samples_per_group == 0 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "timing_samples_per_group must be greater than 0",
+        ));
+    }
 
     let mut grouped: BTreeMap<String, Vec<&FineSolveRecord>> = BTreeMap::new();
     for record in records {
@@ -420,21 +509,22 @@ fn write_simple_solve_metrics_csv(
             .push(record);
     }
 
+    let mut rows: Vec<Vec<String>> = Vec::new();
     for (group_name, group_records) in grouped {
         for record in &group_records {
-            writeln!(
-                writer,
-                "{},{},{},{:.6},{:.6},{:.6},{:.6},{:.6},{},,",
-                group_name,
-                record.run_name,
-                record.method,
-                record.fine_clarabel_solve_time_s,
-                record.time_of_flight_s,
-                context.zoh_coarse_dt_s,
-                context.zoh_fine_dt_s,
-                context.cgl_fine_search_delta_t_s,
-                context.cgl_fine_nodes,
-            )?;
+            rows.push(vec![
+                group_name.clone(),
+                record.run_name.clone(),
+                record.method.clone(),
+                format!("{:.6}", record.fine_clarabel_solve_time_s),
+                format!("{:.6}", record.time_of_flight_s),
+                format!("{:.6}", context.zoh_coarse_dt_s),
+                format!("{:.6}", context.zoh_fine_dt_s),
+                format!("{:.6}", context.cgl_fine_search_delta_t_s),
+                context.cgl_fine_nodes.to_string(),
+                String::new(),
+                String::new(),
+            ]);
         }
 
         for (set_idx, chunk) in group_records.chunks(timing_samples_per_group).enumerate() {
@@ -465,23 +555,71 @@ fn write_simple_solve_metrics_csv(
             let method = &chunk[0].method;
             let time_of_flight_s = chunk[0].time_of_flight_s;
 
-            writeln!(
-                writer,
-                "{},set_{}_avg,{},,{:.6},{:.6},{:.6},{:.6},{},{:.6},{:.6}",
-                group_name,
-                set_idx + 1,
-                method,
-                time_of_flight_s,
-                context.zoh_coarse_dt_s,
-                context.zoh_fine_dt_s,
-                context.cgl_fine_search_delta_t_s,
-                context.cgl_fine_nodes,
-                avg,
-                std_error
-            )?;
+            rows.push(vec![
+                group_name.clone(),
+                format!("set_{}_avg", set_idx + 1),
+                method.clone(),
+                String::new(),
+                format!("{:.6}", time_of_flight_s),
+                format!("{:.6}", context.zoh_coarse_dt_s),
+                format!("{:.6}", context.zoh_fine_dt_s),
+                format!("{:.6}", context.cgl_fine_search_delta_t_s),
+                context.cgl_fine_nodes.to_string(),
+                format!("{:.6}", avg),
+                format!("{:.6}", std_error),
+            ]);
         }
     }
 
-    writer.flush()?;
-    Ok(())
+    Ok(rows)
+}
+
+fn simple_solve_metrics_columns() -> &'static [&'static str] {
+    &[
+        "group_name",
+        "run_name",
+        "method",
+        "fine_clarabel_solve_time_s",
+        "time_of_flight_s",
+        "zoh_coarse_dt_s",
+        "zoh_fine_dt_s",
+        "cgl_fine_search_delta_t_s",
+        "cgl_fine_nodes",
+        "set_avg_fine_clarabel_solve_time_s",
+        "set_std_error_fine_clarabel_solve_time_s",
+    ]
+}
+
+fn simple_solve_metrics_header() -> String {
+    simple_solve_metrics_columns().join(",")
+}
+
+fn split_simple_csv_line(line: &str) -> Vec<String> {
+    line.split(',').map(|value| value.to_string()).collect()
+}
+
+fn normalize_simple_metrics_row(headers: &[String], fields: &[String]) -> Option<Vec<String>> {
+    if headers.is_empty() {
+        return None;
+    }
+
+    let mut by_name: HashMap<&str, &str> = HashMap::new();
+    for (idx, header) in headers.iter().enumerate() {
+        let value = fields.get(idx).map(|value| value.as_str()).unwrap_or("");
+        by_name.insert(header.as_str(), value);
+    }
+
+    let group_name = by_name.get("group_name").copied().unwrap_or("");
+    let run_name = by_name.get("run_name").copied().unwrap_or("");
+    let method = by_name.get("method").copied().unwrap_or("");
+    if group_name.is_empty() || run_name.is_empty() || method.is_empty() {
+        return None;
+    }
+
+    Some(
+        simple_solve_metrics_columns()
+            .iter()
+            .map(|column| by_name.get(*column).copied().unwrap_or("").to_string())
+            .collect(),
+    )
 }
