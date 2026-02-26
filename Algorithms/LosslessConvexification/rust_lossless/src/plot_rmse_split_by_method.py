@@ -136,7 +136,7 @@ def plot_metric(
 
     n_groups = len(groups)
     group_spacing = 1.45
-    split_gap = 1.25
+    split_gap = 2.40
     bar_width = 0.30
     run_offsets = {
         "very_coarse": -1.5 * bar_width,
