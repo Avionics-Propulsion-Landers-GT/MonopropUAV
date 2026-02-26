@@ -1,0 +1,3 @@
+ground_truth_csv,candidate_csv,rmse_x,rmse_y,rmse_z,rmse_vx,rmse_vy,rmse_vz,rmse_mass,rmse_ux,rmse_uy,rmse_uz,rmse_sigma,rmse_thrust_force,rmse_xyz,rmse_vxyz,rmse_uxyz
+trajectory_zoh_truth.csv,trajectory_cgl_offset_descent_ultra_short_1.csv,6.849257131,13.69851426,0.3992075801,1.636554356,3.273108712,0.4440798818,0.0557418187,0.8151492352,1.63029847,1.695857391,1.681018663,133.2856231,15.32060648,3.686293225,2.48963324
+trajectory_zoh_truth.csv,trajectory_zoh_offset_descent_ultra_short_1.csv,6.658620035,13.31724007,0.7581030883,1.584636922,3.169273845,0.5369147239,0.02952006141,0.7580204734,1.516040947,1.205574368,1.068422755,96.1566646,14.90841454,3.583803608,2.079996333
