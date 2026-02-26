@@ -9,17 +9,20 @@ import matplotlib.pyplot as plt
 METHODS = ("zoh", "cgl")
 METHOD_COLORS = {"zoh": "#1F77B4", "cgl": "#E66101"}
 RUN_TYPE_REMAP = {
+    "extreme_short": "very_coarse",
     "ultra_short": "coarse",
     "short": "fine",
     "long": "very_fine",
 }
-TARGET_RUN_TYPES = ("coarse", "fine", "very_fine")
+TARGET_RUN_TYPES = ("very_coarse", "coarse", "fine", "very_fine")
 RUN_TYPE_ORDER = {
-    "coarse": 0,
-    "fine": 1,
-    "very_fine": 2,
+    "very_coarse": 0,
+    "coarse": 1,
+    "fine": 2,
+    "very_fine": 3,
 }
 RUN_TYPE_LABELS = {
+    "very_coarse": "Very Coarse",
     "coarse": "Coarse",
     "fine": "Fine",
     "very_fine": "Very Fine",

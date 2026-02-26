@@ -4,7 +4,14 @@ import math
 import re
 from pathlib import Path
 
-RUN_TYPE_ORDER = {"ultra_short": 0, "very_short": 1, "short": 2, "med": 3, "long": 4}
+RUN_TYPE_ORDER = {
+    "extreme_short": 0,
+    "ultra_short": 1,
+    "very_short": 2,
+    "short": 3,
+    "med": 4,
+    "long": 5,
+}
 METHOD_ORDER = {"zoh": 0, "cgl": 1}
 
 
@@ -172,7 +179,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Collect one zoh and one cgl comparison result from each run type "
-            "(default: ultra_short, very_short, short, med, long) into a single "
+            "(default: extreme_short, ultra_short, very_short, short, med, long) into a single "
             "group_comparison_results.csv."
         )
     )
@@ -183,8 +190,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--run-types",
         nargs="+",
-        default=["ultra_short", "very_short", "short", "med", "long"],
-        help="Run types to include (default: ultra_short very_short short med long)",
+        default=["extreme_short", "ultra_short", "very_short", "short", "med", "long"],
+        help="Run types to include (default: extreme_short ultra_short very_short short med long)",
     )
     parser.add_argument(
         "--run-id",

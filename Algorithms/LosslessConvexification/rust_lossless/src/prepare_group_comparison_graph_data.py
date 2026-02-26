@@ -8,6 +8,7 @@ from pathlib import Path
 
 METHOD_ORDER = {"zoh": 0, "cgl": 1}
 RUN_TYPE_REMAP = {
+    "extreme_short": "very_coarse",
     "ultra_short": "coarse",
     "very_short": "less_coarse",
     "short": "fine",
@@ -15,12 +16,13 @@ RUN_TYPE_REMAP = {
     "long": "very_fine",
 }
 RUN_TYPE_ORDER = {
-    "coarse": 0,
-    "less_coarse": 1,
-    "less_fine": 2,
-    "fine": 3,
-    "very_fine": 4,
-    "extreme_long": 5,
+    "very_coarse": 0,
+    "coarse": 1,
+    "less_coarse": 2,
+    "less_fine": 3,
+    "fine": 4,
+    "very_fine": 5,
+    "extreme_long": 6,
 }
 
 

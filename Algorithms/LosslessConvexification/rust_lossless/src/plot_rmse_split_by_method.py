@@ -8,17 +8,20 @@ import matplotlib.pyplot as plt
 
 METHODS = ("zoh", "cgl")
 RUN_TYPE_REMAP = {
+    "extreme_short": "very_coarse",
     "ultra_short": "coarse",
     "short": "fine",
     "long": "very_fine",
 }
-RUN_TYPES = ("coarse", "fine", "very_fine")
+RUN_TYPES = ("very_coarse", "coarse", "fine", "very_fine")
 RUN_TYPE_LABELS = {
+    "very_coarse": "Very Coarse",
     "coarse": "Coarse",
     "fine": "Fine",
     "very_fine": "Very Fine",
 }
 RUN_TYPE_COLORS = {
+    "very_coarse": "#4C78A8",
     "coarse": "#1B9E77",
     "fine": "#7570B3",
     "very_fine": "#D95F02",
@@ -132,13 +135,14 @@ def plot_metric(
     )
 
     n_groups = len(groups)
-    group_spacing = 1.18
+    group_spacing = 1.45
     split_gap = 1.25
     bar_width = 0.30
     run_offsets = {
-        "coarse": -bar_width,
-        "fine": 0.0,
-        "very_fine": bar_width,
+        "very_coarse": -1.5 * bar_width,
+        "coarse": -0.5 * bar_width,
+        "fine": 0.5 * bar_width,
+        "very_fine": 1.5 * bar_width,
     }
 
     half_span = (n_groups - 1) * group_spacing
