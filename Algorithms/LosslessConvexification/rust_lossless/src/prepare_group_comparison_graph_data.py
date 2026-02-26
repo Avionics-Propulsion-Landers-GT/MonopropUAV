@@ -23,7 +23,7 @@ def parse_args() -> argparse.Namespace:
         description=(
             "Collect all group_comparison_results.csv files into a clean graphing CSV "
             "with columns: group_name, run_type, method, rmse_xyz, rmse_sigma, "
-            "avg_solve_time, std_error_solve_time."
+            "avg_solve_time, std_error_solve_time, time_of_flight_s."
         )
     )
     parser.add_argument(
@@ -67,7 +67,7 @@ def read_rows(csv_path: Path) -> list[dict[str, str]]:
         return list(reader)
 
 
-def sort_key(row: dict[str, str]) -> tuple[int, str, int, str]:
+def sort_key(row: dict[str, str]) -> tuple[int, str, int, int]:
     method = row["method"]
     run_type = row["run_type"]
     return (
@@ -130,6 +130,36 @@ def read_simple_solve_stats(run_type_dir: Path) -> dict[str, tuple[str, str]]:
     return stats
 
 
+def read_last_fine_time_of_flight(
+    method_dir: Path, method: str, group_name: str, run_type: str
+) -> str:
+    solve_metrics_path = method_dir / "solve_metrics.csv"
+    if not solve_metrics_path.exists() or not solve_metrics_path.is_file():
+        return ""
+
+    with solve_metrics_path.open(newline="") as f:
+        reader = csv.DictReader(f)
+        if not reader.fieldnames:
+            return ""
+        required = {"run_name", "pass", "time_of_flight_s"}
+        if not required.issubset(reader.fieldnames):
+            return ""
+
+        prefix = f"{method}_{group_name}_{run_type}_"
+        last_time_of_flight = ""
+        for row in reader:
+            if (row.get("pass") or "").strip() != "fine":
+                continue
+            run_name = (row.get("run_name") or "").strip()
+            if not run_name.startswith(prefix):
+                continue
+            tof_raw = (row.get("time_of_flight_s") or "").strip()
+            if tof_raw:
+                last_time_of_flight = tof_raw
+
+    return last_time_of_flight
+
+
 def main() -> None:
     args = parse_args()
     root = args.root.resolve()
@@ -138,8 +168,10 @@ def main() -> None:
     collected: list[dict[str, str]] = []
     skipped_files = 0
     simple_stats_cache: dict[tuple[Path, str], dict[str, tuple[str, str]]] = {}
+    tof_cache: dict[tuple[Path, str, str], str] = {}
 
-    for comparison_csv in sorted(root.rglob("group_comparison_results.csv")):
+    comparison_files = sorted(root.rglob("group_comparison_results.csv"))
+    for comparison_csv in comparison_files:
         if not comparison_csv.is_file():
             continue
 
@@ -150,17 +182,27 @@ def main() -> None:
                 candidate_csv = (row.get("candidate_csv") or "").strip()
                 run_type = (row.get("run_type") or "").strip()
                 method = method_from_candidate(candidate_csv)
-                cache_key = (comparison_csv.parent, run_type)
-                if cache_key not in simple_stats_cache:
-                    simple_stats_cache[cache_key] = read_simple_solve_stats(
+
+                simple_cache_key = (comparison_csv.parent, run_type)
+                if simple_cache_key not in simple_stats_cache:
+                    simple_stats_cache[simple_cache_key] = read_simple_solve_stats(
                         comparison_csv.parent / run_type
                     )
-                solve_stats = simple_stats_cache[cache_key]
                 simple_group_name = f"{method}_{group_name}_{run_type}"
-                avg_solve_time, std_error_solve_time = solve_stats.get(
-                    simple_group_name,
-                    ("", ""),
-                )
+                avg_solve_time, std_error_solve_time = simple_stats_cache[
+                    simple_cache_key
+                ].get(simple_group_name, ("", ""))
+
+                tof_key = (comparison_csv.parent, run_type, method)
+                if tof_key not in tof_cache:
+                    tof_cache[tof_key] = read_last_fine_time_of_flight(
+                        comparison_csv.parent / run_type / method,
+                        method,
+                        group_name,
+                        run_type,
+                    )
+                time_of_flight_s = tof_cache[tof_key]
+
                 collected.append(
                     {
                         "group_name": group_name,
@@ -170,6 +212,7 @@ def main() -> None:
                         "rmse_sigma": (row.get("rmse_sigma") or "").strip(),
                         "avg_solve_time": avg_solve_time,
                         "std_error_solve_time": std_error_solve_time,
+                        "time_of_flight_s": time_of_flight_s,
                     }
                 )
         except ValueError as exc:
@@ -193,14 +236,14 @@ def main() -> None:
                 "rmse_sigma",
                 "avg_solve_time",
                 "std_error_solve_time",
+                "time_of_flight_s",
             ],
         )
         writer.writeheader()
         writer.writerows(collected)
 
     print(
-        f"Saved {len(collected)} rows from "
-        f"{len(list(root.rglob('group_comparison_results.csv')))} files to {output_path}"
+        f"Saved {len(collected)} rows from {len(comparison_files)} files to {output_path}"
     )
     if skipped_files:
         print(f"Skipped {skipped_files} files due to format issues.", file=sys.stderr)
