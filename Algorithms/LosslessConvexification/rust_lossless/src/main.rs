@@ -64,7 +64,7 @@ fn main() {
         ..Default::default()
     };
 
-    let group_name = "direct_limited_descent";
+    let group_name = "offset_limited_descent";
     let run_name = "short";
     let runs_per_group = 10;
     let run_label = format!("{}_{}", group_name, run_name);
