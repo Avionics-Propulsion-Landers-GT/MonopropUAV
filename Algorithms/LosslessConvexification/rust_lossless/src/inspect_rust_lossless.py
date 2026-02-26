@@ -70,10 +70,12 @@ def plot_trajectory(csv_path: Path) -> None:
 
 def main() -> None:
     project_root = Path(__file__).resolve().parents[1]
-    csv_files = sorted(project_root.glob("trajectory_*.csv"))
+    inspect_dir = project_root / "to_inspect"
+    inspect_dir.mkdir(parents=True, exist_ok=True)
+    csv_files = sorted(inspect_dir.glob("trajectory_*.csv"))
 
     if not csv_files:
-        print(f"No files found matching trajectory_*.csv in {project_root}")
+        print(f"No files found matching trajectory_*.csv in {inspect_dir}")
         return
 
     for csv_path in csv_files:
