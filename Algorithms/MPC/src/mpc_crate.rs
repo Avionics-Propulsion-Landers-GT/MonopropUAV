@@ -14,9 +14,9 @@ pub fn dynamics(x: &Array1<f64>, u: &Array1<f64>, mass: f64) -> Array1<f64> {
     // Constants
     let m = mass;
     let g = 9.81;
-    let ixx = 20.0;
-    let iyy = 20.0;
-    let izz = 10.0;
+    let ixx = 50.0;
+    let iyy = 50.0;
+    let izz = 3.0;
     let dt = 0.1;
 
     // Inertia matrix and inverse

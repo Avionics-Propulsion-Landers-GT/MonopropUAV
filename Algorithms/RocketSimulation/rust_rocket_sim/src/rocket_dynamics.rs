@@ -1,4 +1,4 @@
-use nalgebra::{Vector3, Vector4, UnitQuaternion, Quaternion};
+use nalgebra::{Matrix3, Vector3, Vector4, UnitQuaternion, Quaternion};
 
 use crate::device_sim::*;
 use ndarray::Array1;
@@ -13,34 +13,38 @@ pub struct Rocket {
     pub ang_vel: Vector3<f64>,
     pub ang_accel: Vector3<f64>,
 
-    pub dry_mass: f64,
+    pub frame_mass: f64,
     pub nitrogen_tank_empty_mass: f64, // the mass of the empty tank
     pub nitrogen_mass: f64,
     starting_nitrogen_mass: f64,
-    pub nitrogen_tank_empty_offset: Vector3<f64>, // Vector offset from frame CoM to the empty nitrogen tank CoM
-    pub nitrogen_tank_full_offset: Vector3<f64>, // Vector offset from the empty nitrogen tank CoM to the full nitrogen tank CoM
+    pub nitrogen_tank_offset: Vector3<f64>, // Vector offset from frame CoM to the nitrogen tank CoM
     pub nitrous_tank_empty_mass: f64, // the mass of the empty tank
     pub pressurizing_nitrogen_mass: f64,
     starting_pressurizing_nitrogen_mass: f64,
     pub nitrous_mass: f64,
     starting_nitrous_mass: f64,
-    pub nitrous_tank_empty_offset: Vector3<f64>, // Vector offset from frame CoM to the empty nitrous tank CoM (no nitrous or nitrogen in it)
-    pub nitrous_tank_full_offset: Vector3<f64>, // Vector offset from the empty nitrous tank CoM to the nitrous tank CoM when it's full of nitrous
-    pub nitrous_tank_depleted_offset: Vector3<f64>, // Vector offset from the empty nitrous tank CoM to the nitrous tank CoM when all of the nitrous has been depleted
+    pub nitrous_tank_offset: Vector3<f64>, // Vector offset from frame CoM to the nitrous tank CoM
     pub tvc_module_empty_mass: f64, // the mass of the empty tvc module
     pub fuel_grain_mass: f64,
     starting_fuel_grain_mass: f64,
     pub frame_com_to_gimbal: Vector3<f64>, // Vector offset from frame CoM to the gimbal point (thrust plate)
     pub gimbal_to_tvc_com: Vector3<f64>, // Vector offset from gimbal point to the TVC's center of mass
 
-    pub inertia_tensor: Vector3<f64>, // Simplified diagonal inertia matrix
+    pub frame_moi: Matrix3<f64>,
+    pub dry_nitrogen_moi: Matrix3<f64>,
+    pub wet_nitrogen_moi: Matrix3<f64>,
+    pub nitrous_tank_radius: f64,
+    pub nitrous_tank_length: f64,
+    pub dry_nitrous_moi: Matrix3<f64>,
+    pub dry_tvc_moi: Matrix3<f64>,
+    pub wet_tvc_moi: Matrix3<f64>,
 
     pub tvc_range: f64,
     pub tvc: TVC,
 
     pub rcs: RCS,
 
-    thrust_vector: Vector3<f64>,
+    pub thrust_vector: Vector3<f64>,
 
     pub imu: IMU,
     pub gps: GPS,
@@ -55,14 +59,13 @@ pub struct Rocket {
 
 #[derive(Debug, Clone)]
 pub struct RocketDebugInfo{
-    pub thrust_vector: Vector3<f64>,
     pub thrust_torque: Vector3<f64>,
     pub total_force: Vector3<f64>,
     pub total_torque: Vector3<f64>,
 }
 
 impl Rocket {
-    pub fn new(position: Vector3<f64>, velocity: Vector3<f64>, accel: Vector3<f64>, attitude: UnitQuaternion<f64>, ang_vel: Vector3<f64>, ang_accel: Vector3<f64>, dry_mass: f64, nitrogen_tank_empty_mass: f64, starting_nitrogen_mass: f64, nitrogen_tank_empty_offset: Vector3<f64>, nitrogen_tank_full_offset: Vector3<f64>, nitrous_tank_empty_mass: f64, starting_pressurizing_nitrogen_mass: f64, starting_nitrous_mass: f64, nitrous_tank_empty_offset: Vector3<f64>, nitrous_tank_full_offset: Vector3<f64>, nitrous_tank_depleted_offset: Vector3<f64>, tvc_module_empty_mass: f64, starting_fuel_grain_mass: f64, frame_com_to_gimbal: Vector3<f64>, gimbal_to_tvc_com: Vector3<f64>, inertia_tensor: Vector3<f64>, tvc_range: f64, tvc: TVC, rcs: RCS, imu: IMU, gps: GPS, uwb: UWB, com_to_ground: Vector3<f64>) -> Self {
+    pub fn new(position: Vector3<f64>, velocity: Vector3<f64>, accel: Vector3<f64>, attitude: UnitQuaternion<f64>, ang_vel: Vector3<f64>, ang_accel: Vector3<f64>, frame_mass: f64, nitrogen_tank_empty_mass: f64, starting_nitrogen_mass: f64, nitrogen_tank_offset: Vector3<f64>, nitrous_tank_empty_mass: f64, starting_pressurizing_nitrogen_mass: f64, starting_nitrous_mass: f64, nitrous_tank_offset: Vector3<f64>, tvc_module_empty_mass: f64, starting_fuel_grain_mass: f64, frame_com_to_gimbal: Vector3<f64>, gimbal_to_tvc_com: Vector3<f64>, frame_moi: Matrix3<f64>, dry_nitrogen_moi: Matrix3<f64>, wet_nitrogen_moi: Matrix3<f64>, nitrous_tank_radius: f64, nitrous_tank_length: f64, dry_nitrous_moi: Matrix3<f64>, dry_tvc_moi: Matrix3<f64>, wet_tvc_moi: Matrix3<f64>, tvc_range: f64, tvc: TVC, rcs: RCS, imu: IMU, gps: GPS, uwb: UWB, com_to_ground: Vector3<f64>) -> Self {
         let mut rocket = Self {
             position,
             velocity,
@@ -70,26 +73,30 @@ impl Rocket {
             attitude,
             ang_vel,
             ang_accel,
-            dry_mass,
+            frame_mass,
             nitrogen_tank_empty_mass,
             nitrogen_mass: starting_nitrogen_mass,
             starting_nitrogen_mass,
-            nitrogen_tank_empty_offset,
-            nitrogen_tank_full_offset,
+            nitrogen_tank_offset,
             nitrous_tank_empty_mass,
             pressurizing_nitrogen_mass: starting_pressurizing_nitrogen_mass,
             starting_pressurizing_nitrogen_mass,
             nitrous_mass: starting_nitrous_mass,
             starting_nitrous_mass,
-            nitrous_tank_empty_offset,
-            nitrous_tank_full_offset,
-            nitrous_tank_depleted_offset,
+            nitrous_tank_offset,
             tvc_module_empty_mass,
             fuel_grain_mass: starting_fuel_grain_mass,
             starting_fuel_grain_mass,
             frame_com_to_gimbal,
             gimbal_to_tvc_com,
-            inertia_tensor,
+            frame_moi,
+            dry_nitrogen_moi,
+            wet_nitrogen_moi,
+            nitrous_tank_radius,
+            nitrous_tank_length,
+            dry_nitrous_moi,
+            dry_tvc_moi,
+            wet_tvc_moi,
             tvc_range,
             tvc,
             rcs,
@@ -100,7 +107,6 @@ impl Rocket {
             com_to_ground,
             system_time: 0.0,
             debug_info: RocketDebugInfo {
-                thrust_vector: Vector3::zeros(),
                 thrust_torque: Vector3::zeros(),
                 total_force: Vector3::zeros(),
                 total_torque: Vector3::zeros(),
@@ -121,7 +127,17 @@ impl Rocket {
     pub fn step(&mut self, control_input: Vector4<f64>, outside_forces: Vector3<f64>, outside_torques: Vector3<f64>, dt: f64) -> bool {
         let rotated_offset = self.attitude.transform_vector(&self.com_to_ground);
         let rocket_bottom = self.position + rotated_offset;
-        if rocket_bottom.z <= 0.0 {
+        if rocket_bottom.z < 0.0 {
+            // 1. Shift the rocket UP by the exact amount it went underground.
+            // (Because rocket_bottom.z is negative, subtracting it adds positive height)
+            self.position.z -= rocket_bottom.z; // Add a small buffer of 1 cm to prevent immediate re-collision on the next frame
+
+            // 2. CRITICAL: Kill the downward velocity!
+            // If you don't do this, the math still thinks it's falling at -5m/s, 
+            // and it will just instantly clip back underground on the next frame.
+            if self.velocity.z < 0.0 { // Assuming your velocity variable is named this
+                self.velocity.z = 0.0;
+            }
             return false; // Indicate that we've hit the ground
         }
         
@@ -131,8 +147,11 @@ impl Rocket {
         self.gps.update(self.position, self.system_time);
         self.uwb.update(self.position, self.system_time);
 
+        let com_offset = self.get_com_offset(self.thrust_vector);
+        let moi = self.get_moi(self.thrust_vector, com_offset);
+
         // Update actuated devices
-        let tvc_effect: TVCEffect = self.tvc.update(Vector3::new(control_input.x, control_input.y, control_input.z), self.nitrogen_mass, self.pressurizing_nitrogen_mass, self.nitrous_mass, self.fuel_grain_mass, dt, self.system_time);
+        let tvc_effect: TVCEffect = self.tvc.update(Vector3::new(control_input.x, control_input.y, control_input.z), self.frame_com_to_gimbal - com_offset, self.nitrogen_mass, self.pressurizing_nitrogen_mass, self.nitrous_mass, self.fuel_grain_mass, dt, self.system_time);
         self.nitrogen_mass = tvc_effect.nitrogen_mass;
         self.pressurizing_nitrogen_mass = tvc_effect.pressurizing_nitrogen_mass;
         self.nitrous_mass = tvc_effect.nitrous_mass;
@@ -150,10 +169,9 @@ impl Rocket {
 
         // Translational Dynamics
         let gravity = Vector3::new(0.0, 0.0, -9.81);
-        let thrust_vector = self.attitude.transform_vector(&tvc_effect.thrust);
-        let total_force = outside_forces + (gravity * mass) + thrust_vector;
+        self.thrust_vector = self.attitude.transform_vector(&tvc_effect.thrust);
+        let total_force = outside_forces + (gravity * mass) + self.thrust_vector;
         println!("Gravity Force: {:?}", gravity * mass);
-        self.debug_info.thrust_vector = thrust_vector;
         self.debug_info.total_force = total_force;
 
         self.accel = total_force / mass;        
@@ -165,11 +183,7 @@ impl Rocket {
         // alpha = I_inv * (Torque - omega x (I * omega))
         
         // We calculate I * omega manually since inertia is a diagonal Vector3 here
-        let i_omega = Vector3::new(
-            self.inertia_tensor.x * self.ang_vel.x,
-            self.inertia_tensor.y * self.ang_vel.y,
-            self.inertia_tensor.z * self.ang_vel.z,
-        );
+        let i_omega = moi * self.ang_vel;
 
         let gyro_torque = self.ang_vel.cross(&i_omega);
         let net_torque = outside_torques - gyro_torque + tvc_effect.torque + rcs_effect.torque;
@@ -177,11 +191,8 @@ impl Rocket {
         self.debug_info.total_torque = net_torque;
 
         // Angular acceleration (alpha)
-        let alpha = Vector3::new(
-            net_torque.x / self.inertia_tensor.x,
-            net_torque.y / self.inertia_tensor.y,
-            net_torque.z / self.inertia_tensor.z,
-        );
+        let moi_inv = moi.try_inverse().expect("MOI matrix must be invertible");
+        let alpha = moi_inv * net_torque;
 
         // Update Angular Velocity
         self.ang_vel += alpha * dt;
@@ -212,7 +223,83 @@ impl Rocket {
     }
 
     pub fn get_mass(&self) -> f64 {
-        self.dry_mass + self.nitrogen_tank_empty_mass + self.nitrogen_mass + self.nitrous_tank_empty_mass + self.pressurizing_nitrogen_mass + self.nitrous_mass + self.tvc_module_empty_mass + self.fuel_grain_mass
+        self.get_dry_mass() + self.nitrogen_mass + self.pressurizing_nitrogen_mass + self.nitrous_mass + self.fuel_grain_mass
+    }
+
+    pub fn get_dry_mass(&self) -> f64 {
+        self.frame_mass + self.nitrogen_tank_empty_mass + self.nitrous_tank_empty_mass + self.tvc_module_empty_mass
+    }
+
+    // This is expressed as a vector offset from the frame CoM
+    pub fn get_com_offset(&self, thrust_vector: Vector3<f64>) -> Vector3<f64> {
+        let total_mass = self.get_mass();
+
+        let nitrogen_com = self.nitrogen_tank_offset;
+
+        // TODO: implement full nitrous com calculations
+        let nitrous_com = self.nitrous_tank_offset;
+        
+        let thrust_direction = thrust_vector.normalize();
+        let vertical = Vector3::new(0.0, 0.0, 1.0);
+        let rotation = UnitQuaternion::rotation_between(&vertical, &thrust_direction).unwrap_or_else(|| UnitQuaternion::identity());
+        let tvc_com = self.frame_com_to_gimbal + rotation * self.gimbal_to_tvc_com;
+
+
+        let combined_com = (nitrogen_com * (self.nitrogen_tank_empty_mass + self.nitrogen_mass) / total_mass
+                            + nitrous_com * (self.nitrous_tank_empty_mass + self.pressurizing_nitrogen_mass + self.nitrous_mass) / total_mass
+                            + tvc_com * (self.tvc_module_empty_mass + self.fuel_grain_mass) / total_mass);
+        
+        combined_com
+    }
+
+    pub fn get_moi(&self, thrust_vector: Vector3<f64>, com_offset: Vector3<f64>) -> Matrix3<f64> {
+        let nitrogen_moi = self.transform_moi(self.weight_matrices(self.nitrogen_mass / self.starting_nitrogen_mass, self.wet_nitrogen_moi, self.dry_nitrogen_moi), self.nitrogen_tank_offset + com_offset, self.nitrogen_tank_empty_mass + self.nitrogen_mass);
+        
+        // TODO: implement full nitrous moi calculations
+        let nitrous_moi = self.transform_moi(self.dry_nitrous_moi, self.nitrous_tank_offset + com_offset, self.nitrous_tank_empty_mass + self.pressurizing_nitrogen_mass + self.nitrous_mass);
+        
+        let thrust_direction = thrust_vector.normalize();
+        let vertical = Vector3::new(0.0, 0.0, 1.0);
+        let rotation = UnitQuaternion::rotation_between(&vertical, &thrust_direction).unwrap_or_else(|| UnitQuaternion::identity());
+        let rotated_dry_tvc_moi = rotation * self.gimbal_to_tvc_com;
+        let tvc_moi = self.transform_moi(self.weight_matrices(self.fuel_grain_mass / self.starting_fuel_grain_mass, self.wet_tvc_moi, self.dry_tvc_moi), com_offset + self.frame_com_to_gimbal + rotated_dry_tvc_moi, self.tvc_module_empty_mass + self.fuel_grain_mass);
+        
+        
+        let moi = self.frame_moi
+            + nitrogen_moi
+            + nitrous_moi
+            + tvc_moi;
+        
+        moi
+    }
+
+    pub fn transform_moi(&self, moi: Matrix3<f64>, d: Vector3<f64>, mass: f64) -> Matrix3<f64> {
+        let y2_z2 = mass * (d.y * d.y + d.z * d.z);
+        let x2_z2 = mass * (d.x * d.x + d.z * d.z);
+        let x2_y2 = mass * (d.x * d.x + d.y * d.y);
+        let neg_xy = -mass * d.x * d.y;
+        let neg_xz = -mass * d.x * d.z;
+        let neg_yz = -mass * d.y * d.z;
+
+        Matrix3::new(
+            moi[(0, 0)] + y2_z2,
+            moi[(0, 1)] + neg_xy,
+            moi[(0, 2)] + neg_xz,
+            moi[(1, 0)] + neg_xy,
+            moi[(1, 1)] + x2_z2,
+            moi[(1, 2)] + neg_yz,
+            moi[(2, 0)] + neg_xz,
+            moi[(2, 1)] + neg_yz,
+            moi[(2, 2)] + x2_y2,
+        )
+    }
+
+    pub fn weight_matrices(&self, weight: f64, matrix1: Matrix3<f64>, matrix2: Matrix3<f64>) -> Matrix3<f64> {
+        weight * matrix1 + (1.0 - weight) * matrix2
+    }
+
+    pub fn weight_vectors(&self, weight: f64, vector1: Vector3<f64>, vector2: Vector3<f64>) -> Vector3<f64> {
+        weight * vector1 + (1.0 - weight) * vector2
     }
 
     // State vector: [x, y, z, qx, qy, qz, qw, x_dot, y_dot, z_dot, wx, wy, wz]

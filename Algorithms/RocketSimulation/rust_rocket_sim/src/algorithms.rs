@@ -1,7 +1,12 @@
 #[path="../../../MPC/src/mpc_crate.rs"]
 mod mpc_crate;
+#[path="../../../LosslessConvexification/rust_lossless/src/lossless.rs"]
+pub mod lossless;
 use ndarray::{Array1, Array2};
 use std::f64::consts::PI;
+use clarabel::algebra::*;
+use clarabel::solver::*;
+use std::time::Instant;
 
 #[derive(Debug, Clone)]
 pub struct MPC {
@@ -20,10 +25,14 @@ pub struct MPC {
     pub min_thrust: f64, // minimum thrust
     pub max_thrust: f64, // maximum thrust
     pub gimbal_limit: f64, // maximum gimbal angle in radians
+    pub system_time: f64, // internal time tracking for MPC updates
+    pub update_rate: f64, // rate at which MPC updates (e.g., 10 Hz)
+    previous_control: Vec<Array1<f64>>, // previous control input for smoothing
+    pub last_solve_time: f64,
 }
 
 impl MPC {
-    pub fn new(n: usize, m: usize, n_steps: usize, dt: f64, integral_gains: (f64, f64, f64), q: Array2<f64>, r: Array2<f64>, qn: Array2<f64>, smoothing_weight: Array1<f64>, panoc_cache_tolerance: f64, panoc_cache_lbfgs_memory: usize, min_thrust: f64, max_thrust: f64, gimbal_limit: f64) -> Self {
+    pub fn new(n: usize, m: usize, n_steps: usize, dt: f64, integral_gains: (f64, f64, f64), q: Array2<f64>, r: Array2<f64>, qn: Array2<f64>, smoothing_weight: Array1<f64>, panoc_cache_tolerance: f64, panoc_cache_lbfgs_memory: usize, min_thrust: f64, max_thrust: f64, gimbal_limit: f64, system_time: f64, update_rate: f64) -> Self {
         Self {
             n,
             m,
@@ -40,7 +49,27 @@ impl MPC {
             min_thrust,
             max_thrust,
             gimbal_limit,
+            system_time: 0.0,
+            update_rate,
+            previous_control: vec![Array1::zeros(m); n_steps],
+            last_solve_time: 0.0,
         }
+    }
+
+    pub fn update(&mut self, x0: &Array1<f64>, xref_traj: &Vec<Array1<f64>>, u_warm: &Vec<Array1<f64>>, mass: f64, system_time: f64) -> Vec<Array1<f64>> {
+        let elapsed_time = system_time - self.system_time;
+        if elapsed_time < 1.0 / self.update_rate {
+            // Not time to update yet, return previous control sequence
+            return self.previous_control.clone();
+        } else {
+            self.system_time = system_time;
+            self.last_solve_time = system_time;
+
+            let control_sequence = self.solve(x0, xref_traj, u_warm, mass);
+            self.previous_control = control_sequence.clone();
+            return control_sequence;
+        }
+
     }
 
     pub fn solve(&mut self, x0: &Array1<f64>, xref_traj: &Vec<Array1<f64>>, u_warm: &Vec<Array1<f64>>, mass: f64) -> Vec<Array1<f64>> {
@@ -88,5 +117,91 @@ impl MPC {
         }
 
         return control_sequence;
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Lossless {
+    pub max_velocity: f64,
+    pub dry_mass: f64,
+    pub alpha: f64,
+    pub lower_thrust_bound: f64,
+    pub upper_thrust_bound: f64,
+    pub tvc_range_rad: f64,
+    pub coarse_delta_t: f64,
+    pub fine_delta_t: f64,
+    pub glide_slope: f64,
+    pub use_glide_slope: bool,
+    pub system_time: f64,
+    pub update_rate: f64,
+    last_solution: lossless::TrajectoryResult, // Store the last solution for use when not updating
+    pub last_solve_time: f64,
+}
+
+impl Lossless {
+    pub fn new(max_velocity: f64, dry_mass: f64, alpha: f64, lower_thrust_bound: f64, upper_thrust_bound: f64, tvc_range_rad: f64, coarse_delta_t: f64, fine_delta_t: f64, glide_slope: f64, use_glide_slope: bool, pointing_direction: [f64; 3], system_time: f64, update_rate: f64) -> Self {
+        Self {
+            max_velocity,
+            dry_mass,
+            alpha,
+            lower_thrust_bound,
+            upper_thrust_bound,
+            tvc_range_rad,
+            coarse_delta_t,
+            fine_delta_t,
+            glide_slope,
+            use_glide_slope,
+            system_time,
+            update_rate,
+            last_solution: lossless::TrajectoryResult {
+                positions: vec![[0.0; 3]; 20], // Placeholder for 20 steps
+                velocities: vec![[0.0; 3]; 20], // Placeholder for 20 steps
+                masses: vec![dry_mass; 20], // Placeholder for 20 steps
+                thrusts: vec![[0.0; 3]; 20], // Placeholder for 20 steps
+                sigmas: vec![0.0; 20], // Placeholder for 20 steps
+                time_of_flight_s: 0.0, // Placeholder for time of flight
+            },
+            last_solve_time: 0.0,
+        }
+    }
+
+    pub fn update(&mut self, current_position: [f64; 3], current_velocity: [f64; 3], target_position: [f64; 3], propellant_mass: f64, system_time: f64) -> lossless::TrajectoryResult {
+        let elapsed_time = system_time - self.system_time;
+        if elapsed_time < 1.0 / self.update_rate {
+            // Not time to update yet, return previous control input (could be stored in the struct if needed)
+            return self.last_solution.clone(); // Return the last solution if not time to update
+        } else {
+            self.system_time = system_time;
+            self.last_solve_time = system_time;
+
+            // Call the lossless convexification solver to get the optimal control input
+            let trajectory = self.solve(current_position, current_velocity, target_position, propellant_mass);
+            self.last_solution = trajectory;
+            return self.last_solution.clone(); // Return the new solution after updating
+        }
+
+    }
+
+    pub fn solve(&mut self, current_position: [f64; 3], current_velocity: [f64; 3], target_position: [f64; 3], propellant_mass: f64) -> lossless::TrajectoryResult {
+        let mut solver = lossless::LosslessSolver {
+            landing_point: target_position,
+            initial_position: current_position,
+            initial_velocity: current_velocity,
+            max_velocity: self.max_velocity,
+            dry_mass: self.dry_mass,
+            fuel_mass: propellant_mass,
+            alpha: self.alpha,
+            lower_thrust_bound: self.lower_thrust_bound,
+            upper_thrust_bound: self.upper_thrust_bound,
+            tvc_range_rad: self.tvc_range_rad,
+            coarse_delta_t: self.coarse_delta_t,
+            fine_delta_t: self.fine_delta_t,
+            use_glide_slope: self.use_glide_slope,
+            glide_slope: self.glide_slope,
+            N: 20, // will be overridden by the solver based on the problem setup
+            ..Default::default()
+        };
+
+        return solver.solve().trajectory.expect("Failed to solve trajectory optimization problem");
     }
 }

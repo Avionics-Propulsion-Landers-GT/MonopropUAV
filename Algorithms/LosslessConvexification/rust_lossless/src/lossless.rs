@@ -24,6 +24,7 @@ pub struct LosslessSolver {
     pub N: i64,
 }
 
+#[derive(Debug, Clone)]
 pub struct TrajectoryResult {
     pub positions: Vec<[f64; 3]>,
     pub velocities: Vec<[f64; 3]>,
