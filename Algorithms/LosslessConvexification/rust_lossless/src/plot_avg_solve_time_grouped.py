@@ -231,8 +231,8 @@ def make_plot(
                 f"{height:.3f}",
                 ha="center",
                 va="bottom",
-                fontsize=7.5,
-                rotation=90,
+                fontsize=6.5,
+                rotation=0,
             )
 
     ax.legend(title="Method", loc="upper right")

@@ -59,6 +59,10 @@ def method_from_candidate(candidate_csv: str) -> str:
     return match.group(1)
 
 
+def humanize_group_name(group_name: str) -> str:
+    return " ".join(part.capitalize() for part in group_name.replace("_", " ").split())
+
+
 def normalize_run_type(run_type: str) -> str:
     raw = (run_type or "").strip().lower()
     return RUN_TYPE_REMAP.get(raw, raw)
@@ -203,7 +207,8 @@ def main() -> None:
         if not comparison_csv.is_file():
             continue
 
-        group_name = comparison_csv.parent.name
+        raw_group_name = comparison_csv.parent.name
+        display_group_name = humanize_group_name(raw_group_name)
         try:
             rows = read_rows(comparison_csv)
             for row in rows:
@@ -222,21 +227,21 @@ def main() -> None:
                 simple_data = resolve_simple_group_data(
                     simple_stats,
                     method,
-                    group_name,
+                    raw_group_name,
                     raw_run_type,
                     run_type,
                 )
                 zoh_data = resolve_simple_group_data(
                     simple_stats,
                     "zoh",
-                    group_name,
+                    raw_group_name,
                     raw_run_type,
                     run_type,
                 )
                 cgl_data = resolve_simple_group_data(
                     simple_stats,
                     "cgl",
-                    group_name,
+                    raw_group_name,
                     raw_run_type,
                     run_type,
                 )
@@ -257,7 +262,7 @@ def main() -> None:
 
                 collected.append(
                     {
-                        "group_name": group_name,
+                        "group_name": display_group_name,
                         "run_type": run_type,
                         "method": method,
                         "rmse_xyz": (row.get("rmse_xyz") or "").strip(),

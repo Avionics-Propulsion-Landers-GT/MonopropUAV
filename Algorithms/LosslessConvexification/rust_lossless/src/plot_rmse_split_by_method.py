@@ -224,8 +224,8 @@ def plot_metric(
                 f"{height:.3f}",
                 ha="center",
                 va="bottom",
-                fontsize=7,
-                rotation=90,
+                fontsize=6.2,
+                rotation=0,
             )
 
     ax.legend(
