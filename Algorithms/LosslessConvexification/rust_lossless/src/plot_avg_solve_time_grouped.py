@@ -131,7 +131,7 @@ def make_plot(
         }
     )
 
-    bar_width = 0.34
+    bar_width = 0.44
     run_type_spacing = 1.15
     group_spacing = 0.95
     method_offsets = {"zoh": -bar_width / 2.0, "cgl": bar_width / 2.0}
