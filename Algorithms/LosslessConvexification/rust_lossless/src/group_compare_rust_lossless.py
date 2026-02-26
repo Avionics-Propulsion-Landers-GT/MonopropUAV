@@ -1,5 +1,6 @@
 import argparse
 import csv
+import math
 import re
 from pathlib import Path
 
@@ -51,14 +52,14 @@ def pick_candidate_row(
     group_name: str,
     run_type: str,
     method: str,
-    run_id: int,
+    run_id: int | None,
 ) -> dict[str, str]:
     prefix = f"trajectory_{method}_{group_name}_{run_type}_"
-    exact = f"{prefix}{run_id}.csv"
-
-    exact_match = next((row for row in rows if row.get("candidate_csv", "") == exact), None)
-    if exact_match is not None:
-        return exact_match
+    if run_id is not None:
+        exact = f"{prefix}{run_id}.csv"
+        exact_match = next((row for row in rows if row.get("candidate_csv", "") == exact), None)
+        if exact_match is not None:
+            return exact_match
 
     candidates = [
         row for row in rows if row.get("candidate_csv", "").startswith(prefix)
@@ -70,6 +71,100 @@ def pick_candidate_row(
         )
 
     return min(candidates, key=lambda row: run_number_from_candidate(row["candidate_csv"]))
+
+
+def parse_set_index(run_name: str) -> int:
+    match = re.match(r"^set_(\d+)_avg$", run_name.strip())
+    if not match:
+        return 10**9
+    return int(match.group(1))
+
+
+def method_from_group_name(group_name: str) -> str | None:
+    if group_name.startswith("zoh_"):
+        return "zoh"
+    if group_name.startswith("cgl_"):
+        return "cgl"
+    return None
+
+
+def standard_error(values: list[float]) -> float:
+    if len(values) <= 1:
+        return 0.0
+    mean = sum(values) / len(values)
+    variance = sum((value - mean) ** 2 for value in values) / (len(values) - 1)
+    return math.sqrt(variance) / math.sqrt(len(values))
+
+
+def read_simple_solve_stats(
+    run_type_dir: Path,
+) -> dict[str, tuple[str, str, str]]:
+    exact = run_type_dir / "simple_solve_metrics.csv"
+    if exact.exists() and exact.is_file():
+        target = exact
+    else:
+        candidates = sorted(run_type_dir.glob("simple_solve_metrics*.csv"))
+        if not candidates:
+            return {}
+        target = candidates[0]
+
+    with target.open(newline="") as f:
+        reader = csv.DictReader(f)
+        if not reader.fieldnames:
+            return {}
+        rows = list(reader)
+
+    stats_by_method: dict[str, tuple[str, str, str]] = {}
+    best_set_index_by_method: dict[str, int] = {}
+    sample_values_by_method: dict[str, list[float]] = {}
+    sample_tof_by_method: dict[str, str] = {}
+
+    for row in rows:
+        run_name = (row.get("run_name") or "").strip()
+        method = (row.get("method") or "").strip() or method_from_group_name(
+            (row.get("group_name") or "").strip()
+        )
+        if method not in METHOD_ORDER:
+            continue
+
+        time_of_flight = (row.get("time_of_flight_s") or "").strip()
+        if time_of_flight and method not in sample_tof_by_method:
+            sample_tof_by_method[method] = time_of_flight
+
+        is_set_row = run_name.startswith("set_") and run_name.endswith("_avg")
+        if is_set_row:
+            avg = (row.get("set_avg_fine_clarabel_solve_time_s") or "").strip()
+            stderr = (row.get("set_std_error_fine_clarabel_solve_time_s") or "").strip()
+            set_index = parse_set_index(run_name)
+            if avg:
+                current_best = best_set_index_by_method.get(method, 10**9)
+                if set_index < current_best:
+                    stats_by_method[method] = (avg, stderr, time_of_flight)
+                    best_set_index_by_method[method] = set_index
+            continue
+
+        sample_raw = (row.get("fine_clarabel_solve_time_s") or "").strip()
+        if sample_raw:
+            try:
+                sample_values_by_method.setdefault(method, []).append(float(sample_raw))
+            except ValueError:
+                pass
+
+    for method in METHOD_ORDER:
+        if method in stats_by_method:
+            continue
+        values = sample_values_by_method.get(method, [])
+        if not values:
+            continue
+        avg = sum(values) / len(values)
+        stderr = standard_error(values)
+        stats_by_method[method] = (
+            f"{avg:.6f}",
+            f"{stderr:.6f}",
+            sample_tof_by_method.get(method, ""),
+        )
+
+    return stats_by_method
 
 
 def parse_args() -> argparse.Namespace:
@@ -94,8 +189,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--run-id",
         type=int,
-        default=1,
-        help="Run id to pick per method and run type (default: 1)",
+        default=None,
+        help=(
+            "Optional run id to pick per method and run type. "
+            "If omitted, picks the lowest available run id."
+        ),
     )
     parser.add_argument(
         "--comparison-file",
@@ -118,7 +216,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    if args.run_id <= 0:
+    if args.run_id is not None and args.run_id <= 0:
         raise ValueError("--run-id must be positive")
 
     project_root = args.project_root.resolve()
@@ -150,13 +248,22 @@ def main() -> None:
             continue
 
         if output_headers is None:
-            output_headers = ["run_type"] + headers
-        elif headers != output_headers[1:]:
+            output_headers = [
+                "group_name",
+                "run_type",
+                *headers,
+                "avg_solve_time",
+                "std_error_solve_time",
+                "time_of_flight_s",
+            ]
+        elif headers != output_headers[2:-3]:
             raise ValueError(
                 f"Header mismatch in {comparison_path}.\n"
-                f"Expected: {output_headers[1:]}\n"
+                f"Expected: {output_headers[2:-3]}\n"
                 f"Found: {headers}"
             )
+
+        simple_stats_by_method = read_simple_solve_stats(run_type_dir)
 
         for method in ("zoh", "cgl"):
             try:
@@ -164,7 +271,20 @@ def main() -> None:
             except ValueError as exc:
                 print(f"Skipping {method} for run type '{run_type}': {exc}")
                 continue
-            selected_rows.append({"run_type": run_type, **picked})
+            avg_solve_time, std_error_solve_time, time_of_flight_s = simple_stats_by_method.get(
+                method,
+                ("", "", ""),
+            )
+            selected_rows.append(
+                {
+                    "group_name": group_name,
+                    "run_type": run_type,
+                    **picked,
+                    "avg_solve_time": avg_solve_time,
+                    "std_error_solve_time": std_error_solve_time,
+                    "time_of_flight_s": time_of_flight_s,
+                }
+            )
 
     if output_headers is None:
         print("No valid run types found. Nothing to write.")
@@ -172,6 +292,11 @@ def main() -> None:
 
     selected_rows.sort(
         key=lambda row: (
+            METHOD_ORDER.get(
+                method_from_candidate(row.get("candidate_csv", "")),
+                len(METHOD_ORDER),
+            ),
+            row["group_name"],
             METHOD_ORDER.get(
                 method_from_candidate(row.get("candidate_csv", "")),
                 len(METHOD_ORDER),

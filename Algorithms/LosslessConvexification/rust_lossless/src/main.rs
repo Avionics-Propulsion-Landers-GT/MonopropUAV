@@ -1,132 +1,224 @@
-mod lossless;
 mod chebyshev_lossless;
-use crate::chebyshev_lossless::*;
-use crate::lossless::{LosslessSolver, SolveMetrics, SolveRunResult, TrajectoryResult};
+mod lossless;
+
+use crate::chebyshev_lossless::ChebyshevLosslessSolver;
+use crate::lossless::{
+    LosslessSolver, SolveAttemptResult, SolveMetrics, SolveRunResult, TrajectoryResult,
+};
 use std::collections::BTreeMap;
-use std::env;
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 struct FineSolveRecord {
     group_name: String,
     run_name: String,
+    method: String,
     fine_clarabel_solve_time_s: f64,
+    time_of_flight_s: f64,
+}
+
+struct SimpleMetricsContext {
+    zoh_coarse_dt_s: f64,
+    zoh_fine_dt_s: f64,
+    cgl_coarse_search_delta_t_s: f64,
+    cgl_fine_search_delta_t_s: f64,
+    cgl_coarse_nodes: usize,
+    cgl_fine_nodes: usize,
 }
 
 fn main() {
-    let intial_position = [0.0, 0.0, 50.0];
-    // let intial_position = [10.0, 20.0, 50.0];
-
-    // let max_velocity = 500.0;
+    let initial_position = [0.0, 0.0, 50.0];
     let max_velocity = 5.0;
 
-    let mut _solver = LosslessSolver {
-        landing_point: [0.0, 0.0, 0.0], // This is the point where you want to end up.
-        initial_position: intial_position,
-        initial_velocity: [0.0, 0.0, 0.0], // This is the velocity you start with.
-        max_velocity: max_velocity, // This is the maximum velocity the vehicle can/should achieve in flight.
-        dry_mass: 50.0, // This is the mass of the vehicle, without any fuel/propellant on board.
-        fuel_mass: 30.0, // This is the mass of the fuel/propellant.
-        alpha: 1.0/(9.81 * 180.0), // This is the conversion ratio from thrust to delta mass.
-        lower_thrust_bound: 1000.0 * 0.4, // This is the minimum thrust the vehicle must keep.
-        upper_thrust_bound: 1000.0, // This is the maximum thrust the vehicle can attain.
-        tvc_range_rad: 15_f64.to_radians(), // This is the range from the vertical axis that the thrust vector control can deviate.
-        // coarse_line_search_delta_t: 0.5, // TODO
-        // fine_line_search_delta_t: 0.5,
-        coarse_delta_t: 0.2, // This is the dt used to solve for the time frame of the trajectory.
-        fine_delta_t: 0.0125, // This is the dt used to solve for the higher resolution trajectory.
-        use_glide_slope: true, // This determines if the glide slope constraint is used. The glide slope constraint ensures that the vehicle stays above an upward spreading cone centered on the landing point.
-        glide_slope: 5_f64.to_radians(), // This is the angle of the glide slope constraint.
-        N: 20, // This is the number of time steps the solver uses. It is set here, but is recalculated internally solve() is called. This is simply exposed so that the number of time steps can be accessed externally, if necessary.
+    let mut zoh_solver = LosslessSolver {
+        landing_point: [0.0, 0.0, 0.0],
+        initial_position,
+        initial_velocity: [0.0, 0.0, 0.0],
+        max_velocity,
+        dry_mass: 50.0,
+        fuel_mass: 30.0,
+        alpha: 1.0 / (9.81 * 180.0),
+        lower_thrust_bound: 1000.0 * 0.4,
+        upper_thrust_bound: 1000.0,
+        tvc_range_rad: 15_f64.to_radians(),
+        coarse_delta_t: 0.2,
+        fine_delta_t: 0.0125,
+        use_glide_slope: true,
+        glide_slope: 5_f64.to_radians(),
+        N: 20,
         ..Default::default()
     };
 
-    // TODO: Make chebyshev not stupid :D shouldn't have the same number of nodes for each pass on the coarse search.
-    // Also want to try a binary search - style implementation
     let mut chebyshev_solver = ChebyshevLosslessSolver {
-        landing_point: [0.0, 0.0, 0.0], // This is the point where you want to end up.
-        initial_position: intial_position, // This is the point where you start from.
-        initial_velocity: [0.0, 0.0, 0.0], // This is the velocity you start with.
-        max_velocity: max_velocity, // This is the maximum velocity the vehicle can/should achieve in flight.
-        dry_mass: 50.0, // This is the mass of the vehicle, without any fuel/propellant on board.
-        fuel_mass: 30.0, // This is the mass of the fuel/propellant.
-        alpha: 1.0/(9.81 * 180.0), // This is the conversion ratio from thrust to delta mass.
-        lower_thrust_bound: 1000.0 * 0.4, // This is the minimum thrust the vehicle must keep.
-        upper_thrust_bound: 1000.0, // This is the maximmum thrust the vehicle can attain.
-        tvc_range_rad: 15_f64.to_radians(), // This is the range from the vertical axis that the thrust vector control can deviate.
+        landing_point: [0.0, 0.0, 0.0],
+        initial_position,
+        initial_velocity: [0.0, 0.0, 0.0],
+        max_velocity,
+        dry_mass: 50.0,
+        fuel_mass: 30.0,
+        alpha: 1.0 / (9.81 * 180.0),
+        lower_thrust_bound: 1000.0 * 0.4,
+        upper_thrust_bound: 1000.0,
+        tvc_range_rad: 15_f64.to_radians(),
         coarse_line_search_delta_t: 0.2,
         fine_line_search_delta_t: 0.05,
-        coarse_nodes: 15, // This is the dt used to solve for the time frame of the trajectory.
-        fine_nodes: 55, // This is the dt used to solve for the higher resolution trajectory.
-        use_glide_slope: true, // This determines if the glide slope constraint is used. The glide slope constraint ensures that the vehicle stays above an upward spreading cone centered on the landing point.
-        glide_slope: 5_f64.to_radians(), // This is the angle of the glide slope constraint.
+        coarse_nodes: 15,
+        fine_nodes: 55,
+        use_glide_slope: true,
+        glide_slope: 5_f64.to_radians(),
         ..Default::default()
     };
 
     let group_name = "direct_limited_descent";
-    let run_name = "long";
-    let runs_per_group = 3;
-    let run_label = format!("{}_{}", group_name, run_name);
-    let output_root = Path::new(group_name).join(run_name);
+    let truth_name = "trajectory_zoh_truth_5_vel_limit.csv";
+    let run_type = "long";
+    let fine_timing_samples_per_group = 3;
+    let comparison_nodes = 100;
+
+    let run_label = format!("{}_{}", group_name, run_type);
+    let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let output_root = project_root.join(group_name).join(run_type);
     std::fs::create_dir_all(&output_root).expect("Failed to create output root directory");
+
+    let simple_metrics_context = SimpleMetricsContext {
+        zoh_coarse_dt_s: zoh_solver.coarse_delta_t,
+        zoh_fine_dt_s: zoh_solver.fine_delta_t,
+        cgl_coarse_search_delta_t_s: chebyshev_solver.coarse_line_search_delta_t,
+        cgl_fine_search_delta_t_s: chebyshev_solver.fine_line_search_delta_t,
+        cgl_coarse_nodes: chebyshev_solver.coarse_nodes,
+        cgl_fine_nodes: chebyshev_solver.fine_nodes,
+    };
+
     let mut fine_records: Vec<FineSolveRecord> = Vec::new();
 
-    let solver_groups = ["zoh","cgl"];
-    let mut run_counter = 0usize;
+    for solver_group in ["zoh", "cgl"] {
+        println!("=== Solving {} ===", solver_group);
+        let run_dir = output_root.join(solver_group);
+        std::fs::create_dir_all(&run_dir).expect("Failed to create run output directory");
 
-    for solver_group in solver_groups {
-        for run_idx in 1..=runs_per_group {
-            run_counter += 1;
-            println!("--- Run {} ---", run_counter);
+        let trajectory_run_name = format!("{}_{}_1", solver_group, run_label);
+        let solve_run = if solver_group == "zoh" {
+            zoh_solver.solve()
+        } else {
+            chebyshev_solver.solve()
+        };
 
-            let run_name = format!("{}_{}_{}", solver_group, run_label, run_idx);
-            let solve_run = if solver_group == "zoh" {
-                _solver.solve()
+        let solve_metrics_path = run_dir.join("solve_metrics.csv");
+        append_solve_metrics_to_csv(&solve_metrics_path, &trajectory_run_name, &solve_run)
+            .expect("Failed to write solve metrics CSV");
+
+        let trajectory = match solve_run.trajectory {
+            Some(result) => result,
+            None => {
+                eprintln!("{} initial solve failed, skipping timing samples.", solver_group);
+                continue;
+            }
+        };
+
+        println!("Final position: {:?}", trajectory.positions.last().unwrap());
+        println!("Final velocity: {:?}", trajectory.velocities.last().unwrap());
+        println!("Final mass: {:?}", trajectory.masses.last().unwrap());
+        println!("Final thrust: {:?}", trajectory.thrusts.last().unwrap());
+
+        let trajectory_path = run_dir.join(format!("trajectory_{}.csv", trajectory_run_name));
+        write_trajectory_to_csv(&trajectory_path, &trajectory).expect("Failed to write CSV");
+
+        let time_of_flight_s = trajectory.time_of_flight_s;
+
+        for sample_idx in 1..=fine_timing_samples_per_group {
+            let sample_run_name = format!("{}_{}_{}", solver_group, run_label, sample_idx);
+            let fine_attempt = if solver_group == "zoh" {
+                rerun_zoh_fine_attempt(&mut zoh_solver, time_of_flight_s)
             } else {
-                chebyshev_solver.solve()
+                rerun_cgl_fine_attempt(&mut chebyshev_solver, time_of_flight_s)
             };
 
-            let run_dir = output_root.join(solver_group);
-            std::fs::create_dir_all(&run_dir).expect("Failed to create run output directory");
-
-            let solve_metrics_path = run_dir.join("solve_metrics.csv");
-            append_solve_metrics_to_csv(&solve_metrics_path, &run_name, &solve_run)
-                .expect("Failed to write solve metrics CSV");
+            if fine_attempt.trajectory.is_none() {
+                eprintln!(
+                    "{} fine timing sample {} failed; not included in simple metrics.",
+                    solver_group, sample_idx
+                );
+                continue;
+            }
 
             fine_records.push(FineSolveRecord {
-                group_name: run_group_name(&run_name),
-                run_name: run_name.clone(),
-                fine_clarabel_solve_time_s: solve_run.fine_metrics.clarabel_solve_time_s,
+                group_name: run_group_name(&sample_run_name),
+                run_name: sample_run_name,
+                method: solver_group.to_string(),
+                fine_clarabel_solve_time_s: fine_attempt.metrics.clarabel_solve_time_s,
+                time_of_flight_s,
             });
-
-            match &solve_run.trajectory {
-                Some(result) => {
-                    println!("Final position: {:?}", result.positions.last().unwrap());
-                    println!("Final velocity: {:?}", result.velocities.last().unwrap());
-                    println!("Final mass: {:?}", result.masses.last().unwrap());
-                    println!("Final thrust: {:?}", result.thrusts.last().unwrap());
-
-                    let trajectory_path = run_dir.join(format!("trajectory_{}.csv", run_name));
-                    write_trajectory_to_csv(&trajectory_path, result).expect("Failed to write CSV");
-                }
-                None => {
-                    eprintln!("Solve failed!");
-                }
-            }
         }
     }
 
     let simple_metrics_path = output_root.join("simple_solve_metrics.csv");
-    write_simple_solve_metrics_csv(&simple_metrics_path, &fine_records, runs_per_group)
-        .expect("Failed to write simple solve metrics CSV");
+    write_simple_solve_metrics_csv(
+        &simple_metrics_path,
+        &fine_records,
+        fine_timing_samples_per_group,
+        &simple_metrics_context,
+    )
+    .expect("Failed to write simple solve metrics CSV");
+
+    let truth_path = project_root.join(truth_name);
+    run_batch_compare(&output_root, &truth_path, comparison_nodes)
+        .expect("Failed to run batch comparison against truth CSV");
+}
+
+fn rerun_zoh_fine_attempt(solver: &mut LosslessSolver, time_of_flight_s: f64) -> SolveAttemptResult {
+    let previous_delta_t = solver.delta_t;
+    let previous_n = solver.N;
+
+    solver.delta_t = solver.fine_delta_t;
+    let target_n = (time_of_flight_s / solver.fine_delta_t).round() as i64;
+    solver.N = target_n.max(1);
+
+    let attempt = solver.solve_at_current_time();
+
+    solver.delta_t = previous_delta_t;
+    solver.N = previous_n;
+    attempt
+}
+
+fn rerun_cgl_fine_attempt(
+    solver: &mut ChebyshevLosslessSolver,
+    time_of_flight_s: f64,
+) -> SolveAttemptResult {
+    let previous_n = solver.N;
+    solver.N = solver.fine_nodes;
+    let attempt = solver.solve_at_current_time(time_of_flight_s);
+    solver.N = previous_n;
+    attempt
+}
+
+fn run_batch_compare(output_root: &Path, truth_csv: &Path, nodes: usize) -> std::io::Result<()> {
+    let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let script_path = project_root.join("src").join("batch_compare_rust_lossless.py");
+
+    let status = Command::new("python")
+        .arg(script_path)
+        .arg(output_root)
+        .arg(truth_csv)
+        .arg("--nodes")
+        .arg(nodes.to_string())
+        .current_dir(project_root)
+        .status()?;
+
+    if !status.success() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "batch_compare_rust_lossless.py exited with non-zero status",
+        ));
+    }
+    Ok(())
 }
 
 pub fn write_trajectory_to_csv(path: &Path, traj: &TrajectoryResult) -> std::io::Result<()> {
     let file = File::create(path)?;
     let mut writer = BufWriter::new(file);
 
-    // ADDED: "thrust_force" to the header
     writeln!(writer, "t,x,y,z,vx,vy,vz,mass,ux,uy,uz,sigma,thrust_force")?;
 
     let n_steps = traj.positions.len();
@@ -136,27 +228,31 @@ pub fn write_trajectory_to_csv(path: &Path, traj: &TrajectoryResult) -> std::io:
         let v = &traj.velocities[k];
         let m = traj.masses[k];
         let sigma = if k < traj.sigmas.len() { traj.sigmas[k] } else { 0.0 };
-        
-        // Safely get u (control vector)
-        let u = if k < traj.thrusts.len() { &traj.thrusts[k] } else { &[0.0, 0.0, 0.0] };
+        let u = if k < traj.thrusts.len() {
+            &traj.thrusts[k]
+        } else {
+            &[0.0, 0.0, 0.0]
+        };
 
-        // --- NEW CALCULATION ---
-        // 1. Calculate Magnitude ||u|| (Euclidean norm)
         let u_mag = (u[0].powi(2) + u[1].powi(2) + u[2].powi(2)).sqrt();
-        
-        // 2. Calculate True Thrust Force = mass * ||u||
         let thrust_force = m * u_mag;
 
         writeln!(
             writer,
             "{},{},{},{},{},{},{},{},{},{},{},{},{}",
             k as f64,
-            x[0], x[1], x[2],
-            v[0], v[1], v[2],
+            x[0],
+            x[1],
+            x[2],
+            v[0],
+            v[1],
+            v[2],
             m,
-            u[0], u[1], u[2],
+            u[0],
+            u[1],
+            u[2],
             sigma,
-            thrust_force // Write the new value to the row
+            thrust_force
         )?;
     }
 
@@ -177,10 +273,7 @@ pub fn append_solve_metrics_to_csv(
     ensure_solve_metrics_header(path, SOLVE_METRICS_HEADER_V1, SOLVE_METRICS_HEADER_V2)?;
 
     let file_exists = path.exists();
-    let file = OpenOptions::new()
-        .append(true)
-        .create(true)
-        .open(path)?;
+    let file = OpenOptions::new().append(true).create(true).open(path)?;
     let write_header = !file_exists || file.metadata()?.len() == 0;
 
     let mut writer = BufWriter::new(file);
@@ -219,11 +312,7 @@ pub fn append_solve_metrics_to_csv(
     Ok(())
 }
 
-fn ensure_solve_metrics_header(
-    path: &Path,
-    old_header: &str,
-    new_header: &str,
-) -> std::io::Result<()> {
+fn ensure_solve_metrics_header(path: &Path, old_header: &str, new_header: &str) -> std::io::Result<()> {
     if !path.exists() || path.metadata()?.len() == 0 {
         return Ok(());
     }
@@ -302,12 +391,13 @@ fn run_group_name(run_name: &str) -> String {
 fn write_simple_solve_metrics_csv(
     path: &Path,
     records: &[FineSolveRecord],
-    runs_per_group: usize,
+    timing_samples_per_group: usize,
+    context: &SimpleMetricsContext,
 ) -> std::io::Result<()> {
-    if runs_per_group == 0 {
+    if timing_samples_per_group == 0 {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
-            "runs_per_group must be greater than 0",
+            "timing_samples_per_group must be greater than 0",
         ));
     }
 
@@ -316,7 +406,7 @@ fn write_simple_solve_metrics_csv(
 
     writeln!(
         writer,
-        "group_name,run_name,fine_clarabel_solve_time_s,set_avg_fine_clarabel_solve_time_s,set_std_error_fine_clarabel_solve_time_s"
+        "group_name,run_name,method,fine_clarabel_solve_time_s,time_of_flight_s,zoh_coarse_dt_s,zoh_fine_dt_s,cgl_coarse_search_delta_t_s,cgl_fine_search_delta_t_s,cgl_coarse_nodes,cgl_fine_nodes,set_avg_fine_clarabel_solve_time_s,set_std_error_fine_clarabel_solve_time_s"
     )?;
 
     let mut grouped: BTreeMap<String, Vec<&FineSolveRecord>> = BTreeMap::new();
@@ -331,40 +421,65 @@ fn write_simple_solve_metrics_csv(
         for record in &group_records {
             writeln!(
                 writer,
-                "{},{},{:.6},,",
-                group_name, record.run_name, record.fine_clarabel_solve_time_s
+                "{},{},{},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{},{},,",
+                group_name,
+                record.run_name,
+                record.method,
+                record.fine_clarabel_solve_time_s,
+                record.time_of_flight_s,
+                context.zoh_coarse_dt_s,
+                context.zoh_fine_dt_s,
+                context.cgl_coarse_search_delta_t_s,
+                context.cgl_fine_search_delta_t_s,
+                context.cgl_coarse_nodes,
+                context.cgl_fine_nodes,
             )?;
         }
 
-        for (set_idx, chunk) in group_records.chunks(runs_per_group).enumerate() {
-            if chunk.len() == runs_per_group {
-                let avg = chunk
-                    .iter()
-                    .map(|record| record.fine_clarabel_solve_time_s)
-                    .sum::<f64>()
-                    / (runs_per_group as f64);
-                let std_error = if chunk.len() > 1 {
-                    let variance = chunk
-                        .iter()
-                        .map(|record| {
-                            let delta = record.fine_clarabel_solve_time_s - avg;
-                            delta * delta
-                        })
-                        .sum::<f64>()
-                        / ((chunk.len() - 1) as f64);
-                    variance.sqrt() / (chunk.len() as f64).sqrt()
-                } else {
-                    0.0
-                };
-                writeln!(
-                    writer,
-                    "{},set_{}_avg,,{:.6},{:.6}",
-                    group_name,
-                    set_idx + 1,
-                    avg,
-                    std_error
-                )?;
+        for (set_idx, chunk) in group_records.chunks(timing_samples_per_group).enumerate() {
+            if chunk.is_empty() {
+                continue;
             }
+
+            let avg = chunk
+                .iter()
+                .map(|record| record.fine_clarabel_solve_time_s)
+                .sum::<f64>()
+                / (chunk.len() as f64);
+
+            let std_error = if chunk.len() > 1 {
+                let variance = chunk
+                    .iter()
+                    .map(|record| {
+                        let delta = record.fine_clarabel_solve_time_s - avg;
+                        delta * delta
+                    })
+                    .sum::<f64>()
+                    / ((chunk.len() - 1) as f64);
+                variance.sqrt() / (chunk.len() as f64).sqrt()
+            } else {
+                0.0
+            };
+
+            let method = &chunk[0].method;
+            let time_of_flight_s = chunk[0].time_of_flight_s;
+
+            writeln!(
+                writer,
+                "{},set_{}_avg,{},,{:.6},{:.6},{:.6},{:.6},{:.6},{},{},{:.6},{:.6}",
+                group_name,
+                set_idx + 1,
+                method,
+                time_of_flight_s,
+                context.zoh_coarse_dt_s,
+                context.zoh_fine_dt_s,
+                context.cgl_coarse_search_delta_t_s,
+                context.cgl_fine_search_delta_t_s,
+                context.cgl_coarse_nodes,
+                context.cgl_fine_nodes,
+                avg,
+                std_error
+            )?;
         }
     }
 
