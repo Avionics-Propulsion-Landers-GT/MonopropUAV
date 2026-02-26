@@ -50,7 +50,7 @@ fn main() {
         coarse_line_search_delta_t: 0.1,
         fine_line_search_delta_t: 0.01,
         coarse_delta_t: 0.05,
-        fine_delta_t: 0.2,
+        fine_delta_t: 0.025,
         use_glide_slope: true,
         glide_slope: 5_f64.to_radians(),
         N: 20,
@@ -72,7 +72,7 @@ fn main() {
         coarse_line_search_delta_t: 0.1,
         fine_line_search_delta_t: 0.01,
         coarse_nodes: 15,
-        fine_nodes: 10,
+        fine_nodes: 30,
         use_glide_slope: true,
         glide_slope: 5_f64.to_radians(),
         ..Default::default()
@@ -80,7 +80,7 @@ fn main() {
 
     let group_name = "direct_descent";
     let truth_name = "trajectory_zoh_truth.csv";
-    let run_type = "ultra_short";
+    let run_type = "short";
     // let solver_groups_to_run: Vec<&str> = vec!["zoh", "cgl"];
     // let solver_groups_to_run: Vec<&str> = vec!["cgl"];
     let solver_groups_to_run: Vec<&str> = vec!["zoh"];
