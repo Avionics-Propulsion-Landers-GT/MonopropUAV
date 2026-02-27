@@ -1,0 +1,33 @@
+flight_plan,resolution,run_type,method,run_id,num_samples,max_abs_dthrust_dt,trajectory_csv
+Direct Descent,very_coarse,extreme_short,zoh,1,16,992.900492316,direct_descent\extreme_short\zoh\trajectory_zoh_direct_descent_extreme_short_1.csv
+Direct Descent,very_coarse,extreme_short,cgl,1,101,15.028408070,direct_descent\extreme_short\cgl\trajectory_cgl_direct_descent_extreme_short_1.csv
+Direct Descent,coarse,ultra_short,zoh,1,143,999.935133904,direct_descent\ultra_short\zoh\trajectory_zoh_direct_descent_ultra_short_1.csv
+Direct Descent,coarse,ultra_short,cgl,1,101,34.100952490,direct_descent\ultra_short\cgl\trajectory_cgl_direct_descent_ultra_short_1.csv
+Direct Descent,fine,short,zoh,1,282,999.942623558,direct_descent\short\zoh\trajectory_zoh_direct_descent_short_1.csv
+Direct Descent,fine,short,cgl,1,101,83.440611443,direct_descent\short\cgl\trajectory_cgl_direct_descent_short_1.csv
+Direct Descent,very_fine,long,zoh,1,562,999.944781380,direct_descent\long\zoh\trajectory_zoh_direct_descent_long_1.csv
+Direct Descent,very_fine,long,cgl,1,101,139.696991578,direct_descent\long\cgl\trajectory_cgl_direct_descent_long_1.csv
+Direct Limited Descent,very_coarse,extreme_short,zoh,1,16,981.736963358,direct_limited_descent\extreme_short\zoh\trajectory_zoh_direct_limited_descent_extreme_short_1.csv
+Direct Limited Descent,very_coarse,extreme_short,cgl,1,101,29.934504668,direct_limited_descent\extreme_short\cgl\trajectory_cgl_direct_limited_descent_extreme_short_1.csv
+Direct Limited Descent,coarse,ultra_short,zoh,1,115,992.629564953,direct_limited_descent\ultra_short\zoh\trajectory_zoh_direct_limited_descent_ultra_short_1.csv
+Direct Limited Descent,coarse,ultra_short,cgl,1,101,33.924390224,direct_limited_descent\ultra_short\cgl\trajectory_cgl_direct_limited_descent_ultra_short_1.csv
+Direct Limited Descent,fine,short,zoh,1,223,999.981858905,direct_limited_descent\short\zoh\trajectory_zoh_direct_limited_descent_short_1.csv
+Direct Limited Descent,fine,short,cgl,1,101,134.629292147,direct_limited_descent\short\cgl\trajectory_cgl_direct_limited_descent_short_1.csv
+Direct Limited Descent,very_fine,long,zoh,1,889,999.979809981,direct_limited_descent\long\zoh\trajectory_zoh_direct_limited_descent_long_1.csv
+Direct Limited Descent,very_fine,long,cgl,1,101,251.183087862,direct_limited_descent\long\cgl\trajectory_cgl_direct_limited_descent_long_1.csv
+Offset Descent,very_coarse,extreme_short,zoh,1,16,999.923334957,offset_descent\extreme_short\zoh\trajectory_zoh_offset_descent_extreme_short_1.csv
+Offset Descent,very_coarse,extreme_short,cgl,1,101,15.765511257,offset_descent\extreme_short\cgl\trajectory_cgl_offset_descent_extreme_short_1.csv
+Offset Descent,coarse,ultra_short,zoh,1,147,999.932374036,offset_descent\ultra_short\zoh\trajectory_zoh_offset_descent_ultra_short_1.csv
+Offset Descent,coarse,ultra_short,cgl,1,101,35.528043825,offset_descent\ultra_short\cgl\trajectory_cgl_offset_descent_ultra_short_1.csv
+Offset Descent,fine,short,zoh,1,242,999.941757977,offset_descent\short\zoh\trajectory_zoh_offset_descent_short_1.csv
+Offset Descent,fine,short,cgl,1,101,92.118635371,offset_descent\short\cgl\trajectory_cgl_offset_descent_short_1.csv
+Offset Descent,very_fine,long,zoh,1,1167,999.941759427,offset_descent\long\zoh\trajectory_zoh_offset_descent_long_1.csv
+Offset Descent,very_fine,long,cgl,1,101,150.637366513,offset_descent\long\cgl\trajectory_cgl_offset_descent_long_1.csv
+Offset Limited Descent,very_coarse,extreme_short,zoh,1,13,999.721789734,offset_limited_descent\extreme_short\zoh\trajectory_zoh_offset_limited_descent_extreme_short_1.csv
+Offset Limited Descent,very_coarse,extreme_short,cgl,1,101,17.931670642,offset_limited_descent\extreme_short\cgl\trajectory_cgl_offset_limited_descent_extreme_short_1.csv
+Offset Limited Descent,coarse,ultra_short,zoh,1,31,999.974386644,offset_limited_descent\ultra_short\zoh\trajectory_zoh_offset_limited_descent_ultra_short_1.csv
+Offset Limited Descent,coarse,ultra_short,cgl,1,101,64.634995158,offset_limited_descent\ultra_short\cgl\trajectory_cgl_offset_limited_descent_ultra_short_1.csv
+Offset Limited Descent,fine,short,zoh,1,121,999.860622496,offset_limited_descent\short\zoh\trajectory_zoh_offset_limited_descent_short_1.csv
+Offset Limited Descent,fine,short,cgl,1,101,193.431166624,offset_limited_descent\short\cgl\trajectory_cgl_offset_limited_descent_short_1.csv
+Offset Limited Descent,very_fine,long,zoh,1,959,999.989557933,offset_limited_descent\long\zoh\trajectory_zoh_offset_limited_descent_long_1.csv
+Offset Limited Descent,very_fine,long,cgl,1,101,279.889414250,offset_limited_descent\long\cgl\trajectory_cgl_offset_limited_descent_long_1.csv

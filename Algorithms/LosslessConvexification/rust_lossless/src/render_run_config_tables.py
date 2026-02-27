@@ -27,7 +27,7 @@ def parse_args() -> argparse.Namespace:
     default_root = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(
         description=(
-            "Render a single consolidated table image for all group_name + run_type entries "
+            "Render a single consolidated table image for all flight plan + resolution entries "
             "using clean_group_graph_data.csv "
             "with time_of_flight_s, zoh_fine_dt_s, and cgl_fine_nodes."
         )
@@ -170,7 +170,7 @@ def render_table_image(rows: list[dict[str, str]], output_path: Path) -> None:
 
     table = ax.table(
         cellText=cell_rows,
-        colLabels=["Run", "Time of Flight (s)", "ZOH dt (s)", "CGL Nodes"],
+        colLabels=["Flight Plan | Resolution", "Time of Flight (s)", "ZOH dt (s)", "CGL Nodes"],
         colWidths=[0.46, 0.18, 0.18, 0.18],
         cellLoc="center",
         loc="center",
@@ -190,7 +190,7 @@ def render_table_image(rows: list[dict[str, str]], output_path: Path) -> None:
         if col_idx == 0 and row_idx > 0:
             cell.get_text().set_ha("left")
 
-    ax.set_title("Run Configuration Summary", pad=10, fontweight="semibold")
+    ax.set_title("Flight Plan / Resolution Configuration Summary", pad=10, fontweight="semibold")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.tight_layout()

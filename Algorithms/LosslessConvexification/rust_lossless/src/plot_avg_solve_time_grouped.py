@@ -33,7 +33,7 @@ def parse_args() -> argparse.Namespace:
     default_root = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(
         description=(
-            "Create avg solve-time bar chart grouped by group_name, then run_type, "
+            "Create avg solve-time bar chart grouped by flight plan, then resolution, "
             "with side-by-side method bars and std-error error bars."
         )
     )
@@ -203,11 +203,11 @@ def make_plot(
     xticks = [x for x, _, _ in cluster_positions]
     xlabels = [RUN_TYPE_LABELS.get(run_type, run_type) for _, _, run_type in cluster_positions]
     ax.set_xticks(xticks)
-    ax.set_xticklabels(xlabels, rotation=25, ha="right")
+    ax.set_xticklabels(xlabels, rotation=30, ha="right")
 
-    ax.set_title("Average Solve Time by Group, Run Type, and Method")
+    ax.set_title("Average Solve Time by Flight Plan, Resolution, and Method")
     ax.set_ylabel("Average Solve Time (s, log scale)")
-    ax.set_xlabel("Run Type")
+    ax.set_xlabel("Resolution")
     ax.set_yscale("log")
     y_min = min(all_y_values) * 0.8
     y_max = max(all_y_values) * 4
@@ -349,7 +349,7 @@ def print_max_method_percent_difference(
     ) = max_record
     print(
         "Max method percent difference "
-        f"({RUN_TYPE_LABELS.get(run_type, run_type)} / {group}): "
+        f"(Resolution: {RUN_TYPE_LABELS.get(run_type, run_type)}, Flight Plan: {group}): "
         f"{percent_diff:.2f}% "
         f"(between {low_avg:.6f}s and {high_avg:.6f}s)"
     )

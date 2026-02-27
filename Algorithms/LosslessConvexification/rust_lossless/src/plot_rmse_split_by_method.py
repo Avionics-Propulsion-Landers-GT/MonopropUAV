@@ -33,7 +33,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Create RMSE bar charts split by method (left=ZOH, right=CGL), "
-            "grouped by group_name, with bars for coarse, fine, and very_fine."
+            "grouped by flight plan, with bars for each resolution."
         )
     )
     parser.add_argument(
@@ -191,7 +191,7 @@ def plot_metric(
     tick_positions = left_centers + right_centers
     tick_labels = [f"{group}\nZOH" for group in groups] + [f"{group}\nCGL" for group in groups]
     ax.set_xticks(tick_positions)
-    ax.set_xticklabels(tick_labels, rotation=25, ha="right")
+    ax.set_xticklabels(tick_labels, rotation=30, ha="right")
     ax.set_xlim(-x_limit, x_limit)
 
     split_x = (left_centers[-1] + right_centers[0]) / 2.0
@@ -227,10 +227,19 @@ def plot_metric(
         "rmse_sigma": "RMSE Sigma",
         "rmse_uxyz": "RMSE UXYZ",
     }
+    metric_units_map = {
+        "rmse_xyz": "m",
+        "rmse_sigma": "m/s^2",
+        "rmse_uxyz": "m/s^2",
+    }
     metric_label = metric_label_map.get(metric_name, metric_name)
-    ax.set_title(f"{metric_label} by Method, Group, and Run Type")
-    ax.set_ylabel(metric_label)
-    ax.set_xlabel("Group and Method")
+    metric_units = metric_units_map.get(metric_name)
+    ax.set_title(f"{metric_label} by Method, Flight Plan, and Resolution")
+    if metric_units:
+        ax.set_ylabel(f"{metric_label} ({metric_units})")
+    else:
+        ax.set_ylabel(metric_label)
+    ax.set_xlabel("Flight Plan and Method")
     ax.grid(axis="y", linestyle="--", linewidth=0.8, alpha=0.35)
     ax.set_axisbelow(True)
 
@@ -248,14 +257,16 @@ def plot_metric(
                 ha="center",
                 va="bottom",
                 fontsize=6.2,
-                rotation=0,
+                rotation=60,
             )
 
+    legend_loc = "upper left" if metric_name == "rmse_uxyz" else "upper right"
+    legend_anchor = (0.015, 0.985) if metric_name == "rmse_uxyz" else (0.985, 0.985)
     ax.legend(
-        title="Run Type",
+        title="Resolution",
         ncol=1,
-        loc="upper right",
-        bbox_to_anchor=(0.985, 0.985),
+        loc=legend_loc,
+        bbox_to_anchor=legend_anchor,
         frameon=True,
         fancybox=False,
         framealpha=0.95,
