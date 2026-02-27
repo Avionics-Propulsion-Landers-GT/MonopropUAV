@@ -339,9 +339,6 @@ pub fn angle_solver(
     let p_lo_lim: f64 = (p0 * 1.001).max(pmin_sat * 1.001);
     let p_hi_lim: f64 = (p1 * 0.999).min(pmax_sat * 0.999);
 
-    println!("iso: {:?}", iso);
-    println!("nist: {:?}", nist);
-
     if p_lo_lim >= p_hi_lim {
         panic!("Valid pressure range collapsed. Check P0/P1 vs saturation table bounds.");
     }
@@ -420,6 +417,7 @@ pub struct FluidDynamicsOutput {
     pub of_ratio_realized: f64,
     pub isp_realized: f64,
     pub cstar_realized: f64,
+    pub pc_bar: f64,
 }
 
 pub fn fluid_dynamics_update(
@@ -475,5 +473,6 @@ pub fn fluid_dynamics_update(
         of_ratio_realized: fr_sol.of_ratio_realized,
         isp_realized: fr_sol.isp_realized,
         cstar_realized: fr_sol.cstar_realized,
+        pc_bar: fr_sol.pc_bar,
     }
 }

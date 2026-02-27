@@ -74,20 +74,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         } else {
             mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
-                20.0, 20.0, 200.0,   // position x, y, z
-                300.0, 300.0, 300.0, 0.0, // quaternion qx, qy, qz, qw
-                30.0, 30.0, 300.0,        // linear velocities x_dot, y_dot, z_dot
+                20.0, 20.0, 70.0,   // position x, y, z
+                80.0, 80.0, 80.0, 0.0, // quaternion qx, qy, qz, qw
+                30.0, 30.0, 40.0,        // linear velocities x_dot, y_dot, z_dot
                 10.0, 10.0, 10.0          // angular velocities wx, wy, wz
             ]));
             mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 0.0]));
             mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
-                20.0, 20.0, 300.0,   // position x, y, z
-                350.0, 350.0, 350.0, 0.0, // quaternion qx, qy, qz, qw
-                40.0, 40.0, 400.0,        // linear velocities x_dot, y_dot, z_dot
-                5.0, 5.0, 5.0          // angular velocities wx, wy, wz
+                20.0, 20.0, 70.0,   // position x, y, z
+                80.0, 80.0, 80.0, 0.0, // quaternion qx, qy, qz, qw
+                30.0, 30.0, 60.0,        // linear velocities x_dot, y_dot, z_dot
+                10.0, 10.0, 10.0          // angular velocities wx, wy, wz
             ]));
             lossless.use_glide_slope = true;
-            lossless.max_velocity = 10.0;
+            lossless.max_velocity = 5.0;
             // if rocket.velocity.norm() >= 5.0 {
             //     lossless.max_velocity = rocket.velocity.norm() * 1.25;
             // }
@@ -170,6 +170,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         current_time += dt;
         // std::thread::sleep(std::time::Duration::from_millis(20)); // Sleep to simulate real-time progression
     }
+
+    rocket.save_debug_to_csv("simulation.csv");
 
     println!("Nitrogen mass: {}", rocket.nitrogen_mass);
     println!("Pressurizing nitrogen mass: {}", rocket.pressurizing_nitrogen_mass);
@@ -282,11 +284,12 @@ fn get_rocket() -> Rocket {
     let nitrogen_iso_data = IsoData::new("isobaric_nitrogen.csv");
     let nitrous_iso_data = IsoData::new("isobaric_liquid_nitrous_oxide.csv");
     let port_d = 0.05;
+    let nitrous_m_dot = 0.0;
 
     let com_to_ground = Vector3::new(0.0, 0.0, -1.5);
 
 
-    Rocket::new(position, velocity, acceleration, attitude, angular_velocity, angular_acceleration, frame_mass, nitrogen_tank_empty_mass, starting_nitrogen_mass, nitrogen_tank_offset, nitrous_tank_empty_mass, starting_pressurizing_nitrogen_mass, starting_nitrous_mass, nitrous_tank_offset, tvc_module_empty_mass, starting_fuel_grain_mass, frame_com_to_gimbal, gimbal_to_tvc_com, frame_moi, dry_nitrogen_moi, wet_nitrogen_moi, nitrous_tank_radius, nitrous_tank_length, nitrous_level, dry_nitrous_moi, dry_tvc_moi, wet_tvc_moi, tvc_range, tvc, rcs, imu, gps, uwb, slosh_model, nist_data, nitrogen_iso_data, nitrous_iso_data, port_d, com_to_ground)
+    Rocket::new(position, velocity, acceleration, attitude, angular_velocity, angular_acceleration, frame_mass, nitrogen_tank_empty_mass, starting_nitrogen_mass, nitrogen_tank_offset, nitrous_tank_empty_mass, starting_pressurizing_nitrogen_mass, starting_nitrous_mass, nitrous_tank_offset, tvc_module_empty_mass, starting_fuel_grain_mass, frame_com_to_gimbal, gimbal_to_tvc_com, frame_moi, dry_nitrogen_moi, wet_nitrogen_moi, nitrous_tank_radius, nitrous_tank_length, nitrous_level, dry_nitrous_moi, dry_tvc_moi, wet_tvc_moi, tvc_range, tvc, rcs, imu, gps, uwb, slosh_model, nist_data, nitrogen_iso_data, nitrous_iso_data, port_d, nitrous_m_dot, com_to_ground)
 }
 
 fn get_mpc() -> MPC {
@@ -298,15 +301,15 @@ fn get_mpc() -> MPC {
     let integral_gains = (0.0, 0.0, 0.0);
     let q = Array2::<f64>::from_diag(&Array1::from(vec![
         20.0, 20.0, 70.0,   // position x, y, z
-        120.0, 120.0, 120.0, 0.0, // quaternion qx, qy, qz, qw
+        60.0, 60.0, 60.0, 0.0, // quaternion qx, qy, qz, qw
         30.0, 30.0, 10.0,        // linear velocities x_dot, y_dot, z_dot
         10.0, 10.0, 10.0          // angular velocities wx, wy, wz
     ]));
     let r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 0.0]));
     let qn = Array2::<f64>::from_diag(&Array1::from(vec![
-        20.0, 20.0, 800.0,   // position x, y, z
-        150.0, 150.0, 150.0, 0.0, // quaternion qx, qy, qz, qw
-        40.0, 40.0, 50.0,        // linear velocities x_dot, y_dot, z_dot
+        20.0, 20.0, 80.0,   // position x, y, z
+        100.0, 100.0, 100.0, 0.0, // quaternion qx, qy, qz, qw
+        40.0, 40.0, 70.0,        // linear velocities x_dot, y_dot, z_dot
         5.0, 5.0, 5.0          // angular velocities wx, wy, wz
     ]));
     // let smoothing_weight = Array1::from(vec![150.0, 150.0, -2.0]);
@@ -327,7 +330,7 @@ fn get_lossless() -> Lossless {
     let dry_mass = 61.0;
     let alpha = 1.0 / (9.81 * 180.0);
     let lower_thrust_bound = 400.0;
-    let upper_thrust_bound = 1000.0;
+    let upper_thrust_bound = 900.0;
     let tvc_range_rad = 15_f64.to_radians();
     let coarse_delta_t = 0.25;
     let fine_delta_t = 0.1;

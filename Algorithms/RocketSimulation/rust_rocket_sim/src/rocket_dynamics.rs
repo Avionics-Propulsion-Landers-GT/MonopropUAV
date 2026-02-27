@@ -4,6 +4,8 @@ use crate::device_sim::*;
 use crate::sloshing_sim::*;
 use crate::fluid_dynamics::*;
 use ndarray::Array1;
+use std::error::Error;
+use std::fs::File;
 
 #[derive(Debug, Clone)]
 pub struct Rocket {
@@ -59,6 +61,7 @@ pub struct Rocket {
     pub nitrogen_iso_data: IsoData,
     pub nitrous_iso_data: IsoData,
     pub port_d: f64,
+    pub nitrous_m_dot: f64,
 
     pub com_to_ground: Vector3<f64>, // Distance from center of mass to ground (for ground interaction)
 
@@ -72,10 +75,26 @@ pub struct RocketDebugInfo{
     pub thrust_torque: Vector3<f64>,
     pub total_force: Vector3<f64>,
     pub total_torque: Vector3<f64>,
+    pub times: Vec<f64>,
+    pub com_offsets: Vec<Vector3<f64>>,
+    pub mois: Vec<Matrix3<f64>>,
+    pub thrusts: Vec<Vector3<f64>>,
+    pub slosh_forces: Vec<Vector3<f64>>,
+    pub nitrous_m_dots: Vec<f64>,
+    pub valve_angles: Vec<f64>,
+    pub chamber_pressures: Vec<f64>,
+    pub of_ratios: Vec<f64>,
+    pub isps: Vec<f64>,
+    pub cstars: Vec<f64>,
+    pub port_ds: Vec<f64>,
+    pub fuel_masses: Vec<f64>,
+    pub nitrous_masses: Vec<f64>,
+    pub nitrogen_n2_tank_masses: Vec<f64>,
+    pub nitrogen_n2o_tank_masses: Vec<f64>,
 }
 
 impl Rocket {
-    pub fn new(position: Vector3<f64>, velocity: Vector3<f64>, accel: Vector3<f64>, attitude: UnitQuaternion<f64>, ang_vel: Vector3<f64>, ang_accel: Vector3<f64>, frame_mass: f64, nitrogen_tank_empty_mass: f64, starting_nitrogen_mass: f64, nitrogen_tank_offset: Vector3<f64>, nitrous_tank_empty_mass: f64, starting_pressurizing_nitrogen_mass: f64, starting_nitrous_mass: f64, nitrous_tank_offset: Vector3<f64>, tvc_module_empty_mass: f64, starting_fuel_grain_mass: f64, frame_com_to_gimbal: Vector3<f64>, gimbal_to_tvc_com: Vector3<f64>, frame_moi: Matrix3<f64>, dry_nitrogen_moi: Matrix3<f64>, wet_nitrogen_moi: Matrix3<f64>, nitrous_tank_radius: f64, nitrous_tank_length: f64, nitrous_level: f64, dry_nitrous_moi: Matrix3<f64>, dry_tvc_moi: Matrix3<f64>, wet_tvc_moi: Matrix3<f64>, tvc_range: f64, tvc: TVC, rcs: RCS, imu: IMU, gps: GPS, uwb: UWB, sloshing_model: SloshModel, nist_data: NistData, nitrogen_iso_data: IsoData, nitrous_iso_data: IsoData, port_d: f64, com_to_ground: Vector3<f64>) -> Self {
+    pub fn new(position: Vector3<f64>, velocity: Vector3<f64>, accel: Vector3<f64>, attitude: UnitQuaternion<f64>, ang_vel: Vector3<f64>, ang_accel: Vector3<f64>, frame_mass: f64, nitrogen_tank_empty_mass: f64, starting_nitrogen_mass: f64, nitrogen_tank_offset: Vector3<f64>, nitrous_tank_empty_mass: f64, starting_pressurizing_nitrogen_mass: f64, starting_nitrous_mass: f64, nitrous_tank_offset: Vector3<f64>, tvc_module_empty_mass: f64, starting_fuel_grain_mass: f64, frame_com_to_gimbal: Vector3<f64>, gimbal_to_tvc_com: Vector3<f64>, frame_moi: Matrix3<f64>, dry_nitrogen_moi: Matrix3<f64>, wet_nitrogen_moi: Matrix3<f64>, nitrous_tank_radius: f64, nitrous_tank_length: f64, nitrous_level: f64, dry_nitrous_moi: Matrix3<f64>, dry_tvc_moi: Matrix3<f64>, wet_tvc_moi: Matrix3<f64>, tvc_range: f64, tvc: TVC, rcs: RCS, imu: IMU, gps: GPS, uwb: UWB, sloshing_model: SloshModel, nist_data: NistData, nitrogen_iso_data: IsoData, nitrous_iso_data: IsoData, port_d: f64, nitrous_m_dot: f64, com_to_ground: Vector3<f64>) -> Self {
         let mut rocket = Self {
             position,
             velocity,
@@ -120,12 +139,29 @@ impl Rocket {
             nitrogen_iso_data,
             nitrous_iso_data,
             port_d,
+            nitrous_m_dot,
             com_to_ground,
             system_time: 0.0,
             debug_info: RocketDebugInfo {
                 thrust_torque: Vector3::zeros(),
                 total_force: Vector3::zeros(),
                 total_torque: Vector3::zeros(),
+                times: Vec::new(),
+                com_offsets: Vec::new(),
+                mois: Vec::new(),
+                thrusts: Vec::new(),
+                slosh_forces: Vec::new(),
+                nitrous_m_dots: Vec::new(),
+                valve_angles: Vec::new(),
+                chamber_pressures: Vec::new(),
+                of_ratios: Vec::new(),
+                isps: Vec::new(),
+                cstars: Vec::new(),
+                port_ds: Vec::new(),
+                fuel_masses: Vec::new(),
+                nitrous_masses: Vec::new(),
+                nitrogen_n2_tank_masses: Vec::new(),
+                nitrogen_n2o_tank_masses: Vec::new(),
             },
         };
 
@@ -159,6 +195,7 @@ impl Rocket {
             return false; // Indicate that we've hit the ground
         }
         
+        self.debug_info.times.push(self.system_time);
 
         // Update Sensors
         self.imu.update(self.accel, self.ang_vel, self.attitude, self.system_time);
@@ -210,16 +247,38 @@ impl Rocket {
         self.nitrogen_mass = fluid_dynamics_output.new_n2_mass_storagetanks;
         self.pressurizing_nitrogen_mass = fluid_dynamics_output.new_n2_mass_runtank;
         self.port_d = fluid_dynamics_output.new_port_d;
+        self.nitrous_m_dot = fluid_dynamics_output.mdot_ox;
+
+        self.debug_info.com_offsets.push(com_offset);
+        self.debug_info.mois.push(moi);
+        self.debug_info.nitrous_m_dots.push(self.nitrous_m_dot);
+        self.debug_info.valve_angles.push(fluid_dynamics_output.valve_angle); // This is in degrees!
+        self.debug_info.chamber_pressures.push(fluid_dynamics_output.pc_bar);
+        self.debug_info.of_ratios.push(fluid_dynamics_output.of_ratio_realized);
+        self.debug_info.isps.push(fluid_dynamics_output.isp_realized);
+        self.debug_info.cstars.push(fluid_dynamics_output.cstar_realized);
+        self.debug_info.port_ds.push(self.port_d);
+        self.debug_info.fuel_masses.push(self.fuel_grain_mass);
+        self.debug_info.nitrous_masses.push(self.nitrous_mass);
+        self.debug_info.nitrogen_n2_tank_masses.push(self.nitrogen_mass);
+        self.debug_info.nitrogen_n2o_tank_masses.push(self.pressurizing_nitrogen_mass);
+
 
         self.system_time += dt;
         let mass = self.get_mass();
 
+        let slosh_force = self.sloshing_model.step(dt, self.accel, self.attitude, self.nitrous_m_dot);
+
         // Translational Dynamics
         let gravity = Vector3::new(0.0, 0.0, -9.81);
         self.thrust_vector = self.attitude.transform_vector(&tvc_effect.thrust);
-        let total_force = outside_forces + (gravity * mass) + self.thrust_vector;
-        println!("Gravity Force: {:?}", gravity * mass);
+        let slosh_force_world = self.attitude.transform_vector(&slosh_force);
+        let body_vel = self.attitude.transform_vector(&self.velocity);
+        let drag = 0.5 * 1.225 * Vector3::new(body_vel.x.powi(2) * 2.0 * 1.2, body_vel.y.powi(2) * 2.0 * 1.2, body_vel.z.powi(2) * 0.85 * 0.25);
+        let total_force = outside_forces + (gravity * mass) + self.thrust_vector + slosh_force_world + drag;
         self.debug_info.total_force = total_force;
+        self.debug_info.thrusts.push(tvc_effect.thrust);
+        self.debug_info.slosh_forces.push(slosh_force);
 
         self.accel = total_force / mass;        
         self.velocity += self.accel * dt;
@@ -233,7 +292,9 @@ impl Rocket {
         let i_omega = moi * self.ang_vel;
 
         let gyro_torque = self.ang_vel.cross(&i_omega);
-        let net_torque = outside_torques - gyro_torque + tvc_effect.torque + rcs_effect.torque;
+        let slosh_lever_arm = self.nitrous_tank_offset - com_offset;
+        let slosh_torque = slosh_lever_arm.cross(&slosh_force);
+        let net_torque = outside_torques - gyro_torque + tvc_effect.torque + rcs_effect.torque + slosh_torque;
         self.debug_info.thrust_torque = tvc_effect.torque;
         self.debug_info.total_torque = net_torque;
 
@@ -283,7 +344,6 @@ impl Rocket {
 
         let nitrogen_com = self.nitrogen_tank_offset;
 
-        // TODO: implement full nitrous com calculations
         let liquid_nitrous_tank_com_offset = Vector3::new(0.0, 0.0, (self.nitrous_level - self.nitrous_tank_length) / 2.0);
         let pressurizing_nitrogen_tank_com_offset = Vector3::new(0.0, 0.0, (self.nitrous_tank_length - self.nitrous_level) / 2.0);
         let nitrous_tank_mass = self.nitrous_tank_empty_mass + self.pressurizing_nitrogen_mass + self.nitrous_mass;
@@ -305,7 +365,6 @@ impl Rocket {
     pub fn get_moi(&self, thrust_vector: Vector3<f64>, com_offset: Vector3<f64>) -> Matrix3<f64> {
         let nitrogen_moi = self.transform_moi(self.weight_matrices(self.nitrogen_mass / self.starting_nitrogen_mass, self.wet_nitrogen_moi, self.dry_nitrogen_moi), self.nitrogen_tank_offset + com_offset, self.nitrogen_tank_empty_mass + self.nitrogen_mass);
         
-        // TODO: implement full nitrous moi calculations
         let liquid_nitrous_tank_com_offset = Vector3::new(0.0, 0.0, (self.nitrous_level - self.nitrous_tank_length) / 2.0);
         let pressurizing_nitrogen_tank_com_offset = Vector3::new(0.0, 0.0, (self.nitrous_tank_length - self.nitrous_level) / 2.0);
         let liquid_nitrous_moi = self.transform_moi(self.get_cylinder_moi(self.nitrous_tank_radius, self.nitrous_tank_length, self.nitrous_mass), -liquid_nitrous_tank_com_offset, self.nitrous_mass);
@@ -382,6 +441,75 @@ impl Rocket {
         state[12] = self.ang_vel.z;
 
         state
+    }
+
+    pub fn save_debug_to_csv(&self, file_path: &str) -> Result<(), Box<dyn Error>> {
+        let file = File::create(file_path)?;
+        let mut wtr = csv::Writer::from_writer(file);
+
+        // 1. Write the flattened CSV Header
+        wtr.write_record(&[
+            "time",
+            // COM Offset (Vector3)
+            "com_x", "com_y", "com_z",
+            // MOI Tensor (Matrix3 - Symmetric 6 values)
+            "i_xx", "i_yy", "i_zz", "i_xy", "i_xz", "i_yz",
+            // Thrust (Vector3)
+            "thrust_x", "thrust_y", "thrust_z",
+            // Slosh Force (Vector3)
+            "slosh_x", "slosh_y", "slosh_z",
+            // Thermodynamic & Mass Scalars
+            "nitrous_m_dot", "valve_angle", "chamber_pressure",
+            "of_ratio", "isp", "cstar", "port_d",
+            "fuel_mass", "nitrous_mass", "n2_tank_mass", "n2o_tank_mass"
+        ])?;
+
+        let num_records = self.debug_info.times.len();
+
+        // 2. Loop through every time step and write the row
+        for i in 0..num_records {
+            // Safety check: Prevents a crash if one array forgot to push a value during a tick!
+            if i >= self.debug_info.com_offsets.len() || i >= self.debug_info.mois.len() || i >= self.debug_info.thrusts.len() {
+                eprintln!("Warning: Data arrays out of sync at row {}. Stopping export early.", i);
+                break;
+            }
+
+            let com = self.debug_info.com_offsets[i];
+            let moi = self.debug_info.mois[i];
+            let thrust = self.debug_info.thrusts[i];
+            let slosh = self.debug_info.slosh_forces[i];
+
+            // 3. Write the row data
+            wtr.write_record(&[
+                self.debug_info.times[i].to_string(),
+                
+                com.x.to_string(), com.y.to_string(), com.z.to_string(),
+                
+                moi[(0,0)].to_string(), moi[(1,1)].to_string(), moi[(2,2)].to_string(),
+                moi[(0,1)].to_string(), moi[(0,2)].to_string(), moi[(1,2)].to_string(),
+                
+                thrust.x.to_string(), thrust.y.to_string(), thrust.z.to_string(),
+                
+                slosh.x.to_string(), slosh.y.to_string(), slosh.z.to_string(),
+                
+                self.debug_info.nitrous_m_dots[i].to_string(),
+                self.debug_info.valve_angles[i].to_string(),
+                self.debug_info.chamber_pressures[i].to_string(),
+                self.debug_info.of_ratios[i].to_string(),
+                self.debug_info.isps[i].to_string(),
+                self.debug_info.cstars[i].to_string(),
+                self.debug_info.port_ds[i].to_string(),
+                self.debug_info.fuel_masses[i].to_string(),
+                self.debug_info.nitrous_masses[i].to_string(),
+                self.debug_info.nitrogen_n2_tank_masses[i].to_string(),
+                self.debug_info.nitrogen_n2o_tank_masses[i].to_string(),
+            ])?;
+        }
+
+        wtr.flush()?;
+        println!("Successfully exported {} rows of telemetry to '{}'", num_records, file_path);
+        
+        Ok(())
     }
 }
 
