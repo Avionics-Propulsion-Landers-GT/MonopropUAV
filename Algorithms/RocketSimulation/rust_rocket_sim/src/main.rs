@@ -1,9 +1,13 @@
 mod rocket_dynamics;
 mod device_sim;
 mod algorithms;
+mod sloshing_sim;
+mod fluid_dynamics;
 use crate::rocket_dynamics::*;
 use crate::device_sim::*;
 use crate::algorithms::*;
+use crate::sloshing_sim::*;
+use crate::fluid_dynamics::*;
 use nalgebra::{Matrix3, Vector3, Vector4, UnitQuaternion};
 use ndarray::{Array1, Array2};
 
@@ -33,38 +37,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut rocket = get_rocket();
 
     let mut mpc = get_mpc();
-    let rocket_init_state = rocket.get_state();
-    // let mut hover_xref_traj = vec![rocket_init_state.clone(); mpc.n_steps + 1];
-    // 1. Setup the profile parameters
-    let mut full_profile: Vec<Array1<f64>> = Vec::new();
-    let target_altitude = 50.0;
-    let climb_rate = 3.0; // m/s
-    let mpc_dt = 0.1;
-    
-    let mut current_z = 0.0;
-    let base_state = rocket.get_state(); // Assuming starting at 0,0,0
-
-    // 2. Generate the Climb Phase
-    while current_z < target_altitude {
-        let mut state = base_state.clone();
-        state[2] = current_z;      // Target Z position
-        state[9] = climb_rate;     // Target Z velocity (Crucial!)
-        full_profile.push(state);
-        current_z += climb_rate * mpc_dt;
-    }
-
-    // 3. Generate the Hover Phase
-    // Add enough "parked" states to keep the MPC happy once it reaches the top.
-    // Let's add 20 seconds worth of hovering (200 steps).
-    for _ in 0..200 {
-        let mut state = base_state.clone();
-        state[2] = target_altitude; 
-        state[9] = 0.0; // Velocity is now 0 (Brake and hold!)
-        full_profile.push(state);
-    }
     let mut hover_u_warm = vec![Array1::from(vec![0.0, 0.0, rocket.get_mass() * 9.81]); mpc.n_steps]; // Warm start with zero control inputs
 
     let mut lossless = get_lossless();
+    let mut at_hover = -1;
+    let mut hover_start_time = 0.0;
 
     let mut control_input = Vector4::new(0.0, 0.0, 0.0, 0.0);
     let mut outside_forces = Vector3::new(0.0, 0.0, 0.0);
@@ -78,18 +55,56 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mass = rocket.get_mass();
         // hover_u_warm = vec![Array1::from(vec![0.0, 0.0, mass * 9.81]); mpc.n_steps]; // Warm start with zero control inputs
         
-        let trajectory = lossless.update([rocket.position.x, rocket.position.y, rocket.position.z], [rocket.velocity.x, rocket.velocity.y, rocket.velocity.z], [0.0, 0.0, target_altitude], mass - rocket.get_dry_mass(), current_time);
+        let mut xref_traj;
+        if at_hover == -1 {
+            let mut trajectory  = lossless.update([rocket.position.x, rocket.position.y, rocket.position.z], [rocket.velocity.x, rocket.velocity.y, rocket.velocity.z], [0.0, 0.0, 50.0], mass - rocket.get_dry_mass(), current_time);
+            xref_traj = get_mpc_reference(&trajectory, current_time - lossless.last_solve_time, mpc.dt, lossless.fine_delta_t, mpc.n_steps + 1);
+            if rocket.position.z >= 45.0 {
+                at_hover = 0;
+                hover_start_time = current_time;
+            }
+        } else if at_hover == 0 {
+            xref_traj = vec![Array1::from(vec![0.0, 0.0, 50.0, // x, y, z
+                                                0.0, 0.0, 0.0, 1.0, // qx, qy, qz, qw (upright)
+                                                0.0, 0.0, 0.0, // x_dot, y_dot, z_dot
+                                                0.0, 0.0, 0.0]); // wx, wy, wz
+                                                mpc.n_steps + 1];
+            if current_time - hover_start_time >= 10.0 {
+                at_hover = 1;
+            }
+        } else {
+            mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
+                20.0, 20.0, 70.0,   // position x, y, z
+                80.0, 80.0, 80.0, 0.0, // quaternion qx, qy, qz, qw
+                30.0, 30.0, 40.0,        // linear velocities x_dot, y_dot, z_dot
+                10.0, 10.0, 10.0          // angular velocities wx, wy, wz
+            ]));
+            mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 0.0]));
+            mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
+                20.0, 20.0, 70.0,   // position x, y, z
+                80.0, 80.0, 80.0, 0.0, // quaternion qx, qy, qz, qw
+                30.0, 30.0, 60.0,        // linear velocities x_dot, y_dot, z_dot
+                10.0, 10.0, 10.0          // angular velocities wx, wy, wz
+            ]));
+            lossless.use_glide_slope = true;
+            lossless.max_velocity = 5.0;
+            // if rocket.velocity.norm() >= 5.0 {
+            //     lossless.max_velocity = rocket.velocity.norm() * 1.25;
+            // }
+            let mut trajectory = lossless.update([rocket.position.x, rocket.position.y, rocket.position.z], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], mass - rocket.get_dry_mass(), current_time);
+            xref_traj = get_mpc_reference(&trajectory, current_time - lossless.last_solve_time, mpc.dt, lossless.fine_delta_t, mpc.n_steps + 1);
+        }
 
-        // 2. Prepare the empty sliding window
-        let mut xref_traj = get_mpc_reference(&trajectory, current_time, mpc_dt, lossless.fine_delta_t, mpc.n_steps + 1);
+        println!("XREF_TRAJ{:?}", xref_traj);
 
         let control_sequence = mpc.update(&rocket.get_state(), &xref_traj, &hover_u_warm, mass, current_time); // Placeholder reference trajectory and warm start
         let last_solve_time = mpc.last_solve_time;// 1. Calculate the fractional progress between MPC steps (0.0 to 1.0)
         let time_since_solve = current_time - last_solve_time;
-        let raw_index = (time_since_solve / mpc_dt) as usize;
+        let raw_index = (time_since_solve / mpc.dt) as usize;
         let max_index = control_sequence.len().saturating_sub(1);
         let current_step_index = raw_index.min(max_index);
-        let progress = (time_since_solve % mpc_dt) / mpc_dt;
+        // let progress = (time_since_solve % mpc.dt) / mpc.dt;
+        let progress = 0.0;
 
         // 2. Grab the current command (u0) and the next predicted command (u1)
         let u_0 = &control_sequence[current_step_index];
@@ -144,9 +159,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .with_radii([0.1]) // Size of the point representing the rocket
         )?;
 
+        // Log the rocket's position for visualization
+        rec.log(
+            "world/timer",
+            &rerun::Points3D::new([(current_time as f32, 0.0, 0.0)])
+                .with_colors([rerun::Color::from_rgb(0, 255, 0)]) // Green color for the timer
+                .with_radii([0.1]) // Size of the point representing the timer
+        )?;
+
         current_time += dt;
         // std::thread::sleep(std::time::Duration::from_millis(20)); // Sleep to simulate real-time progression
     }
+
+    rocket.save_debug_to_csv("simulation.csv");
 
     println!("Nitrogen mass: {}", rocket.nitrogen_mass);
     println!("Pressurizing nitrogen mass: {}", rocket.pressurizing_nitrogen_mass);
@@ -188,6 +213,7 @@ fn get_rocket() -> Rocket {
                                         0.0, 0.0, 1.055);
     let nitrous_tank_radius = 0.0;
     let nitrous_tank_length = 0.0;
+    let nitrous_level = 0.85 * 0.75;
     let dry_nitrous_moi = Matrix3::new(1.31, 0.0, 0.0,
                                         0.0, 1.31, 0.0,
                                         0.0, 0.0, 0.21);
@@ -253,33 +279,40 @@ fn get_rocket() -> Rocket {
     let uwb_update_rate = 5.0;
     let uwb = UWB::new(uwb_position_noise_sigma, uwb_position_offset, uwb_origin, uwb_range, uwb_update_rate);
 
+    let slosh_model = get_slosh_model();
+    let nist_data = NistData::new();
+    let nitrogen_iso_data = IsoData::new("isobaric_nitrogen.csv");
+    let nitrous_iso_data = IsoData::new("isobaric_liquid_nitrous_oxide.csv");
+    let port_d = 0.05;
+    let nitrous_m_dot = 0.0;
+
     let com_to_ground = Vector3::new(0.0, 0.0, -1.5);
 
 
-    Rocket::new(position, velocity, acceleration, attitude, angular_velocity, angular_acceleration, frame_mass, nitrogen_tank_empty_mass, starting_nitrogen_mass, nitrogen_tank_offset, nitrous_tank_empty_mass, starting_pressurizing_nitrogen_mass, starting_nitrous_mass, nitrous_tank_offset, tvc_module_empty_mass, starting_fuel_grain_mass, frame_com_to_gimbal, gimbal_to_tvc_com, frame_moi, dry_nitrogen_moi, wet_nitrogen_moi, nitrous_tank_radius, nitrous_tank_length, dry_nitrous_moi, dry_tvc_moi, wet_tvc_moi, tvc_range, tvc, rcs, imu, gps, uwb, com_to_ground)
+    Rocket::new(position, velocity, acceleration, attitude, angular_velocity, angular_acceleration, frame_mass, nitrogen_tank_empty_mass, starting_nitrogen_mass, nitrogen_tank_offset, nitrous_tank_empty_mass, starting_pressurizing_nitrogen_mass, starting_nitrous_mass, nitrous_tank_offset, tvc_module_empty_mass, starting_fuel_grain_mass, frame_com_to_gimbal, gimbal_to_tvc_com, frame_moi, dry_nitrogen_moi, wet_nitrogen_moi, nitrous_tank_radius, nitrous_tank_length, nitrous_level, dry_nitrous_moi, dry_tvc_moi, wet_tvc_moi, tvc_range, tvc, rcs, imu, gps, uwb, slosh_model, nist_data, nitrogen_iso_data, nitrous_iso_data, port_d, nitrous_m_dot, com_to_ground)
 }
 
 fn get_mpc() -> MPC {
     let n = 13; // [x, y, z, qx, qy, qz, qw, x_dot, y_dot, z_dot, wx, wy, wz]
     let m = 3;  // [gimbal_theta, gimbal_phi, thrust]
     let n_steps = 10;
-    let dt = 0.1;
-    // let integral_gains = (0.01, 0.01, 0.02);
+    let dt = 0.8;
+    // let integral_gains = (0.001, 0.001, 0.002);
     let integral_gains = (0.0, 0.0, 0.0);
     let q = Array2::<f64>::from_diag(&Array1::from(vec![
-        20.0, 20.0, 200.0,   // position x, y, z
-        120.0, 120.0, 0.0, 0.0, // quaternion qx, qy, qz, qw
+        20.0, 20.0, 70.0,   // position x, y, z
+        60.0, 60.0, 60.0, 0.0, // quaternion qx, qy, qz, qw
         30.0, 30.0, 10.0,        // linear velocities x_dot, y_dot, z_dot
         10.0, 10.0, 10.0          // angular velocities wx, wy, wz
     ]));
-    let r = Array2::<f64>::from_diag(&Array1::from(vec![5.0, 5.0, 0.0]));
+    let r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 0.0]));
     let qn = Array2::<f64>::from_diag(&Array1::from(vec![
-        20.0, 20.0, 100.0,   // position x, y, z
-        150.0, 150.0, 10.0, 10.0, // quaternion qx, qy, qz, qw
-        40.0, 40.0, 20.0,        // linear velocities x_dot, y_dot, z_dot
+        20.0, 20.0, 80.0,   // position x, y, z
+        100.0, 100.0, 100.0, 0.0, // quaternion qx, qy, qz, qw
+        40.0, 40.0, 70.0,        // linear velocities x_dot, y_dot, z_dot
         5.0, 5.0, 5.0          // angular velocities wx, wy, wz
     ]));
-    let smoothing_weight = Array1::from(vec![15000.0, 15000.0, 0.0]);
+    // let smoothing_weight = Array1::from(vec![150.0, 150.0, -2.0]);
     let smoothing_weight = Array1::from(vec![0.0, 0.0, 0.0]);
     let panoc_cache_tolerance = 1e-4;
     let panoc_cache_lbfgs_memory = 20;
@@ -297,16 +330,36 @@ fn get_lossless() -> Lossless {
     let dry_mass = 61.0;
     let alpha = 1.0 / (9.81 * 180.0);
     let lower_thrust_bound = 400.0;
-    let upper_thrust_bound = 1000.0;
+    let upper_thrust_bound = 900.0;
     let tvc_range_rad = 15_f64.to_radians();
-    let coarse_delta_t = 1.0;
-    let fine_delta_t = 0.5;
+    let coarse_delta_t = 0.25;
+    let fine_delta_t = 0.1;
     let glide_slope = 5.0_f64.to_radians();
     let use_glide_slope = false;
     let system_time = -1.0;
     let update_rate = 3.0;
 
     Lossless::new(max_velocity, dry_mass, alpha, lower_thrust_bound, upper_thrust_bound, tvc_range_rad, coarse_delta_t, fine_delta_t, glide_slope, use_glide_slope, [0.0; 3], system_time, update_rate)
+}
+
+fn get_slosh_model() -> SloshModel {
+    let radius_m = 0.12;
+    let length_m = 0.75;
+    let density_liquid = 731.18;
+    let gravity = 9.81;
+    let tank_config = TankConfig::new(radius_m, length_m, density_liquid, gravity);
+
+    let m_frac = 0.5;
+    let c_lin = 200.0;
+    let alpha = 0.0;
+    let omega_scale = 1.0;
+    let slosh_params = SloshParams::new(m_frac, c_lin, alpha, omega_scale);
+
+    let initial_fill_frac = 0.85;
+
+    let slosh_state = SloshState::default();
+
+    SloshModel::new(tank_config, slosh_params, initial_fill_frac, slosh_state)
 }
 
 pub fn get_mpc_reference(
@@ -351,8 +404,10 @@ pub fn get_mpc_reference(
             let safe_idx = base_idx.min(num_points.saturating_sub(2));
             
             // Calculate the fraction (0.0 to 1.0) between the two points
-            let frac = (t_target - (safe_idx as f64) * lossless_dt) / lossless_dt;
-            let clamped_frac = frac.clamp(0.0, 1.0);
+            // let frac = (t_target - (safe_idx as f64) * lossless_dt) / lossless_dt;
+            // let clamped_frac = frac.clamp(0.0, 1.0);
+            // 3. Subtract to get the float portion, then clamp to lock out-of-bounds to 1.0
+            let clamped_frac = (exact_idx - safe_idx as f64).clamp(0.0, 1.0);
 
             let p0 = traj.positions[safe_idx];
             let p1 = traj.positions[safe_idx + 1];
