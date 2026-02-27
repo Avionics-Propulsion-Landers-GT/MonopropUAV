@@ -238,6 +238,33 @@ def make_plot(
                 rotation=0,
             )
 
+    # Annotate pairwise percent difference between methods at each cluster.
+    for x_center, group, run_type in cluster_positions:
+        zoh_pair = data.get((group, run_type, "zoh"))
+        cgl_pair = data.get((group, run_type, "cgl"))
+        if zoh_pair is None or cgl_pair is None:
+            continue
+
+        zoh_avg, _ = zoh_pair
+        cgl_avg, _ = cgl_pair
+        if zoh_avg <= 0 or cgl_avg <= 0:
+            continue
+
+        slow_avg = max(zoh_avg, cgl_avg)
+        fast_avg = min(zoh_avg, cgl_avg)
+        percent_diff = ((slow_avg - fast_avg) / fast_avg) * 100.0
+        label_y = min(slow_avg * 1.24, y_max * 0.96)
+        ax.text(
+            x_center,
+            label_y,
+            f"Δ{percent_diff:.1f}%",
+            ha="center",
+            va="bottom",
+            fontsize=7.0,
+            color="black",
+            fontweight="semibold",
+        )
+
     ax.legend(title="Method", loc="upper right")
 
     y_bottom, y_top = ax.get_ylim()
@@ -268,12 +295,73 @@ def make_plot(
     plt.close(fig)
 
 
+def print_max_method_percent_difference(
+    data: dict[tuple[str, str, str], tuple[float, float]],
+    groups: list[str],
+    group_run_types: dict[str, list[str]],
+) -> None:
+    max_record: tuple[float, str, str, str, float, str, float] | None = None
+
+    for group in groups:
+        for run_type in group_run_types.get(group, []):
+            method_avgs: list[tuple[str, float]] = []
+            for method in METHODS:
+                pair = data.get((group, run_type, method))
+                if pair is None:
+                    continue
+                avg, _ = pair
+                if avg <= 0:
+                    continue
+                method_avgs.append((method, avg))
+
+            if len(method_avgs) < 2:
+                continue
+
+            low_method, low_avg = min(method_avgs, key=lambda item: item[1])
+            high_method, high_avg = max(method_avgs, key=lambda item: item[1])
+            if low_avg <= 0:
+                continue
+
+            percent_diff = ((high_avg - low_avg) / low_avg) * 100.0
+            if max_record is None or percent_diff > max_record[0]:
+                max_record = (
+                    percent_diff,
+                    group,
+                    run_type,
+                    low_method,
+                    low_avg,
+                    high_method,
+                    high_avg,
+                )
+
+    if max_record is None:
+        print("No method pairs with positive avg_solve_time were found for percent-difference summary.")
+        return
+
+    (
+        percent_diff,
+        group,
+        run_type,
+        low_method,
+        low_avg,
+        high_method,
+        high_avg,
+    ) = max_record
+    print(
+        "Max method percent difference "
+        f"({RUN_TYPE_LABELS.get(run_type, run_type)} / {group}): "
+        f"{percent_diff:.2f}% "
+        f"(between {low_avg:.6f}s and {high_avg:.6f}s)"
+    )
+
+
 def main() -> None:
     args = parse_args()
     input_path = args.input.resolve()
     output_path = args.output.resolve()
 
     data, groups, group_run_types = load_data(input_path)
+    print_max_method_percent_difference(data, groups, group_run_types)
     make_plot(data, groups, group_run_types, output_path)
     print(f"Saved {output_path}")
 
