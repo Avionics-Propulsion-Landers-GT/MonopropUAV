@@ -51,6 +51,12 @@ def parse_args() -> argparse.Namespace:
             f"(default: {default_root / 'figures' / 'max_thrust_rate_change_split_by_method.png'})"
         ),
     )
+    parser.add_argument(
+        "--y-max",
+        type=float,
+        default=None,
+        help="Optional fixed y-axis max. If omitted, uses data-driven scaling.",
+    )
     return parser.parse_args()
 
 
@@ -74,7 +80,7 @@ def load_data(path: Path) -> dict[tuple[str, str, str], float]:
         reader = csv.DictReader(f)
         if not reader.fieldnames:
             raise ValueError(f"{path} has no header row")
-        required = {"flight_plan", "resolution", "method", "max_abs_dthrust_dt"}
+        required = {"flight_plan", "resolution", "method"}
         missing = required.difference(reader.fieldnames)
         if missing:
             raise ValueError(f"{path} is missing required columns: {sorted(missing)}")
@@ -86,7 +92,10 @@ def load_data(path: Path) -> dict[tuple[str, str, str], float]:
             flight_plan = normalize_flight_plan(row.get("flight_plan", ""))
             resolution = (row.get("resolution") or "").strip().lower()
             method = (row.get("method") or "").strip().lower()
-            value = parse_float(row.get("max_abs_dthrust_dt", ""))
+            value = parse_float(row.get("max_abs_dthrust_dt_n_per_s", ""))
+            if value is None:
+                # Backward compatibility with older CSV exports.
+                value = parse_float(row.get("max_abs_dthrust_dt", ""))
 
             if (
                 flight_plan not in FLIGHT_PLANS
@@ -106,7 +115,11 @@ def load_data(path: Path) -> dict[tuple[str, str, str], float]:
     return means
 
 
-def make_plot(values: dict[tuple[str, str, str], float], output_path: Path) -> None:
+def make_plot(
+    values: dict[tuple[str, str, str], float],
+    output_path: Path,
+    y_max_override: float | None = None,
+) -> None:
     if not values:
         raise RuntimeError("No usable rows found for plotting")
 
@@ -183,44 +196,57 @@ def make_plot(values: dict[tuple[str, str, str], float], output_path: Path) -> N
     split_x = (left_centers[-1] + right_centers[0]) / 2.0
     ax.axvline(split_x, color="gray", linestyle="--", linewidth=1.1, alpha=0.8)
 
-    ax.set_ylim(0.0, 1500.0)
-    y_min, y_max = ax.get_ylim()
+    positive_values = [value for value in values.values() if math.isfinite(value) and value > 0.0]
+    if not positive_values:
+        raise RuntimeError("No finite positive values available for log-scale plotting")
+
+    y_bottom_limit = max(min(positive_values) * 0.8, 1e-9)
+    if y_max_override is not None and y_max_override > 0:
+        y_top_limit = y_max_override
+    else:
+        y_top_limit = max(positive_values) * 6
+    if y_top_limit <= y_bottom_limit:
+        y_top_limit = y_bottom_limit * 10.0
+
+    ax.set_yscale("log")
+    ax.set_ylim(bottom=y_bottom_limit, top=y_top_limit)
     y_top = ax.get_ylim()[1]
     ax.text(
         sum(left_centers) / len(left_centers),
-        y_top * 0.98,
+        0.98,
         "Method: ZOH",
         ha="center",
         va="top",
         fontsize=11,
         fontweight="semibold",
+        transform=ax.get_xaxis_transform(),
     )
     ax.text(
         sum(right_centers) / len(right_centers),
-        y_top * 0.98,
+        0.98,
         "Method: CGL",
         ha="center",
         va="top",
         fontsize=11,
         fontweight="semibold",
+        transform=ax.get_xaxis_transform(),
     )
 
     ax.set_title("Maximum Thrust Rate-of-Change by Method, Flight Plan, and Resolution")
-    ax.set_ylabel("Max |dT/dt| (N/t-unit)")
+    ax.set_ylabel("Max |dT/dt| (N/s, log scale)")
     ax.set_xlabel("Flight Plan and Method")
     ax.grid(axis="y", linestyle="--", linewidth=0.8, alpha=0.35)
     ax.set_axisbelow(True)
 
-    y_min, y_max = ax.get_ylim()
-    y_offset = (y_max - y_min) * 0.012
+    _, y_max = ax.get_ylim()
     for method, container in bar_containers:
         for bar in container:
             height = bar.get_height()
-            if not math.isfinite(height):
+            if not math.isfinite(height) or height <= 0:
                 continue
             ax.text(
                 bar.get_x() + bar.get_width() / 2.0,
-                height + y_offset,
+                min(height * 1.03, y_max * 0.98),
                 f"{height:.1f}",
                 ha="center",
                 va="bottom",
@@ -251,7 +277,7 @@ def main() -> None:
     output_path = args.output.resolve()
 
     values = load_data(input_path)
-    make_plot(values, output_path)
+    make_plot(values, output_path, y_max_override=args.y_max)
     print(f"Saved {output_path}")
 
 

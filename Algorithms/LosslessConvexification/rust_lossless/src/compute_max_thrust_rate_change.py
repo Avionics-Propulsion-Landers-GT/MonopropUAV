@@ -75,7 +75,47 @@ def humanize(text: str) -> str:
     return " ".join(part.capitalize() for part in text.split("_"))
 
 
-def compute_max_abs_dthrust_dt(path: Path) -> tuple[float | None, int]:
+def extract_run_name_from_trajectory(path: Path) -> str:
+    stem = path.stem
+    if stem.startswith("trajectory_"):
+        return stem[len("trajectory_") :]
+    return stem
+
+
+def read_time_of_flight_by_run(run_dir: Path) -> dict[str, float]:
+    solve_metrics_path = run_dir / "solve_metrics.csv"
+    if not solve_metrics_path.exists() or not solve_metrics_path.is_file():
+        return {}
+
+    with solve_metrics_path.open(newline="") as f:
+        reader = csv.DictReader(f)
+        if not reader.fieldnames:
+            return {}
+        if "run_name" not in reader.fieldnames or "time_of_flight_s" not in reader.fieldnames:
+            return {}
+
+        pass_priority = {"total": 0, "fine": 1, "coarse": 2}
+        selected: dict[str, tuple[int, float]] = {}
+        has_pass_column = "pass" in reader.fieldnames
+
+        for row in reader:
+            run_name = (row.get("run_name") or "").strip()
+            if not run_name:
+                continue
+            tof = parse_float(row.get("time_of_flight_s", ""))
+            if tof is None or tof <= 0:
+                continue
+
+            pass_name = (row.get("pass") or "").strip().lower() if has_pass_column else ""
+            priority = pass_priority.get(pass_name, 10)
+            current = selected.get(run_name)
+            if current is None or priority < current[0]:
+                selected[run_name] = (priority, tof)
+
+    return {run_name: tof for run_name, (_, tof) in selected.items()}
+
+
+def compute_max_abs_dthrust_dt(path: Path, time_of_flight_s: float | None) -> tuple[float | None, int]:
     with path.open(newline="") as f:
         reader = csv.DictReader(f)
         if not reader.fieldnames:
@@ -85,10 +125,8 @@ def compute_max_abs_dthrust_dt(path: Path) -> tuple[float | None, int]:
         if missing:
             raise ValueError(f"{path} is missing required columns: {sorted(missing)}")
 
-        max_rate: float | None = None
-        prev_t: float | None = None
-        prev_thrust: float | None = None
-        parsed_rows = 0
+        t_values: list[float] = []
+        thrust_values: list[float] = []
 
         for row in reader:
             t_value = parse_float(row.get("t", ""))
@@ -96,16 +134,30 @@ def compute_max_abs_dthrust_dt(path: Path) -> tuple[float | None, int]:
             if t_value is None or thrust_value is None:
                 continue
 
-            parsed_rows += 1
-            if prev_t is not None and prev_thrust is not None:
-                dt = t_value - prev_t
-                if dt > 0:
-                    rate = abs((thrust_value - prev_thrust) / dt)
-                    if max_rate is None or rate > max_rate:
-                        max_rate = rate
+            t_values.append(t_value)
+            thrust_values.append(thrust_value)
 
-            prev_t = t_value
-            prev_thrust = thrust_value
+    parsed_rows = len(t_values)
+    if parsed_rows < 2:
+        return None, parsed_rows
+
+    raw_time_span = t_values[-1] - t_values[0]
+    time_scale = 1.0
+    if time_of_flight_s is not None and time_of_flight_s > 0 and raw_time_span > 0:
+        # Convert index-like timeline to real seconds while keeping compatibility
+        # with future CSVs that might already use real-time t.
+        time_scale = time_of_flight_s / raw_time_span
+
+    max_rate: float | None = None
+    for idx in range(1, parsed_rows):
+        dt_raw = t_values[idx] - t_values[idx - 1]
+        dt = dt_raw * time_scale
+        if dt <= 0:
+            continue
+        dthrust = thrust_values[idx] - thrust_values[idx - 1]
+        rate = abs(dthrust / dt)
+        if max_rate is None or rate > max_rate:
+            max_rate = rate
 
     return max_rate, parsed_rows
 
@@ -114,6 +166,7 @@ def collect_rows(root: Path) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     resolution_order = {name: idx for idx, (name, _) in enumerate(RUN_TYPE_MAP)}
     flight_order = {name: idx for idx, name in enumerate(FLIGHT_PLANS)}
+    tof_cache: dict[Path, dict[str, float]] = {}
 
     for flight_plan in FLIGHT_PLANS:
         for resolution_label, raw_run_type in RUN_TYPE_MAP:
@@ -122,8 +175,16 @@ def collect_rows(root: Path) -> list[dict[str, str]]:
                 if not run_dir.exists() or not run_dir.is_dir():
                     continue
 
+                if run_dir not in tof_cache:
+                    tof_cache[run_dir] = read_time_of_flight_by_run(run_dir)
+                time_of_flight_by_run = tof_cache[run_dir]
+
                 for trajectory_csv in sorted(run_dir.glob("trajectory_*.csv")):
-                    max_rate, parsed_rows = compute_max_abs_dthrust_dt(trajectory_csv)
+                    run_name = extract_run_name_from_trajectory(trajectory_csv)
+                    time_of_flight_s = time_of_flight_by_run.get(run_name)
+                    max_rate, parsed_rows = compute_max_abs_dthrust_dt(
+                        trajectory_csv, time_of_flight_s
+                    )
                     if max_rate is None:
                         continue
                     run_id = parse_run_id(trajectory_csv)
@@ -136,6 +197,9 @@ def collect_rows(root: Path) -> list[dict[str, str]]:
                             "run_id": str(run_id if run_id >= 0 else ""),
                             "trajectory_csv": str(trajectory_csv.relative_to(root)),
                             "num_samples": str(parsed_rows),
+                            "time_of_flight_s": f"{time_of_flight_s:.6f}" if time_of_flight_s else "",
+                            "max_abs_dthrust_dt_n_per_s": f"{max_rate:.9f}",
+                            # Legacy compatibility for existing consumers.
                             "max_abs_dthrust_dt": f"{max_rate:.9f}",
                         }
                     )
@@ -164,6 +228,8 @@ def write_csv(path: Path, rows: list[dict[str, str]]) -> None:
                 "method",
                 "run_id",
                 "num_samples",
+                "time_of_flight_s",
+                "max_abs_dthrust_dt_n_per_s",
                 "max_abs_dthrust_dt",
                 "trajectory_csv",
             ],
@@ -195,7 +261,7 @@ def render_table_image(rows: list[dict[str, str]], output_path: Path) -> None:
                 row["run_type"],
                 row["method"].upper(),
                 row["run_id"] or "N/A",
-                f"{float(row['max_abs_dthrust_dt']):.6f}",
+                f"{float(row['max_abs_dthrust_dt_n_per_s']):.6f}",
             ]
         )
 
@@ -207,7 +273,7 @@ def render_table_image(rows: list[dict[str, str]], output_path: Path) -> None:
             "Raw Run Type",
             "Method",
             "Run ID",
-            "Max |dT/dt|",
+            "Max |dT/dt| (N/s)",
         ],
         colWidths=[0.25, 0.13, 0.18, 0.10, 0.10, 0.14],
         cellLoc="center",
@@ -228,7 +294,7 @@ def render_table_image(rows: list[dict[str, str]], output_path: Path) -> None:
         if col_idx == 0 and row_idx > 0:
             cell.get_text().set_ha("left")
 
-    ax.set_title("Maximum Thrust Rate-of-Change by Run", pad=10, fontweight="semibold")
+    ax.set_title("Maximum Thrust Rate-of-Change by Run (Real Time)", pad=10, fontweight="semibold")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.tight_layout()
     fig.savefig(output_path, bbox_inches="tight")
