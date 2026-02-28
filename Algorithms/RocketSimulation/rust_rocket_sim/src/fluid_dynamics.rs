@@ -174,11 +174,13 @@ pub struct NistData {
     pub rho_v: Vec<f64>,       // [kg/m^3]
     pub h_l_kj: Vec<f64>,      // [kJ/kg]
     pub h_v_kj: Vec<f64>,      // [kJ/kg]
+    pub s_l_kj: Vec<f64>, 
+    pub s_v_kj: Vec<f64>,
 }
 
 impl NistData {
     pub fn new() -> Self {
-        Self::parse_csv("N2O_NIST_sat_table.csv")
+        Self::parse_csv(include_str!("N2O_NIST_sat_table.csv"))
     }
 
     pub fn parse_csv(csv_content: &str) -> Self {
@@ -205,8 +207,10 @@ impl NistData {
                 data.p_sat_mpa.push(cols[1].trim().parse::<f64>().expect("Failed to parse p_sat_mpa"));
                 data.rho_l.push(cols[2].trim().parse::<f64>().expect("Failed to parse rho_l"));
                 data.h_l_kj.push(cols[3].trim().parse::<f64>().expect("Failed to parse h_l_kj"));
+                data.s_l_kj.push(cols[4].trim().parse::<f64>().expect("Parse error S_L"));
                 data.rho_v.push(cols[5].trim().parse::<f64>().expect("Failed to parse rho_v"));
                 data.h_v_kj.push(cols[6].trim().parse::<f64>().expect("Failed to parse h_v_kj"));
+                data.s_v_kj.push(cols[7].trim().parse::<f64>().expect("Parse error S_V"));
             }
         }
         
@@ -232,6 +236,10 @@ pub fn interp1(x: &[f64], y: &[f64], x_query: f64) -> f64 {
     if n == 1 {
         return y[0]; // If there's only one data point, return it
     }
+    // Clamp to minimum boundary
+    if x_query <= x[0] { return y[0]; }
+    // Clamp to maximum boundary
+    if x_query >= x[x.len() - 1] { return y[y.len() - 1]; }
     // --------------------------------------------------------
 
     if x_query <= x[0] {
@@ -262,7 +270,6 @@ fn dyer_model(
     if p_in <= p_out {
         return 0.0;
     }
-
     // Convert NIST MPa array to Pa on the fly for lookups
     let p_sat_pa: Vec<f64> = nist.p_sat_mpa.iter().map(|&p| p * 1e6).collect();
     let h_l_j: Vec<f64> = nist.h_l_kj.iter().map(|&h| h * 1000.0).collect();
@@ -279,7 +286,7 @@ fn dyer_model(
     let denom_in = hv_in - hl_in;
     let x_in = if denom_in.abs() < 1e-9 { 0.0 } else { ((h_in - hl_in) / denom_in).clamp(0.0, 1.0) };
 
-    let m_dot_spi = cd * area * (2.0 * rhol_in * (p_in - p_out)).sqrt();
+    let m_dot_spi = cd * area * (2.0 * rhol_in * (p_in - p_out)).max(0.0).sqrt();
 
     let denom_out = hv_out - hl_out;
     let x_out = if denom_out.abs() < 1e-9 { 0.0 } else { ((h_in - hl_out) / denom_out).clamp(0.0, 1.0) };
@@ -290,7 +297,7 @@ fn dyer_model(
     let m_dot_hem = if h_in <= h_mix_out {
         0.0
     } else {
-        cd * area * rho_mix_out * (2.0 * (h_in - h_mix_out)).sqrt()
+        cd * area * rho_mix_out * (2.0 * (h_in - h_mix_out)).max(0.0).sqrt()
     };
 
     let k = if x_in > 0.0 {

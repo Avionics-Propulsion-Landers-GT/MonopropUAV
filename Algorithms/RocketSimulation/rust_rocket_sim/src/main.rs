@@ -56,25 +56,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // hover_u_warm = vec![Array1::from(vec![0.0, 0.0, mass * 9.81]); mpc.n_steps]; // Warm start with zero control inputs
         
         let mut xref_traj;
+        let mut uref_traj;
         if at_hover == -1 {
             let mut trajectory  = lossless.update([rocket.position.x, rocket.position.y, rocket.position.z], [rocket.velocity.x, rocket.velocity.y, rocket.velocity.z], [0.0, 0.0, 50.0], mass - rocket.get_dry_mass(), current_time);
-            xref_traj = get_mpc_reference(&trajectory, current_time - lossless.last_solve_time, mpc.dt, lossless.fine_delta_t, mpc.n_steps + 1);
+            (xref_traj, uref_traj) = get_mpc_reference(&trajectory, current_time - lossless.last_solve_time, rocket.attitude, mpc.max_thrust, mpc.dt, lossless.fine_delta_t, mpc.n_steps + 1);
             if rocket.position.z >= 45.0 {
                 at_hover = 0;
                 hover_start_time = current_time;
             }
+            // uref_traj = vec![Array1::from(vec![0.0, 0.0, mass * 9.81]); mpc.n_steps]; // Warm start with zero control inputs
         } else if at_hover == 0 {
             xref_traj = vec![Array1::from(vec![0.0, 0.0, 50.0, // x, y, z
                                                 0.0, 0.0, 0.0, 1.0, // qx, qy, qz, qw (upright)
                                                 0.0, 0.0, 0.0, // x_dot, y_dot, z_dot
                                                 0.0, 0.0, 0.0]); // wx, wy, wz
                                                 mpc.n_steps + 1];
+            uref_traj = vec![Array1::from(vec![0.0, 0.0, mass * 9.81]); mpc.n_steps]; // Warm start with zero control inputs
             if current_time - hover_start_time >= 10.0 {
                 at_hover = 1;
             }
         } else {
             mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
-                20.0, 20.0, 70.0,   // position x, y, z
+                50.0, 50.0, 70.0,   // position x, y, z
                 80.0, 80.0, 80.0, 0.0, // quaternion qx, qy, qz, qw
                 30.0, 30.0, 40.0,        // linear velocities x_dot, y_dot, z_dot
                 10.0, 10.0, 10.0          // angular velocities wx, wy, wz
@@ -83,7 +86,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
                 20.0, 20.0, 70.0,   // position x, y, z
                 80.0, 80.0, 80.0, 0.0, // quaternion qx, qy, qz, qw
-                30.0, 30.0, 60.0,        // linear velocities x_dot, y_dot, z_dot
+                30.0, 30.0, 100.0,        // linear velocities x_dot, y_dot, z_dot
                 10.0, 10.0, 10.0          // angular velocities wx, wy, wz
             ]));
             lossless.use_glide_slope = true;
@@ -92,12 +95,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             //     lossless.max_velocity = rocket.velocity.norm() * 1.25;
             // }
             let mut trajectory = lossless.update([rocket.position.x, rocket.position.y, rocket.position.z], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], mass - rocket.get_dry_mass(), current_time);
-            xref_traj = get_mpc_reference(&trajectory, current_time - lossless.last_solve_time, mpc.dt, lossless.fine_delta_t, mpc.n_steps + 1);
+            (xref_traj, uref_traj) = get_mpc_reference(&trajectory, current_time - lossless.last_solve_time, rocket.attitude, mpc.max_thrust, mpc.dt, lossless.fine_delta_t, mpc.n_steps + 1);
         }
 
         println!("XREF_TRAJ{:?}", xref_traj);
 
-        let control_sequence = mpc.update(&rocket.get_state(), &xref_traj, &hover_u_warm, mass, current_time); // Placeholder reference trajectory and warm start
+        let control_sequence = mpc.update(&rocket.get_state(), &xref_traj, &uref_traj, mass, current_time); // Placeholder reference trajectory and warm start
         let last_solve_time = mpc.last_solve_time;// 1. Calculate the fractional progress between MPC steps (0.0 to 1.0)
         let time_since_solve = current_time - last_solve_time;
         let raw_index = (time_since_solve / mpc.dt) as usize;
@@ -365,16 +368,27 @@ fn get_slosh_model() -> SloshModel {
 pub fn get_mpc_reference(
     traj: &algorithms::lossless::TrajectoryResult,
     current_time: f64,
+    initial_attitude: UnitQuaternion<f64>,
+    max_thrust: f64,
     mpc_dt: f64,
     lossless_dt: f64,
     n_steps: usize,
-) -> Vec<Array1<f64>> {
-    let mut mpc_reference = Vec::with_capacity(n_steps + 1);
+) -> (Vec<Array1<f64>>, Vec<Array1<f64>>) {
+    let mut xref_traj = Vec::with_capacity(n_steps);
     let num_points = traj.positions.len();
-
     if num_points == 0 {
         panic!("TrajectoryResult is empty!");
     }
+
+    let mut uref_traj = Vec::with_capacity(n_steps - 1);
+    let real_thrusts: Vec<[f64; 1]> = traj.thrusts.iter()
+        .zip(&traj.masses)
+        .map(|(u, &m)| {
+            let world_thrust = Vector3::new(u[0] * m, u[1] * m, u[2] * m);
+            [world_thrust.norm()] 
+        })
+        .collect();
+    let num_thrusts = traj.thrusts.len();
 
     // Generate the state for the current time, plus each future step in the horizon
     for i in 0..=n_steps {
@@ -383,17 +397,22 @@ pub fn get_mpc_reference(
 
         let mut interp_p = [0.0; 3];
         let mut interp_v = [0.0; 3];
+        let mut interp_u = [0.0; 3];
 
         // 2. Are we past the end of the flight profile?
         if t_target >= traj.time_of_flight_s || num_points == 1 {
             // Park the rocket at the final coordinate
             interp_p = traj.positions[num_points - 1];
             interp_v = [0.0, 0.0, 0.0]; // Force target velocity to 0 to hold the hover
+            interp_u = [0.0, 0.0, max_thrust];
             
         } else if t_target <= 0.0 {
             // We haven't launched yet (or t_target is 0)
             interp_p = traj.positions[0];
             interp_v = traj.velocities[0];
+            if num_thrusts > 0 {
+                interp_u = [0.0, 0.0, real_thrusts[0][0]];
+            }
             
         } else {
             // 3. Interpolate perfectly between the two closest trajectory points
@@ -414,9 +433,17 @@ pub fn get_mpc_reference(
             let v0 = traj.velocities[safe_idx];
             let v1 = traj.velocities[safe_idx + 1];
 
+            let max_u_idx = num_thrusts.saturating_sub(2);
+            let idx_u = base_idx.min(max_u_idx);
+            let frac_u = (exact_idx - idx_u as f64).clamp(0.0, 1.0);
+
+            let u0 = if num_thrusts > 0 { [0.0, 0.0, real_thrusts[idx_u][0]] } else { [0.0, 0.0, max_thrust] };
+            let u1 = if num_thrusts > 1 { [0.0, 0.0, real_thrusts[idx_u + 1][0]] } else { u0 };
+
             for j in 0..3 {
                 interp_p[j] = p0[j] + clamped_frac * (p1[j] - p0[j]);
                 interp_v[j] = v0[j] + clamped_frac * (v1[j] - v0[j]);
+                interp_u[j] = u0[j] + clamped_frac * (u1[j] - u0[j]);
             }
         }
 
@@ -429,8 +456,12 @@ pub fn get_mpc_reference(
             0.0, 0.0, 0.0                          // Target Angular Velocity (Zero spin)
         ]);
 
-        mpc_reference.push(state);
+        xref_traj.push(state);
+        // Push controls ONLY for the current step and future steps, excluding the terminal boundary
+        if i < n_steps - 1 {
+            uref_traj.push(Array1::from(vec![interp_u[0], interp_u[1], interp_u[2]]));
+        }
     }
-
-    mpc_reference
+    
+    (xref_traj, uref_traj)
 }
