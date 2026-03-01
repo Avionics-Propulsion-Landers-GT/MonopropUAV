@@ -3,6 +3,7 @@ use nalgebra::{Matrix3, Vector3, Vector4, UnitQuaternion, Quaternion};
 use crate::device_sim::*;
 use crate::sloshing_sim::*;
 use crate::fluid_dynamics::*;
+use crate::wind_sim::WindModel;
 use ndarray::Array1;
 use std::error::Error;
 use std::fs::File;
@@ -65,6 +66,9 @@ pub struct Rocket {
 
     pub com_to_ground: Vector3<f64>, // Distance from center of mass to ground (for ground interaction)
 
+    // Optional wind model — None means no wind (clean-air baseline)
+    pub wind_model: Option<WindModel>,
+
     system_time: f64,
 
     pub debug_info: RocketDebugInfo,
@@ -91,10 +95,12 @@ pub struct RocketDebugInfo{
     pub nitrous_masses: Vec<f64>,
     pub nitrogen_n2_tank_masses: Vec<f64>,
     pub nitrogen_n2o_tank_masses: Vec<f64>,
+    // Wind velocity applied this tick [m/s], world frame
+    pub wind_vels: Vec<Vector3<f64>>,
 }
 
 impl Rocket {
-    pub fn new(position: Vector3<f64>, velocity: Vector3<f64>, accel: Vector3<f64>, attitude: UnitQuaternion<f64>, ang_vel: Vector3<f64>, ang_accel: Vector3<f64>, frame_mass: f64, nitrogen_tank_empty_mass: f64, starting_nitrogen_mass: f64, nitrogen_tank_offset: Vector3<f64>, nitrous_tank_empty_mass: f64, starting_pressurizing_nitrogen_mass: f64, starting_nitrous_mass: f64, nitrous_tank_offset: Vector3<f64>, tvc_module_empty_mass: f64, starting_fuel_grain_mass: f64, frame_com_to_gimbal: Vector3<f64>, gimbal_to_tvc_com: Vector3<f64>, frame_moi: Matrix3<f64>, dry_nitrogen_moi: Matrix3<f64>, wet_nitrogen_moi: Matrix3<f64>, nitrous_tank_radius: f64, nitrous_tank_length: f64, nitrous_level: f64, dry_nitrous_moi: Matrix3<f64>, dry_tvc_moi: Matrix3<f64>, wet_tvc_moi: Matrix3<f64>, tvc_range: f64, tvc: TVC, rcs: RCS, imu: IMU, gps: GPS, uwb: UWB, sloshing_model: SloshModel, nist_data: NistData, nitrogen_iso_data: IsoData, nitrous_iso_data: IsoData, port_d: f64, nitrous_m_dot: f64, com_to_ground: Vector3<f64>) -> Self {
+    pub fn new(position: Vector3<f64>, velocity: Vector3<f64>, accel: Vector3<f64>, attitude: UnitQuaternion<f64>, ang_vel: Vector3<f64>, ang_accel: Vector3<f64>, frame_mass: f64, nitrogen_tank_empty_mass: f64, starting_nitrogen_mass: f64, nitrogen_tank_offset: Vector3<f64>, nitrous_tank_empty_mass: f64, starting_pressurizing_nitrogen_mass: f64, starting_nitrous_mass: f64, nitrous_tank_offset: Vector3<f64>, tvc_module_empty_mass: f64, starting_fuel_grain_mass: f64, frame_com_to_gimbal: Vector3<f64>, gimbal_to_tvc_com: Vector3<f64>, frame_moi: Matrix3<f64>, dry_nitrogen_moi: Matrix3<f64>, wet_nitrogen_moi: Matrix3<f64>, nitrous_tank_radius: f64, nitrous_tank_length: f64, nitrous_level: f64, dry_nitrous_moi: Matrix3<f64>, dry_tvc_moi: Matrix3<f64>, wet_tvc_moi: Matrix3<f64>, tvc_range: f64, tvc: TVC, rcs: RCS, imu: IMU, gps: GPS, uwb: UWB, sloshing_model: SloshModel, nist_data: NistData, nitrogen_iso_data: IsoData, nitrous_iso_data: IsoData, port_d: f64, nitrous_m_dot: f64, com_to_ground: Vector3<f64>, wind_model: Option<WindModel>) -> Self {
         let mut rocket = Self {
             position,
             velocity,
@@ -141,6 +147,7 @@ impl Rocket {
             port_d,
             nitrous_m_dot,
             com_to_ground,
+            wind_model,
             system_time: 0.0,
             debug_info: RocketDebugInfo {
                 thrust_torque: Vector3::zeros(),
@@ -162,6 +169,7 @@ impl Rocket {
                 nitrous_masses: Vec::new(),
                 nitrogen_n2_tank_masses: Vec::new(),
                 nitrogen_n2o_tank_masses: Vec::new(),
+                wind_vels: Vec::new(),
             },
         };
 
@@ -273,9 +281,30 @@ impl Rocket {
         let gravity = Vector3::new(0.0, 0.0, -9.81);
         self.thrust_vector = self.attitude.transform_vector(&tvc_effect.thrust);
         let slosh_force_world = self.attitude.transform_vector(&slosh_force);
-        let body_vel = self.attitude.transform_vector(&self.velocity);
-        let drag = 0.5 * 1.225 * Vector3::new(body_vel.x.powi(2) * 2.0 * 1.2, body_vel.y.powi(2) * 2.0 * 1.2, body_vel.z.powi(2) * 0.85 * 0.25);
-        let total_force = outside_forces + (gravity * mass) + self.thrust_vector + slosh_force_world + drag;
+
+        // Step the wind model to get current wind in world frame [m/s].
+        // Drag depends on velocity relative to the airmass, not the ground.
+        // A headwind feels like faster flight; a tailwind reduces drag.
+        let wind_vel_world = self.wind_model
+            .as_mut()
+            .map(|w| w.step(self.position.z, dt, self.system_time))
+            .unwrap_or_default();
+        self.debug_info.wind_vels.push(wind_vel_world);
+
+        // Relative velocity: how fast we're moving through the air (not the ground)
+        let relative_vel_world = self.velocity - wind_vel_world;
+        let body_vel = self.attitude.inverse_transform_vector(&relative_vel_world);
+
+        // Drag per axis: F_drag = -sign(v) * 0.5 * rho * Cd * A * v^2
+        // The sign flip makes sure drag always opposes motion on each axis.
+        // Cd*A values match the original (lateral faces vs. axial face).
+        let drag_body = Vector3::new(
+            -body_vel.x.signum() * 0.5 * 1.225 * 2.0 * 1.2 * body_vel.x.powi(2),
+            -body_vel.y.signum() * 0.5 * 1.225 * 2.0 * 1.2 * body_vel.y.powi(2),
+            -body_vel.z.signum() * 0.5 * 1.225 * 0.85 * 0.25 * body_vel.z.powi(2),
+        );
+        let drag_world = self.attitude.transform_vector(&drag_body);
+        let total_force = outside_forces + (gravity * mass) + self.thrust_vector + slosh_force_world + drag_world;
         self.debug_info.total_force = total_force;
         self.debug_info.thrusts.push(tvc_effect.thrust);
         self.debug_info.slosh_forces.push(slosh_force);
@@ -461,7 +490,9 @@ impl Rocket {
             // Thermodynamic & Mass Scalars
             "nitrous_m_dot", "valve_angle", "chamber_pressure",
             "of_ratio", "isp", "cstar", "port_d",
-            "fuel_mass", "nitrous_mass", "n2_tank_mass", "n2o_tank_mass"
+            "fuel_mass", "nitrous_mass", "n2_tank_mass", "n2o_tank_mass",
+            // Wind velocity [m/s], world frame
+            "wind_x", "wind_y", "wind_z"
         ])?;
 
         let num_records = self.debug_info.times.len();
@@ -503,6 +534,9 @@ impl Rocket {
                 self.debug_info.nitrous_masses[i].to_string(),
                 self.debug_info.nitrogen_n2_tank_masses[i].to_string(),
                 self.debug_info.nitrogen_n2o_tank_masses[i].to_string(),
+                self.debug_info.wind_vels[i].x.to_string(),
+                self.debug_info.wind_vels[i].y.to_string(),
+                self.debug_info.wind_vels[i].z.to_string(),
             ])?;
         }
 
