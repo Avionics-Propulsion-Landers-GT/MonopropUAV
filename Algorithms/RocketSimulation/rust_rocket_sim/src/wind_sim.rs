@@ -2,18 +2,14 @@ use nalgebra::Vector3;
 use rand::rng;
 use rand_distr::{Normal, Distribution};
 
-// ---------------------------------------------------------------------------
-// Wind Profile
-// ---------------------------------------------------------------------------
-// Maps altitude bands to mean wind vectors in the world frame.
-// Between bands we just linearly interpolate, same as interp1 in fluid_dynamics.
-
+// Mean wind velocity at a given altitude, world frame (x=east, y=north, z=up)
 #[derive(Debug, Clone)]
 pub struct WindBand {
     pub altitude_m: f64,
-    pub wind_mps: Vector3<f64>, // mean wind [m/s] in world frame (x=east, y=north, z=up)
+    pub wind_mps: Vector3<f64>,
 }
 
+// Altitude-keyed wind profile, interpolated between bands
 #[derive(Debug, Clone)]
 pub struct WindProfile {
     pub bands: Vec<WindBand>,
@@ -21,30 +17,25 @@ pub struct WindProfile {
 
 impl WindProfile {
     pub fn new(bands: Vec<WindBand>) -> Self {
-        // Sort ascending by altitude so interpolation always works
         let mut bands = bands;
         bands.sort_by(|a, b| a.altitude_m.partial_cmp(&b.altitude_m).unwrap());
         Self { bands }
     }
 
-    // Returns the mean wind at the given altitude by linearly interpolating between bands.
-    // Below the lowest band we hold the bottom value, above the highest we hold the top.
+    // Linear interpolation between the two nearest altitude bands
     pub fn sample(&self, altitude_m: f64) -> Vector3<f64> {
         if self.bands.is_empty() {
             return Vector3::zeros();
         }
         let n = self.bands.len();
 
-        // Clamp below
         if altitude_m <= self.bands[0].altitude_m {
             return self.bands[0].wind_mps;
         }
-        // Clamp above
         if altitude_m >= self.bands[n - 1].altitude_m {
             return self.bands[n - 1].wind_mps;
         }
 
-        // Find the bracket and interpolate
         for i in 0..n - 1 {
             let lo = &self.bands[i];
             let hi = &self.bands[i + 1];
@@ -54,47 +45,22 @@ impl WindProfile {
             }
         }
 
-        // Shouldn't reach here, but be safe
         Vector3::zeros()
     }
 }
 
-// ---------------------------------------------------------------------------
-// Gust Model
-// ---------------------------------------------------------------------------
-// Models stochastic wind turbulence using a first-order Gauss-Markov process
-// on each axis independently.
-//
-// Physical intuition: real wind gusts are correlated in time — they don't
-// change instantaneously.  tau_s controls how long a gust "remembers" its
-// previous state.  sigma_mps controls how intense the turbulence is.
-//
-// The update equation is:
-//   z[k+1] = exp(-dt/tau) * z[k] + sigma * sqrt(1 - exp(-2*dt/tau)) * N(0,1)
-//
-// This is exactly the discrete-time solution to the Ornstein-Uhlenbeck SDE,
-// which has a well-understood white-noise power spectral density shaped by
-// the 1st-order low-pass Lorentzian — a good match to measured gust spectra.
-//
-// Gust factor: In wind engineering, the "gust factor" G = V_peak / V_mean.
-// We model peak gusts as a separate one-shot impulse that decays over
-// gust_duration_s, triggered at a user-specified time.  This separately
-// captures that deterministic "worst-case" scenario.
-
+// Gauss-Markov gust model (Ornstein-Uhlenbeck process)
+// Real gusts are correlated in time, not white noise. tau_s controls how long
+// a gust holds its value; sigma_mps controls intensity.
+// A separate one-shot peak gust can be scheduled to stress-test the controller.
 #[derive(Debug, Clone)]
 pub struct GustModel {
-    // Turbulence intensity per axis [m/s]
-    pub sigma_mps: Vector3<f64>,
-    // Correlation time [s] — larger = smoother gusts, smaller = choppier
-    pub tau_s: f64,
-
-    // One-shot peak gust: fires at gust_start_s, lasts gust_duration_s
-    pub gust_magnitude_mps: Vector3<f64>,
+    pub sigma_mps: Vector3<f64>,   // turbulence intensity per axis [m/s]
+    pub tau_s: f64,                 // correlation time [s]
+    pub gust_magnitude_mps: Vector3<f64>, // peak gust vector [m/s]
     pub gust_start_s: f64,
     pub gust_duration_s: f64,
-
-    // Internal Gauss-Markov state
-    state: Vector3<f64>,
+    state: Vector3<f64>,            // internal Gauss-Markov state
 }
 
 impl GustModel {
@@ -115,11 +81,11 @@ impl GustModel {
         }
     }
 
-    // Steps the gust model and returns the total gust velocity [m/s] in world frame.
+    // Steps the gust model and returns stochastic wind velocity [m/s]
     pub fn step(&mut self, dt: f64, system_time: f64) -> Vector3<f64> {
         let mut rng = rng();
 
-        // Gauss-Markov update: exact discrete-time solution, no Euler approximation needed
+        // Exact discrete-time solution to the OU SDE
         let decay = (-dt / self.tau_s).exp();
         let noise_scale = (1.0 - (-2.0 * dt / self.tau_s).exp()).max(0.0).sqrt();
 
@@ -131,14 +97,11 @@ impl GustModel {
 
         self.state = decay * self.state + noise_scale * noise;
 
-        // One-shot peak gust: ramp up instantly, decay linearly over the duration.
-        // This represents the "gust factor" peak — a brief, deterministic worst case
-        // layered on top of the statistical background turbulence.
+        // One-shot peak gust: full magnitude at start, decays linearly to zero
         let peak_gust = if system_time >= self.gust_start_s
             && system_time < self.gust_start_s + self.gust_duration_s
         {
             let progress = (system_time - self.gust_start_s) / self.gust_duration_s;
-            // Linear decay: full magnitude at start, zero at end
             self.gust_magnitude_mps * (1.0 - progress)
         } else {
             Vector3::zeros()
@@ -148,13 +111,7 @@ impl GustModel {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Wind Model (top-level)
-// ---------------------------------------------------------------------------
-// Combines the steady profile and the gust model into a single output.
-// Call step() every simulation tick to get the total wind velocity [m/s]
-// in the world frame.
-
+// Combines a steady altitude profile with stochastic gusts
 #[derive(Debug, Clone)]
 pub struct WindModel {
     pub profile: WindProfile,
@@ -166,9 +123,8 @@ impl WindModel {
         Self { profile, gusts }
     }
 
-    // Returns the total wind velocity vector in world frame [m/s] at the
-    // given altitude.  The rocket dynamics should subtract this from the
-    // rocket velocity to get the velocity relative to the air mass.
+    // Returns total wind velocity [m/s] in world frame at the given altitude.
+    // Subtract from rocket velocity to get velocity relative to the airmass.
     pub fn step(&mut self, altitude_m: f64, dt: f64, system_time: f64) -> Vector3<f64> {
         let mean = self.profile.sample(altitude_m);
         let gust = self.gusts.step(dt, system_time);
