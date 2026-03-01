@@ -16,10 +16,10 @@ use ndarray::{Array1, Array2};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Connecting to Rerun Viewer...");
 
-    // FIX: Use .connect_grpc() as the compiler suggested.
-    // This connects to the 'rerun --web-viewer' running in your other terminal.
+    // buffered() works without any external Rerun process — logs stay in memory.
+    // Swap for connect_grpc() or spawn() when you want live visualization.
     let rec = rerun::RecordingStreamBuilder::new("rocket_sim")
-        .connect_grpc()?; 
+        .buffered()?;
 
     println!("Connected! Sending data...");
 
