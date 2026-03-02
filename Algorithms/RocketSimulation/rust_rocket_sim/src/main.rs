@@ -35,6 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     let mut rocket = get_rocket();
+    let mut has_exceeded_angle = false;
 
     let mut mpc = get_mpc();
     let mut hover_u_warm = vec![Array1::from(vec![0.0, 0.0, rocket.get_mass() * 9.81]); mpc.n_steps]; // Warm start with zero control inputs
@@ -54,18 +55,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // In a real simulation, you'd update these based on your control algorithms and environmental effects.
         let mass = rocket.get_mass();
         // hover_u_warm = vec![Array1::from(vec![0.0, 0.0, mass * 9.81]); mpc.n_steps]; // Warm start with zero control inputs
+        let body_z = Vector3::z();
+        // Rotate the local Z axis into the world frame
+        let world_z_axis = rocket.attitude * body_z;
+        
+        // The dot product of world_z_axis and Vector3::z() is just the .z component
+        let cos_theta = world_z_axis.z;
+        
+        // Clamp to avoid precision errors leading to NaN in acos
+        cos_theta.clamp(-1.0, 1.0).acos();
+        if cos_theta < 0.965925826289{
+            has_exceeded_angle = true;
+        }
         
         let mut xref_traj;
         let mut uref_traj;
         if at_hover == -1 {
             let mut trajectory  = lossless.update([rocket.position.x, rocket.position.y, rocket.position.z], [rocket.velocity.x, rocket.velocity.y, rocket.velocity.z], [0.0, 0.0, 50.0], mass - rocket.get_dry_mass(), current_time);
-            (xref_traj, uref_traj) = get_mpc_reference(&trajectory, current_time - lossless.last_solve_time, rocket.attitude, mpc.max_thrust, mpc.dt, lossless.fine_delta_t, mpc.n_steps + 1);
+            (xref_traj, uref_traj) = get_mpc_reference(&trajectory, current_time - lossless.last_solve_time, rocket.attitude, mpc.min_thrust, mpc.dt, lossless.fine_delta_t, mpc.n_steps + 1);
             if rocket.position.z >= 45.0 {
                 at_hover = 0;
                 hover_start_time = current_time;
             }
             // uref_traj = vec![Array1::from(vec![0.0, 0.0, mass * 9.81]); mpc.n_steps]; // Warm start with zero control inputs
         } else if at_hover == 0 {
+            mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
+                40.0, 40.0, 60.0,   // position x, y, z
+                600.0, 600.0, 600.0, 0.0, // quaternion qx, qy, qz, qw
+                30.0, 30.0, 10.0,        // linear velocities x_dot, y_dot, z_dot
+                100.0, 100.0, 100.0          // angular velocities wx, wy, wz
+            ]));
+            mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 0.0]));
+            mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
+                60.0, 60.0, 80.0,   // position x, y, z
+                1000.0, 1000.0, 1000.0, 0.0, // quaternion qx, qy, qz, qw
+                40.0, 40.0, 60.0,        // linear velocities x_dot, y_dot, z_dot
+                50.0, 50.0, 50.0          // angular velocities wx, wy, wz
+            ]));
             xref_traj = vec![Array1::from(vec![0.0, 0.0, 50.0, // x, y, z
                                                 0.0, 0.0, 0.0, 1.0, // qx, qy, qz, qw (upright)
                                                 0.0, 0.0, 0.0, // x_dot, y_dot, z_dot
@@ -76,19 +102,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 at_hover = 1;
             }
         } else {
-            mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
-                50.0, 50.0, 70.0,   // position x, y, z
-                80.0, 80.0, 80.0, 0.0, // quaternion qx, qy, qz, qw
-                30.0, 30.0, 40.0,        // linear velocities x_dot, y_dot, z_dot
-                10.0, 10.0, 10.0          // angular velocities wx, wy, wz
-            ]));
-            mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 0.0]));
-            mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
-                20.0, 20.0, 70.0,   // position x, y, z
-                80.0, 80.0, 80.0, 0.0, // quaternion qx, qy, qz, qw
-                30.0, 30.0, 100.0,        // linear velocities x_dot, y_dot, z_dot
-                10.0, 10.0, 10.0          // angular velocities wx, wy, wz
-            ]));
+            if rocket.position.z > 10.0 {
+                mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
+                    50.0, 50.0, 70.0,   // position x, y, z
+                    150000.0, 150000.0, 150000.0, 0.0, // quaternion qx, qy, qz, qw
+                    30.0, 30.0, 100.0,        // linear velocities x_dot, y_dot, z_dot
+                    500.0, 500.0, 500.0          // angular velocities wx, wy, wz
+                ]));
+                mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 1.0]));
+                mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
+                    20.0, 20.0, 600.0,   // position x, y, z
+                    175000.0, 175000.0, 175000.0, 0.0, // quaternion qx, qy, qz, qw
+                    30.0, 30.0, 25000.0,        // linear velocities x_dot, y_dot, z_dot
+                    1000.0, 1000.0, 1000.0          // angular velocities wx, wy, wz
+                ]));
+            } else {
+                mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
+                    50.0, 50.0, 70.0,   // position x, y, z
+                    150000.0, 150000.0, 150000.0, 0.0, // quaternion qx, qy, qz, qw
+                    30.0, 30.0, 100.0,        // linear velocities x_dot, y_dot, z_dot
+                    500.0, 500.0, 500.0          // angular velocities wx, wy, wz
+                ]));
+                mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 1.0]));
+                mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
+                    8000.0, 8000.0, 1000.0,   // position x, y, z
+                    175000.0, 175000.0, 175000.0, 0.0, // quaternion qx, qy, qz, qw
+                    30.0, 30.0, 200000.0,        // linear velocities x_dot, y_dot, z_dot
+                    1000.0, 1000.0, 1000.0          // angular velocities wx, wy, wz
+                ]));
+            }
+            lossless.lower_thrust_bound = 500.0;
+            lossless.flip_glide_slope = false;
             lossless.use_glide_slope = true;
             lossless.max_velocity = 5.0;
             // if rocket.velocity.norm() >= 5.0 {
@@ -137,16 +181,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // Log Vehicle
+        let normalized_thrust_vector = rocket.thrust_vector / 1000.0; // Scale for visualization
+        let rocket_color;
+        if has_exceeded_angle {
+            rocket_color = rerun::Color::from_rgb(255, 0, 0);
+        } else {
+            rocket_color = rerun::Color::from_rgb(0, 255, 0);
+        }
         let rotated_offset = rocket.attitude.transform_vector(&rocket.com_to_ground);
         rec.log(
             "world/rocket",
             &rerun::Arrows3D::from_vectors([((-2.0 * rotated_offset.x) as f32, (-2.0 * rotated_offset.y) as f32, (-2.0 * rotated_offset.z) as f32)])
                 .with_origins([[(rocket.position.x+rotated_offset.x) as f32, (rocket.position.y+rotated_offset.y) as f32, (rocket.position.z+rotated_offset.z) as f32]])
-                .with_colors([rerun::Color::from_rgb(255, 0, 0)]) 
+                .with_colors([rocket_color]) 
         )?;
 
         // Log Thrust Vector
-        let normalized_thrust_vector = rocket.thrust_vector / 1000.0; // Scale for visualization
         rec.log(
             "world/thrust_vector",
             &rerun::Arrows3D::from_vectors([((normalized_thrust_vector.x) as f32, (normalized_thrust_vector.y) as f32, (normalized_thrust_vector.z) as f32)])
@@ -158,7 +208,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         rec.log(
             "world/rocket",
             &rerun::Points3D::new([(rocket.position.x as f32, rocket.position.y as f32, rocket.position.z as f32)])
-                .with_colors([rerun::Color::from_rgb(255, 0, 0)]) // Red color for the rocket
+                .with_colors([rocket_color]) // Red color for the rocket
                 .with_radii([0.1]) // Size of the point representing the rocket
         )?;
 
@@ -304,16 +354,16 @@ fn get_mpc() -> MPC {
     let integral_gains = (0.0, 0.0, 0.0);
     let q = Array2::<f64>::from_diag(&Array1::from(vec![
         20.0, 20.0, 70.0,   // position x, y, z
-        60.0, 60.0, 60.0, 0.0, // quaternion qx, qy, qz, qw
-        30.0, 30.0, 10.0,        // linear velocities x_dot, y_dot, z_dot
-        10.0, 10.0, 10.0          // angular velocities wx, wy, wz
+        6000.0, 6000.0, 6000.0, 0.0, // quaternion qx, qy, qz, qw
+        30.0, 30.0, 50.0,        // linear velocities x_dot, y_dot, z_dot
+        100.0, 100.0, 100.0          // angular velocities wx, wy, wz
     ]));
-    let r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 0.0]));
+    let r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 1.0]));
     let qn = Array2::<f64>::from_diag(&Array1::from(vec![
-        20.0, 20.0, 80.0,   // position x, y, z
-        100.0, 100.0, 100.0, 0.0, // quaternion qx, qy, qz, qw
-        40.0, 40.0, 70.0,        // linear velocities x_dot, y_dot, z_dot
-        5.0, 5.0, 5.0          // angular velocities wx, wy, wz
+        40.0, 40.0, 80.0,   // position x, y, z
+        10000.0, 10000.0, 10000.0, 0.0, // quaternion qx, qy, qz, qw
+        20.0, 20.0, 100.0,        // linear velocities x_dot, y_dot, z_dot
+        50.0, 50.0, 50.0          // angular velocities wx, wy, wz
     ]));
     // let smoothing_weight = Array1::from(vec![150.0, 150.0, -2.0]);
     let smoothing_weight = Array1::from(vec![0.0, 0.0, 0.0]);
@@ -337,12 +387,13 @@ fn get_lossless() -> Lossless {
     let tvc_range_rad = 15_f64.to_radians();
     let coarse_delta_t = 0.25;
     let fine_delta_t = 0.1;
-    let glide_slope = 5.0_f64.to_radians();
-    let use_glide_slope = false;
+    let glide_slope = 0.05_f64.to_radians();
+    let use_glide_slope = true;
+    let flip_glide_slope = true;
     let system_time = -1.0;
     let update_rate = 3.0;
 
-    Lossless::new(max_velocity, dry_mass, alpha, lower_thrust_bound, upper_thrust_bound, tvc_range_rad, coarse_delta_t, fine_delta_t, glide_slope, use_glide_slope, [0.0; 3], system_time, update_rate)
+    Lossless::new(max_velocity, dry_mass, alpha, lower_thrust_bound, upper_thrust_bound, tvc_range_rad, coarse_delta_t, fine_delta_t, glide_slope, use_glide_slope, flip_glide_slope, [0.0; 3], system_time, update_rate)
 }
 
 fn get_slosh_model() -> SloshModel {
@@ -369,7 +420,7 @@ pub fn get_mpc_reference(
     traj: &algorithms::lossless::TrajectoryResult,
     current_time: f64,
     initial_attitude: UnitQuaternion<f64>,
-    max_thrust: f64,
+    default_thrust: f64,
     mpc_dt: f64,
     lossless_dt: f64,
     n_steps: usize,
@@ -404,7 +455,7 @@ pub fn get_mpc_reference(
             // Park the rocket at the final coordinate
             interp_p = traj.positions[num_points - 1];
             interp_v = [0.0, 0.0, 0.0]; // Force target velocity to 0 to hold the hover
-            interp_u = [0.0, 0.0, max_thrust];
+            interp_u = [0.0, 0.0, default_thrust];
             
         } else if t_target <= 0.0 {
             // We haven't launched yet (or t_target is 0)
@@ -437,7 +488,7 @@ pub fn get_mpc_reference(
             let idx_u = base_idx.min(max_u_idx);
             let frac_u = (exact_idx - idx_u as f64).clamp(0.0, 1.0);
 
-            let u0 = if num_thrusts > 0 { [0.0, 0.0, real_thrusts[idx_u][0]] } else { [0.0, 0.0, max_thrust] };
+            let u0 = if num_thrusts > 0 { [0.0, 0.0, real_thrusts[idx_u][0]] } else { [0.0, 0.0, default_thrust] };
             let u1 = if num_thrusts > 1 { [0.0, 0.0, real_thrusts[idx_u + 1][0]] } else { u0 };
 
             for j in 0..3 {
@@ -462,6 +513,8 @@ pub fn get_mpc_reference(
             uref_traj.push(Array1::from(vec![interp_u[0], interp_u[1], interp_u[2]]));
         }
     }
+
+    println!("UREF_TRAJ: {:?}", uref_traj);
     
     (xref_traj, uref_traj)
 }

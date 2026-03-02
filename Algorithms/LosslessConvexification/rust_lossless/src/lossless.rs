@@ -10,6 +10,7 @@ pub struct LosslessSolver {
     pub initial_velocity: [f64; 3],
     pub glide_slope: f64,
     pub use_glide_slope: bool,
+    pub flip_glide_slope: bool,
     pub max_velocity: f64,
     pub dry_mass: f64,
     pub fuel_mass: f64,
@@ -113,6 +114,7 @@ impl Default for LosslessSolver {
             initial_velocity: [0.0, 0.0, 0.0],
             glide_slope: 0.0,
             use_glide_slope: false,
+            flip_glide_slope: false,
             max_velocity: 100.0,
             dry_mass: 0.0,
             fuel_mass: 0.0,
@@ -352,7 +354,11 @@ impl LosslessSolver {
             if self.use_glide_slope {
                 // ---------- Glide slope SOC: ||x_k[:2]|| <= x_k[2] / tan(glide_slope) ----------
                 let x_offset = idx_x + 3 * k;
-                rows.push((row_counter as usize) + 0); cols.push((x_offset as usize) + 2); vals.push(-1.0 / self.glide_slope.tan()); // x_k[2]
+                if self.flip_glide_slope {
+                    rows.push((row_counter as usize) + 0); cols.push((x_offset as usize) + 2); vals.push(1.0 / self.glide_slope.tan()); // x_k[2]
+                } else {
+                    rows.push((row_counter as usize) + 0); cols.push((x_offset as usize) + 2); vals.push(-1.0 / self.glide_slope.tan()); // x_k[2]
+                }
                 rows.push((row_counter as usize) + 1); cols.push((x_offset as usize) + 0); vals.push(1.0); // -x_k[0]
                 rows.push((row_counter as usize) + 2); cols.push((x_offset as usize) + 1); vals.push(1.0); // -x_k[1]
                 cones.push(SupportedConeT::SecondOrderConeT(3));

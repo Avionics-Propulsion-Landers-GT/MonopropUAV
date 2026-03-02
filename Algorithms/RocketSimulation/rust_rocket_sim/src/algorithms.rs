@@ -132,6 +132,7 @@ pub struct Lossless {
     pub fine_delta_t: f64,
     pub glide_slope: f64,
     pub use_glide_slope: bool,
+    pub flip_glide_slope: bool,
     pub system_time: f64,
     pub update_rate: f64,
     last_solution: lossless::TrajectoryResult, // Store the last solution for use when not updating
@@ -139,7 +140,7 @@ pub struct Lossless {
 }
 
 impl Lossless {
-    pub fn new(max_velocity: f64, dry_mass: f64, alpha: f64, lower_thrust_bound: f64, upper_thrust_bound: f64, tvc_range_rad: f64, coarse_delta_t: f64, fine_delta_t: f64, glide_slope: f64, use_glide_slope: bool, pointing_direction: [f64; 3], system_time: f64, update_rate: f64) -> Self {
+    pub fn new(max_velocity: f64, dry_mass: f64, alpha: f64, lower_thrust_bound: f64, upper_thrust_bound: f64, tvc_range_rad: f64, coarse_delta_t: f64, fine_delta_t: f64, glide_slope: f64, use_glide_slope: bool, flip_glide_slope: bool, pointing_direction: [f64; 3], system_time: f64, update_rate: f64) -> Self {
         Self {
             max_velocity,
             dry_mass,
@@ -151,6 +152,7 @@ impl Lossless {
             fine_delta_t,
             glide_slope,
             use_glide_slope,
+            flip_glide_slope,
             system_time,
             update_rate,
             last_solution: lossless::TrajectoryResult {
@@ -202,6 +204,14 @@ impl Lossless {
             ..Default::default()
         };
 
-        return solver.solve().trajectory.expect("Failed to solve trajectory optimization problem");
+        let result = solver.solve();
+
+        if result.trajectory.is_none() {
+            return self.last_solution.clone();
+        } else {
+            return result.trajectory.expect("Failed to solve trajectory optimization problem");
+        }
+
+        // return solver.solve().trajectory.expect("Failed to solve trajectory optimization problem");
     }
 }
