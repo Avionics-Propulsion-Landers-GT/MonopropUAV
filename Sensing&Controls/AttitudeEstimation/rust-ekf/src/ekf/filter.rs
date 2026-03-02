@@ -66,10 +66,12 @@ impl<T: EKFModel> ExtendedKalmanFilter<T> {
         let s = prediction_jacobian.dot(&self.error_covariance).dot(&prediction_jacobian.t())
             + &self.measurement_noise_covariance;
 
-        // TODO: Make sure this error doesn't impact the filter's ability to run (Can we give some default value on error instead of returning directly)
         let s_inv = match s.inv() {
             Ok(m) => m,
-            Err(_) => return, // Prevent panic on singular matrix
+            Err(_) => {
+                self.error_covariance += Array2::eye(self.state.len()) * 1e-6; // Prevent panic on singular matrix by adding small diagonal before falling back to prediction
+                return;
+            } 
         };
 
         let k = self.error_covariance.dot(&prediction_jacobian.t()).dot(&s_inv);
