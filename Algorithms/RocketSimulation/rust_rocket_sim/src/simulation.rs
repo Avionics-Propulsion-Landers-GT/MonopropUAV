@@ -11,6 +11,22 @@ use crate::fluid_dynamics::*;
 use nalgebra::{Matrix3, Vector3, Vector4, UnitQuaternion};
 use ndarray::{Array1, Array2};
 
+#[derive(Clone, Debug, Default)]
+pub struct Simulation {
+    pub rocket: Rocket,
+    pub mpc: MPC,
+    pub lossless: Lossless,
+    pub debug: bool,
+}
+
+impl Default for Simulation {
+    fn default() -> Self {
+        Self {
+
+        }
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Connecting to Rerun Viewer...");
 
@@ -127,7 +143,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
                     10000.0, 10000.0, 1000.0,   // position x, y, z
                     175000.0, 175000.0, 175000.0, 0.0, // quaternion qx, qy, qz, qw
-                    30.0, 30.0, 250000.0,        // linear velocities x_dot, y_dot, z_dot
+                    30.0, 30.0, 200000.0,        // linear velocities x_dot, y_dot, z_dot
                     1000.0, 1000.0, 1000.0          // angular velocities wx, wy, wz
                 ]));
             } else {
@@ -141,7 +157,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
                     4000.0, 4000.0, 500.0,   // position x, y, z
                     175000.0, 175000.0, 175000.0, 0.0, // quaternion qx, qy, qz, qw
-                    30.0, 30.0, 400000.0,        // linear velocities x_dot, y_dot, z_dot
+                    30.0, 30.0, 450000.0,        // linear velocities x_dot, y_dot, z_dot
                     1000.0, 1000.0, 1000.0          // angular velocities wx, wy, wz
                 ]));
             }
