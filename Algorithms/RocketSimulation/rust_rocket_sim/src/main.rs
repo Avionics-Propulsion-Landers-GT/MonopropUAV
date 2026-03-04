@@ -158,7 +158,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         println!("XREF_TRAJ{:?}", xref_traj);
 
-        let control_sequence = mpc.update(&rocket.get_state(), &xref_traj, &uref_traj, mass, current_time); // Placeholder reference trajectory and warm start
+        let control_sequence = mpc.update(&rocket.get_state(), &xref_traj, &uref_traj, mass, &rocket.get_moi_mpc(), current_time); // Placeholder reference trajectory and warm start
         let last_solve_time = mpc.last_solve_time;// 1. Calculate the fractional progress between MPC steps (0.0 to 1.0)
         let time_since_solve = current_time - last_solve_time;
         let raw_index = (time_since_solve / mpc.dt) as usize;
@@ -189,6 +189,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Control Input: {:?}", control_input);
         println!("Total Force: {:?}", rocket.debug_info.total_force);
         println!("Thrust Vector: {:?}", rocket.thrust_vector);
+        
 
         if !rocket.step(control_input, outside_forces, outside_torques, dt) && current_time > min_time {
             break;
@@ -363,7 +364,7 @@ fn get_mpc() -> MPC {
     let n = 13; // [x, y, z, qx, qy, qz, qw, x_dot, y_dot, z_dot, wx, wy, wz]
     let m = 3;  // [gimbal_theta, gimbal_phi, thrust]
     let n_steps = 10;
-    let dt = 0.8;
+    let dt = 0.2;
     // let integral_gains = (0.001, 0.001, 0.002);
     let integral_gains = (0.0, 0.0, 0.0);
     let q = Array2::<f64>::from_diag(&Array1::from(vec![
@@ -379,6 +380,7 @@ fn get_mpc() -> MPC {
         20.0, 20.0, 100.0,        // linear velocities x_dot, y_dot, z_dot
         50.0, 50.0, 50.0          // angular velocities wx, wy, wz
     ]));
+
     // let smoothing_weight = Array1::from(vec![150.0, 150.0, -2.0]);
     let smoothing_weight = Array1::from(vec![0.0, 0.0, 0.0]);
     let panoc_cache_tolerance = 1e-4;

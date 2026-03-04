@@ -91,7 +91,7 @@ impl Simulation {
         let mut outside_forces = Vector3::new(0.0, 0.0, 0.0);
         let mut outside_torques = Vector3::new(0.0, 0.0, 0.0);
 
-        let control_sequence = self.mpc.update(&self.rocket.get_state(), &xref_traj, &uref_traj, mass, self.current_time); // Placeholder reference trajectory and warm start
+        let control_sequence = self.mpc.update(&self.rocket.get_state(), &xref_traj, &uref_traj, mass, &rocket.get_moi_mpc(), self.current_time); // Placeholder reference trajectory and warm start
         
         let last_solve_time = self.mpc.last_solve_time;// 1. Calculate the fractional progress between MPC steps (0.0 to 1.0)
         let time_since_mpc_solve = self.current_time - self.mpc.last_solve_time;

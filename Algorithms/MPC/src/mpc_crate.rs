@@ -9,17 +9,21 @@ use ndarray::ArrayView1;
 use optimization_engine::{panoc::*, *};
 use std::time::Instant;
 
-pub fn dynamics(x: &Array1<f64>, u: &Array1<f64>, mass: f64, dt: f64) -> Array1<f64> {
+pub fn dynamics(x: &Array1<f64>, u: &Array1<f64>, mass: f64, moi: &Array2<f64>, dt: f64) -> Array1<f64> {
     // let mut x_next = Array1::<f64>::zeros(x.len());
     // Constants
     let m = mass;
     let g = 9.81;
-    let ixx = 50.0;
-    let iyy = 50.0;
-    let izz = 3.0;
+    // let ixx = 50.0;
+    // let iyy = 50.0;
+    // let izz = 3.0;
+    // let ixx = 71.0;
+    // let iyy = 71.0;
+    // let izz = 3.8;
 
     // Inertia matrix and inverse
-    let i = Array2::from_diag(&Array1::from(vec![ixx, iyy, izz]));
+    // let i = Array2::from_diag(&Array1::from(vec![ixx, iyy, izz]));
+    let i = moi.clone();
     let i_inv = i.clone().inv().unwrap();
 
     // Unpack state
@@ -76,7 +80,7 @@ pub fn dynamics(x: &Array1<f64>, u: &Array1<f64>, mass: f64, dt: f64) -> Array1<
     let z_ddot = acc[2];
 
     // TVC torque
-    let d = 1.0;
+    let d = 0.663834203726;
     let r_cp = Array1::from(vec![0.0, 0.0, -d]);
     let torque_b = Array1::from(vec![
         r_cp[1] * thrust_b[2] - r_cp[2] * thrust_b[1],
@@ -86,10 +90,11 @@ pub fn dynamics(x: &Array1<f64>, u: &Array1<f64>, mass: f64, dt: f64) -> Array1<
 
     // Angular velocity
     let omega = Array1::from(vec![wx, wy, wz]);
+    // TODO: make it full matrix
     let omega_cross_i_omega = Array1::from(vec![
-        omega[1] * (iyy * omega[2]) - omega[2] * (izz * omega[1]),
-        omega[2] * (izz * omega[0]) - omega[0] * (ixx * omega[2]),
-        omega[0] * (ixx * omega[1]) - omega[1] * (iyy * omega[0]),
+        omega[1] * (i[(1, 1)] * omega[2]) - omega[2] * (i[(2, 2)] * omega[1]),
+        omega[2] * (i[(2, 2)] * omega[0]) - omega[0] * (i[(0, 0)] * omega[2]),
+        omega[0] * (i[(0, 0)] * omega[1]) - omega[1] * (i[(1, 1)] * omega[0]),
     ]);
     let omega_dot = i_inv.dot(&(torque_b - omega_cross_i_omega));
 
@@ -128,7 +133,7 @@ pub fn dynamics(x: &Array1<f64>, u: &Array1<f64>, mass: f64, dt: f64) -> Array1<
     x_next
 }
 
-fn compute_jacobian(x: &Array1<f64>, u: &Array1<f64>, mass: f64, dt: f64) -> (Array2<f64>, Array2<f64>) {
+fn compute_jacobian(x: &Array1<f64>, u: &Array1<f64>, mass: f64, moi: &Array2<f64>, dt: f64) -> (Array2<f64>, Array2<f64>) {
     let n = x.len();
     let m = u.len();
     let mut A = Array2::<f64>::zeros((n, n));
@@ -141,8 +146,8 @@ fn compute_jacobian(x: &Array1<f64>, u: &Array1<f64>, mass: f64, dt: f64) -> (Ar
         let mut x_minus = x.clone();
         x_plus[i] += eps;
         x_minus[i] -= eps;
-        let fx_plus = dynamics(&x_plus, u, mass, dt);
-        let fx_minus = dynamics(&x_minus, u, mass, dt);
+        let fx_plus = dynamics(&x_plus, u, mass, moi, dt);
+        let fx_minus = dynamics(&x_minus, u, mass, moi, dt);
         A.column_mut(i).assign(&((fx_plus - fx_minus) / (2.0 * eps)));
     }
     for i in 0..m {
@@ -150,31 +155,31 @@ fn compute_jacobian(x: &Array1<f64>, u: &Array1<f64>, mass: f64, dt: f64) -> (Ar
         let mut u_minus = u.clone();
         u_plus[i] += eps;
         u_minus[i] -= eps;
-        let fx_plus = dynamics(x, &u_plus, mass, dt);
-        let fx_minus = dynamics(x, &u_minus, mass, dt);
+        let fx_plus = dynamics(x, &u_plus, mass, moi, dt);
+        let fx_minus = dynamics(x, &u_minus, mass, moi, dt);
         B.column_mut(i).assign(&((fx_plus - fx_minus) / (2.0 * eps)));
     }
 
     (A, B)
 }
 
-fn rollout(x0: &Array1<f64>, U: &Vec<Array1<f64>>, mass: f64, dt: f64) -> Vec<Array1<f64>> {
+fn rollout(x0: &Array1<f64>, U: &Vec<Array1<f64>>, mass: f64, moi: &Array2<f64>, dt: f64) -> Vec<Array1<f64>> {
     let mut xs = Vec::new();
     let mut x = x0.clone();
     xs.push(x.clone());
     for u in U.iter() {
-        x = dynamics(&x, u, mass, dt);
+        x = dynamics(&x, u, mass, moi, dt);
         xs.push(x.clone());
     }
     xs
 }
 
-fn linearize_trajectory(xs: &Vec<Array1<f64>>, U: &Vec<Array1<f64>>, mass: f64, dt: f64) -> (Vec<Array2<f64>>, Vec<Array2<f64>>) {
+fn linearize_trajectory(xs: &Vec<Array1<f64>>, U: &Vec<Array1<f64>>, mass: f64, moi: &Array2<f64>, dt: f64) -> (Vec<Array2<f64>>, Vec<Array2<f64>>) {
     let mut A_seq = Vec::new();
     let mut B_seq = Vec::new();
 
     for k in 0..U.len() {
-        let (A, B) = compute_jacobian(&xs[k], &U[k], mass, dt);
+        let (A, B) = compute_jacobian(&xs[k], &U[k], mass, moi, dt);
         A_seq.push(A.clone());
         B_seq.push(B.clone());
     }
@@ -333,8 +338,8 @@ fn solve_qp_pgd(H: &Array2<f64>, g: &Array1<f64>, dU_min: &Array1<f64>, dU_max: 
 
 // TO DO: implement QP solver using active set method with BOX CONSTRAINTS. 
 
-fn true_cost(x0: &Array1<f64>, U: &Vec<Array1<f64>>, xref_traj: &Vec<Array1<f64>>, Q: &Array2<f64>, R: &Array2<f64>, QN: &Array2<f64>, mass: f64, dt: f64) -> f64 {
-    let xs = rollout(x0, U, mass, dt);
+fn true_cost(x0: &Array1<f64>, U: &Vec<Array1<f64>>, xref_traj: &Vec<Array1<f64>>, Q: &Array2<f64>, R: &Array2<f64>, QN: &Array2<f64>, mass: f64, moi: &Array2<f64>, dt: f64) -> f64 {
+    let xs = rollout(x0, U, mass, moi, dt);
     let N = U.len();
     let mut cost = 0.0;
 
@@ -352,7 +357,7 @@ fn true_cost(x0: &Array1<f64>, U: &Vec<Array1<f64>>, xref_traj: &Vec<Array1<f64>
     cost
 }
 
-fn nmpc_step(x0: &Array1<f64>, U_init: &Vec<Array1<f64>>, xref_traj: &Vec<Array1<f64>>, Q: &Array2<f64>, R: &Array2<f64>, QN: &Array2<f64>, u_min: &Array1<f64>, u_max: &Array1<f64>, sqp_iters: usize, alpha_pgd: f64, mass: f64, dt: f64) -> (Vec<Array1<f64>>, Vec<Array1<f64>>) {
+fn nmpc_step(x0: &Array1<f64>, U_init: &Vec<Array1<f64>>, xref_traj: &Vec<Array1<f64>>, Q: &Array2<f64>, R: &Array2<f64>, QN: &Array2<f64>, u_min: &Array1<f64>, u_max: &Array1<f64>, sqp_iters: usize, alpha_pgd: f64, mass: f64, moi: &Array2<f64>, dt: f64) -> (Vec<Array1<f64>>, Vec<Array1<f64>>) {
     let N = U_init.len();
     let m = U_init[0].len();
     // initialize xs trajectory
@@ -360,8 +365,8 @@ fn nmpc_step(x0: &Array1<f64>, U_init: &Vec<Array1<f64>>, xref_traj: &Vec<Array1
     let mut U = U_init.clone();
     let start_time = Instant::now();
     for _ in 0..sqp_iters {
-        xs = rollout(x0, &U, mass, dt);
-        let (A_seq, B_seq) = linearize_trajectory(&xs, &U, mass, dt);
+        xs = rollout(x0, &U, mass, moi, dt);
+        let (A_seq, B_seq) = linearize_trajectory(&xs, &U, mass, moi, dt);
         let (H, g, dU_min, dU_max, _Su, _Q_bar, _R_bar) = assemble_qp_increment(&xs, &U, &xref_traj, &A_seq, &B_seq, &Q, &R, &QN, &u_min, &u_max);
         let dU0 = Array1::<f64>::zeros(m * N);
         let dU = solve_qp_pgd(&H, &g, &dU_min, &dU_max, &dU0, 20, alpha_pgd);
@@ -371,7 +376,7 @@ fn nmpc_step(x0: &Array1<f64>, U_init: &Vec<Array1<f64>>, xref_traj: &Vec<Array1
         for k in 0..N {
             flatU.slice_mut(s![k*m..(k+1)*m]).assign(&U[k]);
         }
-        let J0 = true_cost(x0, &U, xref_traj, Q, R, QN, mass, dt);
+        let J0 = true_cost(x0, &U, xref_traj, Q, R, QN, mass, moi, dt);
         let mut step = 1.0;
         while step > 1e-3 {
             let U_try_flat = &flatU + &(step * &dU);
@@ -385,7 +390,7 @@ fn nmpc_step(x0: &Array1<f64>, U_init: &Vec<Array1<f64>>, xref_traj: &Vec<Array1
                 }
                 U_try.push(u_k);
             }
-            let Jtry = true_cost(x0, &U_try, xref_traj, Q, R, QN, mass, dt);
+            let Jtry = true_cost(x0, &U_try, xref_traj, Q, R, QN, mass, moi, dt);
             if Jtry < J0 {
                 U = U_try;
                 break;
@@ -469,6 +474,7 @@ pub fn OpEnSolve(
     smoothing_weight: &Array1<f64>,
     panoc_cache: &mut PANOCCache,
     mass: f64,
+    moi: &Array2<f64>,
     min_thrust: f64,
     max_thrust: f64,
     gimbal_limit_rad: f64,
@@ -488,8 +494,8 @@ pub fn OpEnSolve(
     let u_nom = Array1::from(u_nom_flat.clone());
 
     // Linearize about current rollout, assemble QP in delta-U space
-    let xs = rollout(x0, U, mass, dt);
-    let (A_seq, B_seq) = linearize_trajectory(&xs, U, mass, dt);
+    let xs = rollout(x0, U, mass, moi, dt);
+    let (A_seq, B_seq) = linearize_trajectory(&xs, U, mass, moi, dt);
     let (H, g, _dU_min, _dU_max, _Su, _Q_bar, _R_bar) =
         assemble_qp_increment(&xs, U, xref_traj, &A_seq, &B_seq, Q, R, QN,
                               &Array1::zeros(m), &Array1::zeros(m));
@@ -557,11 +563,11 @@ pub fn OpEnSolve(
 }
 
 // Main MPC function to be called externally
-pub fn mpc_main(x: &Array1<f64>, U_warm: &mut Vec<Array1<f64>>, xref_traj: &Vec<Array1<f64>>, Q: &Array2<f64>, R: &Array2<f64>, QN: &Array2<f64>, u_min: &Array1<f64>, u_max: &Array1<f64>, sqp_iters: usize, alpha_pgd: f64, mass: f64, dt: f64) -> (Vec<Array1<f64>>, Array1<f64>, Array1<f64>) {
-    let (U, _xs) = nmpc_step(x, &U_warm, &xref_traj, &Q, &R, &QN, &u_min, &u_max, sqp_iters, alpha_pgd, mass, dt);
+pub fn mpc_main(x: &Array1<f64>, U_warm: &mut Vec<Array1<f64>>, xref_traj: &Vec<Array1<f64>>, Q: &Array2<f64>, R: &Array2<f64>, QN: &Array2<f64>, u_min: &Array1<f64>, u_max: &Array1<f64>, sqp_iters: usize, alpha_pgd: f64, mass: f64, moi: &Array2<f64>, dt: f64) -> (Vec<Array1<f64>>, Array1<f64>, Array1<f64>) {
+    let (U, _xs) = nmpc_step(x, &U_warm, &xref_traj, &Q, &R, &QN, &u_min, &u_max, sqp_iters, alpha_pgd, mass, moi, dt);
     let u_apply = U[0].clone(); // apply first control
 
-    let x_new = dynamics(x, &u_apply, mass, dt);
+    let x_new = dynamics(x, &u_apply, mass, moi, dt);
     *U_warm = U[1..].to_vec(); // shift warm start
     U_warm.push(U_warm.last().unwrap().clone()); // repeat last control for warm start
 
