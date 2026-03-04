@@ -275,7 +275,7 @@ impl Rocket {
         let slosh_force_world = self.attitude.transform_vector(&slosh_force);
         let body_vel = self.attitude.transform_vector(&self.velocity);
         let drag = 0.5 * 1.225 * Vector3::new(body_vel.x.powi(2) * 2.0 * 1.2, body_vel.y.powi(2) * 2.0 * 1.2, body_vel.z.powi(2) * 0.85 * 0.25);
-        let total_force = outside_forces + (gravity * mass) + self.thrust_vector + slosh_force_world + drag;
+        let total_force = outside_forces + (gravity * mass) + self.thrust_vector + slosh_force_world - drag;
         self.debug_info.total_force = total_force;
         self.debug_info.thrusts.push(tvc_effect.thrust);
         self.debug_info.slosh_forces.push(slosh_force);

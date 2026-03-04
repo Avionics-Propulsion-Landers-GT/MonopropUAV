@@ -104,7 +104,7 @@ impl MPC {
 
             // Solve MPC to get optimal control sequence
             // solve using OpEn
-            let (mut u_apply, u_warm) = mpc_crate::OpEnSolve(&x, &u_warm, &xref_traj_k, &self.q, &self.r, &self.qn, &self.smoothing_weight, &mut panoc_cache, mass, self.min_thrust, self.max_thrust, self.gimbal_limit);
+            let (mut u_apply, u_warm) = mpc_crate::OpEnSolve(&x, &u_warm, &xref_traj_k, &self.q, &self.r, &self.qn, &self.smoothing_weight, &mut panoc_cache, mass, self.min_thrust, self.max_thrust, self.gimbal_limit, self.dt);
 
             // exponential filter
             if k >= 1 {
