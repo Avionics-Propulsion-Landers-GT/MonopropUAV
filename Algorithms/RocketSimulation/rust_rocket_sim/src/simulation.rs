@@ -117,8 +117,8 @@ impl Simulation {
         }
 
         // TODO: get xref_traj and uref_traj in a way that allows for hovering (i.e. automatically toggling lossless usage on/off, will likely need to set up trajectory state machine)
-        let mut xref_traj;
-        let mut uref_traj;
+        let xref_traj;
+        let uref_traj;
         (xref_traj, uref_traj) = self.get_ref_traj();
 
         let mut control_input = Vector4::new(0.0, 0.0, 0.0, 0.0);
@@ -219,11 +219,11 @@ impl Simulation {
     }
 
     pub fn get_ref_traj(&mut self) -> (Vec<Array1<f64>>, Vec<Array1<f64>>) {
-        let mut xref_traj;
-        let mut uref_traj;
+        let xref_traj;
+        let uref_traj;
 
         if self.traj_stage == 0 {
-            let mut trajectory = self.lossless.update([self.rocket.position.x, self.rocket.position.y, self.rocket.position.z], [self.rocket.velocity.x, self.rocket.velocity.y, self.rocket.velocity.z], [0.0, 0.0, 50.0], self.rocket.get_mass() - self.rocket.get_dry_mass(), self.current_time);
+            let trajectory = self.lossless.update([self.rocket.position.x, self.rocket.position.y, self.rocket.position.z], [self.rocket.velocity.x, self.rocket.velocity.y, self.rocket.velocity.z], [0.0, 0.0, 50.0], self.rocket.get_mass() - self.rocket.get_dry_mass(), self.current_time);
             (xref_traj, uref_traj) = self.get_mpc_reference(&trajectory, self.current_time - self.lossless.last_solve_time, self.rocket.attitude, self.mpc.min_thrust, self.mpc.dt, self.lossless.fine_delta_t, self.mpc.n_steps + 1);
             if self.rocket.position.z >= 45.0 {
                 self.traj_stage = 1;
@@ -305,7 +305,7 @@ impl Simulation {
             // if self.rocket.velocity.norm() >= 5.0 {
             //     self.lossless.max_velocity = self.rocket.velocity.norm() * 1.25;
             // }
-            let mut trajectory = self.lossless.update([self.rocket.position.x, self.rocket.position.y, self.rocket.position.z], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], self.rocket.get_mass() - self.rocket.get_dry_mass(), self.current_time);
+            let trajectory = self.lossless.update([self.rocket.position.x, self.rocket.position.y, self.rocket.position.z], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], self.rocket.get_mass() - self.rocket.get_dry_mass(), self.current_time);
             (xref_traj, uref_traj) = self.get_mpc_reference(&trajectory, self.current_time - self.lossless.last_solve_time, self.rocket.attitude, self.mpc.max_thrust, self.mpc.dt, self.lossless.fine_delta_t, self.mpc.n_steps + 1);
             if self.traj_timer > 20.0 {
                 self.traj_stage = -1;
@@ -385,8 +385,8 @@ impl Simulation {
         let x_actuator = TVCActuator::new(actuator_start_position, actuator_extension_limit, acuator_unloaded_speed, actuator_stall_force, actuator_p_gain, actuator_pos_noise_sigma, actuator_update_rate);
         let y_actuator = TVCActuator::new(actuator_start_position, actuator_extension_limit, acuator_unloaded_speed, actuator_stall_force, actuator_p_gain, actuator_pos_noise_sigma, actuator_update_rate);
         
-        let tvc_actuator_lever_arm = 0.15;
-        let tvc_max_fuel_inertia = 10.0;
+        let tvc_actuator_lever_arm = 0.1;
+        // TODO: Whenever properly implementing TVC, fix these values
         let tvc_max_fuel_inertia = 3.0;
         let tvc_min_fuel_inertia = 8.0;
         let tvc = TVC::new(mtv, x_actuator, y_actuator, tvc_actuator_lever_arm, frame_com_to_gimbal, tvc_max_fuel_inertia, tvc_min_fuel_inertia, starting_fuel_grain_mass);

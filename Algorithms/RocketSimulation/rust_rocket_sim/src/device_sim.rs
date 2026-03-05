@@ -77,7 +77,7 @@ impl IMU {
         // Add Bias + Noise
         let measured_accel = proper_accel_body 
             + self.accel_offset 
-            + noise_3D(&self.accel_noise_sigma, &mut rng);
+            + noise_3_d(&self.accel_noise_sigma, &mut rng);
 
 
         // 2. GYROSCOPE
@@ -87,7 +87,7 @@ impl IMU {
 
         let measured_gyro = ang_vel_body 
             + self.gyro_drift 
-            + noise_3D(&self.gyro_noise_sigma, &mut rng);
+            + noise_3_d(&self.gyro_noise_sigma, &mut rng);
 
 
         // 3. MAGNETOMETER
@@ -96,7 +96,7 @@ impl IMU {
         
         let measured_mag = mag_body 
             + self.mag_offset 
-            + noise_3D(&self.mag_noise_sigma, &mut rng);
+            + noise_3_d(&self.mag_noise_sigma, &mut rng);
 
         self.last_reading = IMUReading {
             accel: measured_accel,
@@ -147,7 +147,7 @@ impl GPS {
 
         let mut rng = rand::rng();
 
-        let noisy_position = position + self.pos_offset + noise_3D(&self.pos_noise_sigma, &mut rng);
+        let noisy_position = position + self.pos_offset + noise_3_d(&self.pos_noise_sigma, &mut rng);
 
         self.last_reading = GPSReading {
             position: noisy_position,
@@ -204,7 +204,7 @@ impl UWB {
         } else {
             let mut rng = rand::rng();
 
-            let noisy_position = position + self.pos_offset + noise_3D(&self.pos_noise_sigma, &mut rng);
+            let noisy_position = position + self.pos_offset + noise_3_d(&self.pos_noise_sigma, &mut rng);
 
             self.last_reading = UWBReading {
                 position: noisy_position,
@@ -280,7 +280,7 @@ impl TVCActuator {
 
     pub fn get_noisy_position(&self) -> f64 {
         let mut rng = rand::rng();
-        self.position + noise_1D(self.pos_noise_sigma, &mut rng)
+        self.position + noise_1_d(self.pos_noise_sigma, &mut rng)
     }
 }
 
@@ -411,6 +411,7 @@ impl MTV {
     }
 }
 
+// TODO: Refine the inertia calculations/usage
 #[derive(Debug, Clone)]
 pub struct TVC {
     pub mtv: MTV,
@@ -589,7 +590,7 @@ impl RCS {
 }
 
 // Helper to generate 3D noise
-fn noise_3D(sigma: &Vector3<f64>, rng: &mut ThreadRng) -> Vector3<f64> {
+fn noise_3_d(sigma: &Vector3<f64>, rng: &mut ThreadRng) -> Vector3<f64> {
     let n_x = Normal::new(0.0, sigma.x).unwrap().sample(rng);
     let n_y = Normal::new(0.0, sigma.y).unwrap().sample(rng);
     let n_z = Normal::new(0.0, sigma.z).unwrap().sample(rng);
@@ -597,6 +598,6 @@ fn noise_3D(sigma: &Vector3<f64>, rng: &mut ThreadRng) -> Vector3<f64> {
 }
 
 // Helper to generate 3D noise
-fn noise_1D(sigma: f64, rng: &mut ThreadRng) -> f64 {
+fn noise_1_d(sigma: f64, rng: &mut ThreadRng) -> f64 {
     Normal::new(0.0, sigma).unwrap().sample(rng)
 }

@@ -64,13 +64,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let cos_theta = world_z_axis.z;
         
         // Clamp to avoid precision errors leading to NaN in acos
-        cos_theta.clamp(-1.0, 1.0).acos();
+        let _ = cos_theta.clamp(-1.0, 1.0).acos();
         if cos_theta < 0.965925826289{
             has_exceeded_angle = true;
         }
         
-        let mut xref_traj;
-        let mut uref_traj;
+        let xref_traj;
+        let uref_traj;
         if at_hover == -1 {
             let mut trajectory  = lossless.update([rocket.position.x, rocket.position.y, rocket.position.z], [rocket.velocity.x, rocket.velocity.y, rocket.velocity.z], [0.0, 0.0, 50.0], mass - rocket.get_dry_mass(), current_time);
             (xref_traj, uref_traj) = get_mpc_reference(&trajectory, current_time - lossless.last_solve_time, rocket.attitude, mpc.min_thrust, mpc.dt, lossless.fine_delta_t, mpc.n_steps + 1);
@@ -240,7 +240,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // std::thread::sleep(std::time::Duration::from_millis(20)); // Sleep to simulate real-time progression
     }
 
-    rocket.save_debug_to_csv("simulation.csv");
+    let _ = rocket.save_debug_to_csv("simulation.csv");
 
     println!("Nitrogen mass: {}", rocket.nitrogen_mass);
     println!("Pressurizing nitrogen mass: {}", rocket.pressurizing_nitrogen_mass);
