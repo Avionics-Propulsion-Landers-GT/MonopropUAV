@@ -3,6 +3,7 @@ mod device_sim;
 mod algorithms;
 mod sloshing_sim;
 mod fluid_dynamics;
+mod simulation;
 use crate::rocket_dynamics::*;
 use crate::device_sim::*;
 use crate::algorithms::*;
@@ -304,14 +305,14 @@ fn get_rocket() -> Rocket {
     let mtv = MTV::new(mtv_angle, mtv_ang_vel, mtv_ang_accel, mtv_unloaded_speed, mtv_stall_torque, mtv_p_gain, mtv_valve_torque, starting_fuel_grain_mass, mtv_update_rate);
 
     let actuator_start_position = 0.0;
-    let actuator_extension_limit = 0.3;
-    let acuator_unloaded_speed = 2.0;
-    let actuator_stall_torque = 300.0;
+    let actuator_extension_limit = 0.08;
+    let acuator_unloaded_speed = 0.14986;
+    let actuator_stall_force = 102.06;
     let actuator_p_gain = 10.0;
     let actuator_pos_noise_sigma = 0.0;
     let actuator_update_rate = 200.0;
-    let x_actuator = TVCActuator::new(actuator_start_position, actuator_extension_limit, acuator_unloaded_speed, actuator_stall_torque, actuator_p_gain, actuator_pos_noise_sigma, actuator_update_rate);
-    let y_actuator = TVCActuator::new(actuator_start_position, actuator_extension_limit, acuator_unloaded_speed, actuator_stall_torque, actuator_p_gain, actuator_pos_noise_sigma, actuator_update_rate);
+    let x_actuator = TVCActuator::new(actuator_start_position, actuator_extension_limit, acuator_unloaded_speed, actuator_stall_force, actuator_p_gain, actuator_pos_noise_sigma, actuator_update_rate);
+    let y_actuator = TVCActuator::new(actuator_start_position, actuator_extension_limit, acuator_unloaded_speed, actuator_stall_force, actuator_p_gain, actuator_pos_noise_sigma, actuator_update_rate);
     
     let tvc_actuator_lever_arm = 0.15;
     let tvc_max_fuel_inertia = 10.0;

@@ -1,8 +1,3 @@
-mod rocket_dynamics;
-mod device_sim;
-mod algorithms;
-mod sloshing_sim;
-mod fluid_dynamics;
 use crate::rocket_dynamics::*;
 use crate::device_sim::*;
 use crate::algorithms::*;
@@ -11,7 +6,7 @@ use crate::fluid_dynamics::*;
 use nalgebra::{Matrix3, Vector3, Vector4, UnitQuaternion};
 use ndarray::{Array1, Array2};
 
-#[derive(Clone, Debug, Default)]
+#[derive(Debug)]
 pub struct Simulation {
     pub rocket: Rocket,
     pub mpc: MPC,
@@ -20,8 +15,12 @@ pub struct Simulation {
     pub current_time: f64,
     pub has_exceeded_angle: bool,
     pub min_time: f64,
-    pub traj_stage: i64,
-    pub traj_timer: f64
+    pub traj_stage: i32,
+    pub traj_timer: f64,
+    pub start_state: String,
+    pub end_state: String,
+    pub end_stage: i32,
+    pub rec: Option<rerun::RecordingStream>,
 }
 
 impl Default for Simulation {
@@ -36,15 +35,33 @@ impl Default for Simulation {
             min_time: 10.0,
             traj_stage: 0,
             traj_timer: 0.0,
+            start_state: "ascent".to_string(),
+            end_state: "none".to_string(),
+            end_stage: 0,
+            rec: None,
         }
     }
 }
 
 impl Simulation {
-    pub fn new() -> Self {
-        Self {
+    pub fn new(rocket: Rocket, mpc: MPC, lossless: Lossless, current_time: f64, debug: bool, has_exceeded_angle: bool, min_time: f64, traj_stage: i32, traj_timer: f64, start_state: String, end_state: String) -> Self {
+        let mut simulation = Self {
+            rocket,
+            mpc,
+            lossless,
+            current_time,
+            debug,
+            has_exceeded_angle,
+            min_time,
+            traj_stage,
+            traj_timer,
+            start_state,
+            end_state,
+            end_stage: 0,
+            rec: None,
+        };
 
-        }
+        simulation
     }
 
     pub fn init(&mut self) {
@@ -53,15 +70,18 @@ impl Simulation {
 
             // FIX: Use .connect_grpc() as the compiler suggested.
             // This connects to the 'rerun --web-viewer' running in your other terminal.
-            let rec = rerun::RecordingStreamBuilder::new("rocket_sim")
-                .connect_grpc()?; 
+            self.rec = Some(
+                rerun::RecordingStreamBuilder::new("rocket_sim")
+                    .connect_grpc()
+                    .expect("🚨 FATAL: Failed to connect to the Rerun viewer!")
+            );
 
             println!("Connected! Sending data...");
 
             // --- The Rest of Your Simulation Code ---
             
             // 1. Ground
-            rec.log(
+            let _ = self.rec.as_ref().unwrap().log(
                 "world/ground",
                 &rerun::Boxes3D::from_centers_and_half_sizes(
                     [(0.0, 0.0, -0.05)], // Center: Shift down slightly so y=0 is the top surface
@@ -69,29 +89,43 @@ impl Simulation {
                 )
                 .with_colors([rerun::Color::from_rgb(40, 40, 40)]) // Dark Grey
                 .with_fill_mode(rerun::FillMode::Solid), // Make it solid, not wireframe
-            )?;
+            );
         }
 
         self.has_exceeded_angle = false;
+        
+        match &self.end_state {
+            val if *val == "ascent".to_string() => self.end_stage = 0,
+            val if *val == "hover".to_string() => self.end_stage = 1,
+            val if *val == "descent".to_string() => self.end_stage = 2,
+            _ => self.end_stage = -1,
+        }
     }
 
-    pub fn step(&mut self, dt: f64) -> bool {let mass = rocket.get_mass();
-        let mass = rocket.get_mass();
+    pub fn step(&mut self, dt: f64) -> bool {
+        if self.traj_stage == self.end_stage {
+            return false;
+        }
 
-        let world_z_axis = rocket.attitude * Vector3::z();
+        let mass = self.rocket.get_mass();
+
+        let world_z_axis = self.rocket.attitude * Vector3::z();
         let cos_theta = world_z_axis.z;
-        cos_theta.clamp(-1.0, 1.0).acos();
+        let _ = cos_theta.clamp(-1.0, 1.0).acos();
         if cos_theta < 0.965925826289{
-            has_exceeded_angle = true;
+            self.has_exceeded_angle = true;
         }
 
         // TODO: get xref_traj and uref_traj in a way that allows for hovering (i.e. automatically toggling lossless usage on/off, will likely need to set up trajectory state machine)
+        let mut xref_traj;
+        let mut uref_traj;
+        (xref_traj, uref_traj) = self.get_ref_traj();
 
         let mut control_input = Vector4::new(0.0, 0.0, 0.0, 0.0);
         let mut outside_forces = Vector3::new(0.0, 0.0, 0.0);
         let mut outside_torques = Vector3::new(0.0, 0.0, 0.0);
 
-        let control_sequence = self.mpc.update(&self.rocket.get_state(), &xref_traj, &uref_traj, mass, &rocket.get_moi_mpc(), self.current_time); // Placeholder reference trajectory and warm start
+        let control_sequence = self.mpc.update(&self.rocket.get_state(), &xref_traj, &uref_traj, mass, &self.rocket.get_moi_mpc(), self.current_time); // Placeholder reference trajectory and warm start
         
         let last_solve_time = self.mpc.last_solve_time;// 1. Calculate the fractional progress between MPC steps (0.0 to 1.0)
         let time_since_mpc_solve = self.current_time - self.mpc.last_solve_time;
@@ -113,73 +147,178 @@ impl Simulation {
 
         let control_input = Vector4::new(current_control[0], current_control[1], current_control[2], 0.0); // Convert first control input to Vector4 (assuming the 4th component is not used for now)
 
-        if !rocket.step(control_input, outside_forces, outside_torques, dt) && current_time > min_time {
+        if !self.rocket.step(control_input, outside_forces, outside_torques, dt) && self.current_time > self.min_time {
             return false;
         }
         
         if self.debug {
             println!("XREF_TRAJ{:?}", xref_traj);
-            println!("Rocket State: {:?}", rocket.get_state());
+            println!("Rocket State: {:?}", self.rocket.get_state());
             println!("Rocket Mass: {}", mass);
             println!("Control Input: {:?}", control_input);
-            println!("Total Force: {:?}", rocket.debug_info.total_force);
-            println!("Thrust Vector: {:?}", rocket.thrust_vector);
+            println!("Total Force: {:?}", self.rocket.debug_info.total_force);
+            println!("Thrust Vector: {:?}", self.rocket.thrust_vector);
 
             // Log Vehicle
-            let normalized_thrust_vector = rocket.thrust_vector / 1000.0; // Scale for visualization
+            let normalized_thrust_vector = self.rocket.thrust_vector / 1000.0; // Scale for visualization
             let rocket_color;
-            if has_exceeded_angle {
+            if self.has_exceeded_angle {
                 rocket_color = rerun::Color::from_rgb(255, 0, 0);
             } else {
                 rocket_color = rerun::Color::from_rgb(0, 255, 0);
             }
-            let rotated_offset = rocket.attitude.transform_vector(&rocket.com_to_ground);
-            rec.log(
+            let rotated_offset = self.rocket.attitude.transform_vector(&self.rocket.com_to_ground);
+            let _ = self.rec.as_ref().unwrap().log(
                 "world/rocket",
                 &rerun::Arrows3D::from_vectors([((-2.0 * rotated_offset.x) as f32, (-2.0 * rotated_offset.y) as f32, (-2.0 * rotated_offset.z) as f32)])
-                    .with_origins([[(rocket.position.x+rotated_offset.x) as f32, (rocket.position.y+rotated_offset.y) as f32, (rocket.position.z+rotated_offset.z) as f32]])
+                    .with_origins([[(self.rocket.position.x+rotated_offset.x) as f32, (self.rocket.position.y+rotated_offset.y) as f32, (self.rocket.position.z+rotated_offset.z) as f32]])
                     .with_colors([rocket_color]) 
-            )?;
+            );
 
             // Log Thrust Vector
-            rec.log(
+            let _ = self.rec.as_ref().unwrap().log(
                 "world/thrust_vector",
                 &rerun::Arrows3D::from_vectors([((normalized_thrust_vector.x) as f32, (normalized_thrust_vector.y) as f32, (normalized_thrust_vector.z) as f32)])
-                    .with_origins([[(rocket.position.x+rotated_offset.x) as f32, (rocket.position.y+rotated_offset.y) as f32, (rocket.position.z+rotated_offset.z) as f32]])
+                    .with_origins([[(self.rocket.position.x+rotated_offset.x) as f32, (self.rocket.position.y+rotated_offset.y) as f32, (self.rocket.position.z+rotated_offset.z) as f32]])
                     .with_colors([rerun::Color::from_rgb(0, 0, 255)]) 
-            )?;
+            );
 
             // Log the rocket's position for visualization
-            rec.log(
+            let _ = self.rec.as_ref().unwrap().log(
                 "world/rocket",
-                &rerun::Points3D::new([(rocket.position.x as f32, rocket.position.y as f32, rocket.position.z as f32)])
+                &rerun::Points3D::new([(self.rocket.position.x as f32, self.rocket.position.y as f32, self.rocket.position.z as f32)])
                     .with_colors([rocket_color]) // Red color for the rocket
                     .with_radii([0.1]) // Size of the point representing the rocket
-            )?;
+            );
 
             // Log the rocket's position for visualization
-            rec.log(
+            let _ = self.rec.as_ref().unwrap().log(
                 "world/timer",
-                &rerun::Points3D::new([(current_time as f32, 0.0, 0.0)])
+                &rerun::Points3D::new([(self.current_time as f32, 0.0, 0.0)])
                     .with_colors([rerun::Color::from_rgb(0, 255, 0)]) // Green color for the timer
                     .with_radii([0.1]) // Size of the point representing the timer
-            )?;
+            );
         }
 
-        current_time += dt;
+        self.current_time += dt;
+
+        true
     }
 
     pub fn finish_sim(&mut self) -> (bool, Array1<f64>) {
         if self.debug {
-            rocket.save_debug_to_csv("simulation.csv");
+            let _ = self.rocket.save_debug_to_csv("simulation.csv");
 
-            println!("Nitrogen mass: {}", rocket.nitrogen_mass);
-            println!("Pressurizing nitrogen mass: {}", rocket.pressurizing_nitrogen_mass);
-            println!("Nitrous mass: {}", rocket.nitrous_mass);
-            println!("Fuel grain mass: {}", rocket.fuel_grain_mass);
+            println!("Nitrogen mass: {}", self.rocket.nitrogen_mass);
+            println!("Pressurizing nitrogen mass: {}", self.rocket.pressurizing_nitrogen_mass);
+            println!("Nitrous mass: {}", self.rocket.nitrous_mass);
+            println!("Fuel grain mass: {}", self.rocket.fuel_grain_mass);
         }
 
-        return (self.has_exceeded_angle, rocket.get_state())
+        return (self.has_exceeded_angle, self.rocket.get_state())
+    }
+
+    pub fn get_ref_traj(&mut self) -> (Vec<Array1<f64>>, Vec<Array1<f64>>) {
+        let mut xref_traj;
+        let mut uref_traj;
+
+        if self.traj_stage == 0 {
+            let mut trajectory = self.lossless.update([self.rocket.position.x, self.rocket.position.y, self.rocket.position.z], [self.rocket.velocity.x, self.rocket.velocity.y, self.rocket.velocity.z], [0.0, 0.0, 50.0], self.rocket.get_mass() - self.rocket.get_dry_mass(), self.current_time);
+            (xref_traj, uref_traj) = self.get_mpc_reference(&trajectory, self.current_time - self.lossless.last_solve_time, self.rocket.attitude, self.mpc.min_thrust, self.mpc.dt, self.lossless.fine_delta_t, self.mpc.n_steps + 1);
+            if self.rocket.position.z >= 45.0 {
+                self.traj_stage = 1;
+                self.traj_timer = self.current_time;
+            }
+            // uref_traj = vec![Array1::from(vec![0.0, 0.0, mass * 9.81]); mpc.n_steps]; // Warm start with zero control inputs
+        } else if self.traj_stage == 1 {
+            self.mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
+                40.0, 40.0, 60.0,   // position x, y, z
+                600.0, 600.0, 600.0, 0.0, // quaternion qx, qy, qz, qw
+                30.0, 30.0, 10.0,        // linear velocities x_dot, y_dot, z_dot
+                100.0, 100.0, 100.0          // angular velocities wx, wy, wz
+            ]));
+            self.mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 0.0]));
+            self.mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
+                60.0, 60.0, 80.0,   // position x, y, z
+                1000.0, 1000.0, 1000.0, 0.0, // quaternion qx, qy, qz, qw
+                40.0, 40.0, 60.0,        // linear velocities x_dot, y_dot, z_dot
+                50.0, 50.0, 50.0          // angular velocities wx, wy, wz
+            ]));
+            xref_traj = vec![Array1::from(vec![0.0, 0.0, 50.0, // x, y, z
+                                                0.0, 0.0, 0.0, 1.0, // qx, qy, qz, qw (upright)
+                                                0.0, 0.0, 0.0, // x_dot, y_dot, z_dot
+                                                0.0, 0.0, 0.0]); // wx, wy, wz
+                                                self.mpc.n_steps + 1];
+            uref_traj = vec![Array1::from(vec![0.0, 0.0, self.rocket.get_mass() * 9.81]); self.mpc.n_steps]; // Warm start with zero control inputs
+            if self.current_time - self.traj_timer >= 10.0 {
+                self.traj_stage = 2;
+                self.traj_timer = self.current_time;
+            }
+        } else if self.traj_stage == 2 {
+            if self.rocket.position.z > 10.0 {
+                self.mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
+                    50.0, 50.0, 70.0,   // position x, y, z
+                    150000.0, 150000.0, 150000.0, 0.0, // quaternion qx, qy, qz, qw
+                    30.0, 30.0, 100.0,        // linear velocities x_dot, y_dot, z_dot
+                    500.0, 500.0, 500.0          // angular velocities wx, wy, wz
+                ]));
+                self.mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 1.0]));
+                self.mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
+                    20.0, 20.0, 600.0,   // position x, y, z
+                    175000.0, 175000.0, 175000.0, 0.0, // quaternion qx, qy, qz, qw
+                    30.0, 30.0, 25000.0,        // linear velocities x_dot, y_dot, z_dot
+                    1000.0, 1000.0, 1000.0          // angular velocities wx, wy, wz
+                ]));
+            } else if self.rocket.position.z > 3.0 {
+                self.mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
+                    50.0, 50.0, 70.0,   // position x, y, z
+                    150000.0, 150000.0, 150000.0, 0.0, // quaternion qx, qy, qz, qw
+                    30.0, 30.0, 100.0,        // linear velocities x_dot, y_dot, z_dot
+                    500.0, 500.0, 500.0          // angular velocities wx, wy, wz
+                ]));
+                self.mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 1.0]));
+                self.mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
+                    10000.0, 10000.0, 1000.0,   // position x, y, z
+                    175000.0, 175000.0, 175000.0, 0.0, // quaternion qx, qy, qz, qw
+                    30.0, 30.0, 200000.0,        // linear velocities x_dot, y_dot, z_dot
+                    1000.0, 1000.0, 1000.0          // angular velocities wx, wy, wz
+                ]));
+            } else {
+                self.mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
+                    50.0, 50.0, 70.0,   // position x, y, z
+                    150000.0, 150000.0, 150000.0, 0.0, // quaternion qx, qy, qz, qw
+                    30.0, 30.0, 100.0,        // linear velocities x_dot, y_dot, z_dot
+                    500.0, 500.0, 500.0          // angular velocities wx, wy, wz
+                ]));
+                self.mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 1.0]));
+                self.mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
+                    4000.0, 4000.0, 500.0,   // position x, y, z
+                    175000.0, 175000.0, 175000.0, 0.0, // quaternion qx, qy, qz, qw
+                    30.0, 30.0, 450000.0,        // linear velocities x_dot, y_dot, z_dot
+                    1000.0, 1000.0, 1000.0          // angular velocities wx, wy, wz
+                ]));
+            }
+            self.lossless.lower_thrust_bound = 500.0;
+            self.lossless.flip_glide_slope = false;
+            self.lossless.use_glide_slope = true;
+            self.lossless.max_velocity = 5.0;
+            // if self.rocket.velocity.norm() >= 5.0 {
+            //     self.lossless.max_velocity = self.rocket.velocity.norm() * 1.25;
+            // }
+            let mut trajectory = self.lossless.update([self.rocket.position.x, self.rocket.position.y, self.rocket.position.z], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], self.rocket.get_mass() - self.rocket.get_dry_mass(), self.current_time);
+            (xref_traj, uref_traj) = self.get_mpc_reference(&trajectory, self.current_time - self.lossless.last_solve_time, self.rocket.attitude, self.mpc.max_thrust, self.mpc.dt, self.lossless.fine_delta_t, self.mpc.n_steps + 1);
+            if self.traj_timer > 20.0 {
+                self.traj_stage = -1;
+                self.end_stage = -1;
+            }
+        } else {
+            self.traj_stage = 1;
+            self.traj_timer = self.current_time;
+            self.end_stage = 2;
+            return self.get_ref_traj();
+        }
+
+        (xref_traj, uref_traj)
     }
 
     pub fn get_rocket() -> Rocket {
@@ -237,14 +376,14 @@ impl Simulation {
         let mtv = MTV::new(mtv_angle, mtv_ang_vel, mtv_ang_accel, mtv_unloaded_speed, mtv_stall_torque, mtv_p_gain, mtv_valve_torque, starting_fuel_grain_mass, mtv_update_rate);
 
         let actuator_start_position = 0.0;
-        let actuator_extension_limit = 0.3;
-        let acuator_unloaded_speed = 2.0;
-        let actuator_stall_torque = 300.0;
+        let actuator_extension_limit = 0.08;
+        let acuator_unloaded_speed = 0.14986;
+        let actuator_stall_force = 102.06;
         let actuator_p_gain = 10.0;
         let actuator_pos_noise_sigma = 0.0;
         let actuator_update_rate = 200.0;
-        let x_actuator = TVCActuator::new(actuator_start_position, actuator_extension_limit, acuator_unloaded_speed, actuator_stall_torque, actuator_p_gain, actuator_pos_noise_sigma, actuator_update_rate);
-        let y_actuator = TVCActuator::new(actuator_start_position, actuator_extension_limit, acuator_unloaded_speed, actuator_stall_torque, actuator_p_gain, actuator_pos_noise_sigma, actuator_update_rate);
+        let x_actuator = TVCActuator::new(actuator_start_position, actuator_extension_limit, acuator_unloaded_speed, actuator_stall_force, actuator_p_gain, actuator_pos_noise_sigma, actuator_update_rate);
+        let y_actuator = TVCActuator::new(actuator_start_position, actuator_extension_limit, acuator_unloaded_speed, actuator_stall_force, actuator_p_gain, actuator_pos_noise_sigma, actuator_update_rate);
         
         let tvc_actuator_lever_arm = 0.15;
         let tvc_max_fuel_inertia = 10.0;
@@ -280,7 +419,7 @@ impl Simulation {
         let uwb_update_rate = 5.0;
         let uwb = UWB::new(uwb_position_noise_sigma, uwb_position_offset, uwb_origin, uwb_range, uwb_update_rate);
 
-        let slosh_model = get_slosh_model();
+        let slosh_model = Self::get_slosh_model();
         let nist_data = NistData::new();
         let nitrogen_iso_data = IsoData::new("isobaric_nitrogen.csv");
         let nitrous_iso_data = IsoData::new("isobaric_liquid_nitrous_oxide.csv");
@@ -367,7 +506,7 @@ impl Simulation {
     // TODO: make all the print satements locked behind an if self.debug {} statement
     pub fn get_mpc_reference(
         &mut self,
-        traj: &algorithms::lossless::TrajectoryResult,
+        traj: &lossless::TrajectoryResult,
         current_time: f64,
         initial_attitude: UnitQuaternion<f64>,
         default_thrust: f64,
@@ -467,103 +606,5 @@ impl Simulation {
         println!("UREF_TRAJ: {:?}", uref_traj);
         
         (xref_traj, uref_traj)
-    }
-}
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    loop {
-        // For this example, we'll just keep the control input zero and not apply any outside forces or torques.
-        // In a real simulation, you'd update these based on your control algorithms and environmental effects.
-        
-        
-        let mut xref_traj;
-        let mut uref_traj;
-        if at_hover == -1 {
-            let mut trajectory  = lossless.update([rocket.position.x, rocket.position.y, rocket.position.z], [rocket.velocity.x, rocket.velocity.y, rocket.velocity.z], [0.0, 0.0, 50.0], mass - rocket.get_dry_mass(), current_time);
-            (xref_traj, uref_traj) = get_mpc_reference(&trajectory, current_time - lossless.last_solve_time, rocket.attitude, mpc.min_thrust, mpc.dt, lossless.fine_delta_t, mpc.n_steps + 1);
-            if rocket.position.z >= 45.0 {
-                at_hover = 0;
-                hover_start_time = current_time;
-            }
-            // uref_traj = vec![Array1::from(vec![0.0, 0.0, mass * 9.81]); mpc.n_steps]; // Warm start with zero control inputs
-        } else if at_hover == 0 {
-            mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
-                40.0, 40.0, 60.0,   // position x, y, z
-                600.0, 600.0, 600.0, 0.0, // quaternion qx, qy, qz, qw
-                30.0, 30.0, 10.0,        // linear velocities x_dot, y_dot, z_dot
-                100.0, 100.0, 100.0          // angular velocities wx, wy, wz
-            ]));
-            mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 0.0]));
-            mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
-                60.0, 60.0, 80.0,   // position x, y, z
-                1000.0, 1000.0, 1000.0, 0.0, // quaternion qx, qy, qz, qw
-                40.0, 40.0, 60.0,        // linear velocities x_dot, y_dot, z_dot
-                50.0, 50.0, 50.0          // angular velocities wx, wy, wz
-            ]));
-            xref_traj = vec![Array1::from(vec![0.0, 0.0, 50.0, // x, y, z
-                                                0.0, 0.0, 0.0, 1.0, // qx, qy, qz, qw (upright)
-                                                0.0, 0.0, 0.0, // x_dot, y_dot, z_dot
-                                                0.0, 0.0, 0.0]); // wx, wy, wz
-                                                mpc.n_steps + 1];
-            uref_traj = vec![Array1::from(vec![0.0, 0.0, mass * 9.81]); mpc.n_steps]; // Warm start with zero control inputs
-            if current_time - hover_start_time >= 10.0 {
-                at_hover = 1;
-            }
-        } else {
-            if rocket.position.z > 10.0 {
-                mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
-                    50.0, 50.0, 70.0,   // position x, y, z
-                    150000.0, 150000.0, 150000.0, 0.0, // quaternion qx, qy, qz, qw
-                    30.0, 30.0, 100.0,        // linear velocities x_dot, y_dot, z_dot
-                    500.0, 500.0, 500.0          // angular velocities wx, wy, wz
-                ]));
-                mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 1.0]));
-                mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
-                    20.0, 20.0, 600.0,   // position x, y, z
-                    175000.0, 175000.0, 175000.0, 0.0, // quaternion qx, qy, qz, qw
-                    30.0, 30.0, 25000.0,        // linear velocities x_dot, y_dot, z_dot
-                    1000.0, 1000.0, 1000.0          // angular velocities wx, wy, wz
-                ]));
-            } else if rocket.position.z > 3.0 {
-                mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
-                    50.0, 50.0, 70.0,   // position x, y, z
-                    150000.0, 150000.0, 150000.0, 0.0, // quaternion qx, qy, qz, qw
-                    30.0, 30.0, 100.0,        // linear velocities x_dot, y_dot, z_dot
-                    500.0, 500.0, 500.0          // angular velocities wx, wy, wz
-                ]));
-                mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 1.0]));
-                mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
-                    10000.0, 10000.0, 1000.0,   // position x, y, z
-                    175000.0, 175000.0, 175000.0, 0.0, // quaternion qx, qy, qz, qw
-                    30.0, 30.0, 200000.0,        // linear velocities x_dot, y_dot, z_dot
-                    1000.0, 1000.0, 1000.0          // angular velocities wx, wy, wz
-                ]));
-            } else {
-                mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
-                    50.0, 50.0, 70.0,   // position x, y, z
-                    150000.0, 150000.0, 150000.0, 0.0, // quaternion qx, qy, qz, qw
-                    30.0, 30.0, 100.0,        // linear velocities x_dot, y_dot, z_dot
-                    500.0, 500.0, 500.0          // angular velocities wx, wy, wz
-                ]));
-                mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 1.0]));
-                mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
-                    4000.0, 4000.0, 500.0,   // position x, y, z
-                    175000.0, 175000.0, 175000.0, 0.0, // quaternion qx, qy, qz, qw
-                    30.0, 30.0, 450000.0,        // linear velocities x_dot, y_dot, z_dot
-                    1000.0, 1000.0, 1000.0          // angular velocities wx, wy, wz
-                ]));
-            }
-            lossless.lower_thrust_bound = 500.0;
-            lossless.flip_glide_slope = false;
-            lossless.use_glide_slope = true;
-            lossless.max_velocity = 5.0;
-            // if rocket.velocity.norm() >= 5.0 {
-            //     lossless.max_velocity = rocket.velocity.norm() * 1.25;
-            // }
-            let mut trajectory = lossless.update([rocket.position.x, rocket.position.y, rocket.position.z], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], mass - rocket.get_dry_mass(), current_time);
-            (xref_traj, uref_traj) = get_mpc_reference(&trajectory, current_time - lossless.last_solve_time, rocket.attitude, mpc.max_thrust, mpc.dt, lossless.fine_delta_t, mpc.n_steps + 1);
-        }
-
-        // std::thread::sleep(std::time::Duration::from_millis(20)); // Sleep to simulate real-time progression
     }
 }
