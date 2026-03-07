@@ -241,19 +241,19 @@ impl Simulation {
             // uref_traj = vec![Array1::from(vec![0.0, 0.0, mass * 9.81]); mpc.n_steps]; // Warm start with zero control inputs
         } else if self.traj_stage == 1 {
             self.mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
-                80.0, 80.0, 100.0,   // position x, y, z
+                100.0, 100.0, 120.0,   // position x, y, z
                 600000.0, 600000.0, 600000.0, 0.0, // quaternion qx, qy, qz, qw
                 30.0, 30.0, 10.0,        // linear velocities x_dot, y_dot, z_dot
                 100.0, 100.0, 100.0          // angular velocities wx, wy, wz
             ]));
             self.mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 1.0]));
             self.mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
-                85.0, 85.0, 100.0,   // position x, y, z
+                100.0, 100.0, 150.0,   // position x, y, z
                 1000000.0, 1000000.0, 1000000.0, 0.0, // quaternion qx, qy, qz, qw
                 40.0, 40.0, 60.0,        // linear velocities x_dot, y_dot, z_dot
                 50.0, 50.0, 50.0          // angular velocities wx, wy, wz
             ]));
-            xref_traj = vec![Array1::from(vec![0.0, 0.0, 50.0, // x, y, z
+            xref_traj = vec![Array1::from(vec![0.0, 0.0, 10.0, // x, y, z
                                                 0.0, 0.0, 0.0, 1.0, // qx, qy, qz, qw (upright)
                                                 0.0, 0.0, 0.0, // x_dot, y_dot, z_dot
                                                 0.0, 0.0, 0.0]); // wx, wy, wz
@@ -264,49 +264,68 @@ impl Simulation {
                 self.traj_timer = self.current_time;
             }
         } else if self.traj_stage == 2 {
-            if self.rocket.position.z > 10.0 {
-                self.mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
-                    50.0, 50.0, 70.0,   // position x, y, z
-                    150000.0, 150000.0, 150000.0, 0.0, // quaternion qx, qy, qz, qw
-                    30.0, 30.0, 100.0,        // linear velocities x_dot, y_dot, z_dot
-                    500.0, 500.0, 500.0          // angular velocities wx, wy, wz
-                ]));
-                self.mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 1.0]));
-                self.mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
-                    20.0, 20.0, 600.0,   // position x, y, z
-                    175000.0, 175000.0, 175000.0, 0.0, // quaternion qx, qy, qz, qw
-                    30.0, 30.0, 25000.0,        // linear velocities x_dot, y_dot, z_dot
-                    1000.0, 1000.0, 1000.0          // angular velocities wx, wy, wz
-                ]));
-            } else if self.rocket.position.z > 3.0 {
-                self.mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
-                    50.0, 50.0, 70.0,   // position x, y, z
-                    150000.0, 150000.0, 150000.0, 0.0, // quaternion qx, qy, qz, qw
-                    30.0, 30.0, 100.0,        // linear velocities x_dot, y_dot, z_dot
-                    500.0, 500.0, 500.0          // angular velocities wx, wy, wz
-                ]));
-                self.mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 1.0]));
-                self.mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
-                    10000.0, 10000.0, 1000.0,   // position x, y, z
-                    175000.0, 175000.0, 175000.0, 0.0, // quaternion qx, qy, qz, qw
-                    30.0, 30.0, 200000.0,        // linear velocities x_dot, y_dot, z_dot
-                    1000.0, 1000.0, 1000.0          // angular velocities wx, wy, wz
-                ]));
-            } else {
-                self.mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
-                    50.0, 50.0, 70.0,   // position x, y, z
-                    150000.0, 150000.0, 150000.0, 0.0, // quaternion qx, qy, qz, qw
-                    30.0, 30.0, 100.0,        // linear velocities x_dot, y_dot, z_dot
-                    500.0, 500.0, 500.0          // angular velocities wx, wy, wz
-                ]));
-                self.mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 1.0]));
-                self.mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
-                    4000.0, 4000.0, 500.0,   // position x, y, z
-                    175000.0, 175000.0, 175000.0, 0.0, // quaternion qx, qy, qz, qw
-                    30.0, 30.0, 450000.0,        // linear velocities x_dot, y_dot, z_dot
-                    1000.0, 1000.0, 1000.0          // angular velocities wx, wy, wz
-                ]));
-            }
+            // 1. Stage Cost (Q) - Massive penalty for Z errors
+            self.mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
+                150.0, 150.0, 1500.0,  // Stiffened Z-Position spring (from 40.0 to 1500.0)
+                400000.0, 400000.0, 400000.0, 0.0,
+                100.0, 100.0, 2500.0,  // Stiffened Z-Velocity damper (from 300.0 to 2500.0)
+                500.0, 500.0, 500.0   
+            ]));
+
+            // 2. Control Cost (R) - Remove the fear of using the throttle!
+            // Gimbal X/Y stay at 50 (because radians are tiny numbers), Thrust drops to 0.005!
+            self.mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 0.005]));
+
+            // 3. Terminal Cost (QN) - Land softly!
+            self.mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
+                150.0, 150.0, 5000.0, 
+                500000.0, 500000.0, 500000.0, 0.0,
+                100.0, 100.0, 8000.0, 
+                1000.0, 1000.0, 1000.0 
+            ]));
+            // if self.rocket.position.z > 10.0 {
+            //     self.mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
+            //         50.0, 50.0, 70.0,   // position x, y, z
+            //         150000.0, 150000.0, 150000.0, 0.0, // quaternion qx, qy, qz, qw
+            //         30.0, 30.0, 100.0,        // linear velocities x_dot, y_dot, z_dot
+            //         500.0, 500.0, 500.0          // angular velocities wx, wy, wz
+            //     ]));
+            //     self.mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 1.0]));
+            //     self.mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
+            //         20.0, 20.0, 600.0,   // position x, y, z
+            //         175000.0, 175000.0, 175000.0, 0.0, // quaternion qx, qy, qz, qw
+            //         30.0, 30.0, 25000.0,        // linear velocities x_dot, y_dot, z_dot
+            //         1000.0, 1000.0, 1000.0          // angular velocities wx, wy, wz
+            //     ]));
+            // } else if self.rocket.position.z > 3.0 {
+            //     self.mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
+            //         50.0, 50.0, 70.0,   // position x, y, z
+            //         150000.0, 150000.0, 150000.0, 0.0, // quaternion qx, qy, qz, qw
+            //         30.0, 30.0, 100.0,        // linear velocities x_dot, y_dot, z_dot
+            //         500.0, 500.0, 500.0          // angular velocities wx, wy, wz
+            //     ]));
+            //     self.mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 1.0]));
+            //     self.mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
+            //         10000.0, 10000.0, 1000.0,   // position x, y, z
+            //         175000.0, 175000.0, 175000.0, 0.0, // quaternion qx, qy, qz, qw
+            //         30.0, 30.0, 200000.0,        // linear velocities x_dot, y_dot, z_dot
+            //         1000.0, 1000.0, 1000.0          // angular velocities wx, wy, wz
+            //     ]));
+            // } else {
+            //     self.mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
+            //         50.0, 50.0, 70.0,   // position x, y, z
+            //         150000.0, 150000.0, 150000.0, 0.0, // quaternion qx, qy, qz, qw
+            //         30.0, 30.0, 100.0,        // linear velocities x_dot, y_dot, z_dot
+            //         500.0, 500.0, 500.0          // angular velocities wx, wy, wz
+            //     ]));
+            //     self.mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 1.0]));
+            //     self.mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
+            //         4000.0, 4000.0, 500.0,   // position x, y, z
+            //         175000.0, 175000.0, 175000.0, 0.0, // quaternion qx, qy, qz, qw
+            //         30.0, 30.0, 450000.0,        // linear velocities x_dot, y_dot, z_dot
+            //         1000.0, 1000.0, 1000.0          // angular velocities wx, wy, wz
+            //     ]));
+            // }
             self.lossless.lower_thrust_bound = 500.0;
             self.lossless.flip_glide_slope = false;
             self.lossless.use_glide_slope = true;
@@ -448,19 +467,19 @@ impl Simulation {
         let n = 13; // [x, y, z, qx, qy, qz, qw, x_dot, y_dot, z_dot, wx, wy, wz]
         let m = 3;  // [gimbal_theta, gimbal_phi, thrust]
         let n_steps = 10;
-        let dt = 0.8;
+        let dt = 0.2;
         // let integral_gains = (0.001, 0.001, 0.002);
         let integral_gains = (0.0, 0.0, 0.0);
         let q = Array2::<f64>::from_diag(&Array1::from(vec![
-            20.0, 20.0, 70.0,   // position x, y, z
-            6000.0, 6000.0, 6000.0, 0.0, // quaternion qx, qy, qz, qw
+            60.0, 60.0, 80.0,   // position x, y, z
+            60000.0, 60000.0, 60000.0, 0.0, // quaternion qx, qy, qz, qw
             30.0, 30.0, 12000.0,        // linear velocities x_dot, y_dot, z_dot
             100.0, 100.0, 100.0          // angular velocities wx, wy, wz
         ]));
         let r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 1.0]));
         let qn = Array2::<f64>::from_diag(&Array1::from(vec![
-            40.0, 40.0, 80.0,   // position x, y, z
-            10000.0, 10000.0, 10000.0, 0.0, // quaternion qx, qy, qz, qw
+            60.0, 60.0, 80.0,   // position x, y, z
+            100000.0, 100000.0, 100000.0, 0.0, // quaternion qx, qy, qz, qw
             20.0, 20.0, 50000.0,        // linear velocities x_dot, y_dot, z_dot
             50.0, 50.0, 50.0          // angular velocities wx, wy, wz
         ]));
