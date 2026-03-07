@@ -12,6 +12,7 @@ pub struct Simulation {
     pub mpc: MPC,
     pub lossless: Lossless,
     pub debug: bool,
+    pub dt: f64,
     pub current_time: f64,
     pub has_exceeded_angle: bool,
     pub min_time: f64,
@@ -29,6 +30,7 @@ impl Default for Simulation {
             rocket: Self::get_rocket(),
             mpc: Self::get_mpc(),
             lossless: Self::get_lossless(),
+            dt: 0.02,
             current_time: 0.0,
             debug: false,
             has_exceeded_angle: false,
@@ -44,11 +46,12 @@ impl Default for Simulation {
 }
 
 impl Simulation {
-    pub fn new(rocket: Rocket, mpc: MPC, lossless: Lossless, current_time: f64, debug: bool, has_exceeded_angle: bool, min_time: f64, traj_stage: i32, traj_timer: f64, start_state: String, end_state: String) -> Self {
+    pub fn new(rocket: Rocket, mpc: MPC, lossless: Lossless, dt: f64, current_time: f64, debug: bool, has_exceeded_angle: bool, min_time: f64, traj_stage: i32, traj_timer: f64, start_state: String, end_state: String) -> Self {
         let mut simulation = Self {
             rocket,
             mpc,
             lossless,
+            dt,
             current_time,
             debug,
             has_exceeded_angle,
@@ -94,6 +97,12 @@ impl Simulation {
 
         self.has_exceeded_angle = false;
         
+        match &self.start_state {
+            val if *val == "ascent".to_string() => self.traj_stage = 0,
+            val if *val == "hover".to_string() => self.traj_stage = 1,
+            val if *val == "descent".to_string() => self.traj_stage = 2,
+            _ => self.traj_stage = 0,
+        }
         match &self.end_state {
             val if *val == "ascent".to_string() => self.end_stage = 0,
             val if *val == "hover".to_string() => self.end_stage = 1,
@@ -102,7 +111,7 @@ impl Simulation {
         }
     }
 
-    pub fn step(&mut self, dt: f64) -> bool {
+    pub fn step(&mut self) -> bool {
         if self.traj_stage == self.end_stage {
             return false;
         }
@@ -128,7 +137,7 @@ impl Simulation {
         let control_sequence = self.mpc.update(&self.rocket.get_state(), &xref_traj, &uref_traj, mass, &self.rocket.get_moi_mpc(), self.current_time); // Placeholder reference trajectory and warm start
         
         let last_solve_time = self.mpc.last_solve_time;// 1. Calculate the fractional progress between MPC steps (0.0 to 1.0)
-        let time_since_mpc_solve = self.current_time - self.mpc.last_solve_time;
+        let time_since_mpc_solve = self.current_time - last_solve_time;
         let raw_index = (time_since_mpc_solve / self.mpc.dt) as usize;
         let max_index = control_sequence.len().saturating_sub(1);
         let current_step_index = raw_index.min(max_index);
@@ -147,7 +156,7 @@ impl Simulation {
 
         let control_input = Vector4::new(current_control[0], current_control[1], current_control[2], 0.0); // Convert first control input to Vector4 (assuming the 4th component is not used for now)
 
-        if !self.rocket.step(control_input, outside_forces, outside_torques, dt) && self.current_time > self.min_time {
+        if !self.rocket.step(control_input, outside_forces, outside_torques, self.dt) && self.current_time > self.min_time {
             return false;
         }
         
@@ -200,7 +209,7 @@ impl Simulation {
             );
         }
 
-        self.current_time += dt;
+        self.current_time += self.dt;
 
         true
     }
@@ -225,22 +234,22 @@ impl Simulation {
         if self.traj_stage == 0 {
             let trajectory = self.lossless.update([self.rocket.position.x, self.rocket.position.y, self.rocket.position.z], [self.rocket.velocity.x, self.rocket.velocity.y, self.rocket.velocity.z], [0.0, 0.0, 50.0], self.rocket.get_mass() - self.rocket.get_dry_mass(), self.current_time);
             (xref_traj, uref_traj) = self.get_mpc_reference(&trajectory, self.current_time - self.lossless.last_solve_time, self.rocket.attitude, self.mpc.min_thrust, self.mpc.dt, self.lossless.fine_delta_t, self.mpc.n_steps + 1);
-            if self.rocket.position.z >= 45.0 {
+            if self.rocket.position.z >= 25.0 {
                 self.traj_stage = 1;
                 self.traj_timer = self.current_time;
             }
             // uref_traj = vec![Array1::from(vec![0.0, 0.0, mass * 9.81]); mpc.n_steps]; // Warm start with zero control inputs
         } else if self.traj_stage == 1 {
             self.mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
-                40.0, 40.0, 60.0,   // position x, y, z
-                600.0, 600.0, 600.0, 0.0, // quaternion qx, qy, qz, qw
+                80.0, 80.0, 100.0,   // position x, y, z
+                600000.0, 600000.0, 600000.0, 0.0, // quaternion qx, qy, qz, qw
                 30.0, 30.0, 10.0,        // linear velocities x_dot, y_dot, z_dot
                 100.0, 100.0, 100.0          // angular velocities wx, wy, wz
             ]));
-            self.mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 0.0]));
+            self.mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 1.0]));
             self.mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
-                60.0, 60.0, 80.0,   // position x, y, z
-                1000.0, 1000.0, 1000.0, 0.0, // quaternion qx, qy, qz, qw
+                85.0, 85.0, 100.0,   // position x, y, z
+                1000000.0, 1000000.0, 1000000.0, 0.0, // quaternion qx, qy, qz, qw
                 40.0, 40.0, 60.0,        // linear velocities x_dot, y_dot, z_dot
                 50.0, 50.0, 50.0          // angular velocities wx, wy, wz
             ]));
@@ -397,13 +406,16 @@ impl Simulation {
         let rcs_update_rate = 10.0;
         let rcs = RCS::new(rcs_thrust, rcs_lever_arm, rcs_nitrogen_consumption_rate, rcs_update_rate);
 
-        let imu_accel_noise_sigma = Vector3::zeros();
-        let imu_accel_offset = Vector3::zeros();
-        let imu_gyro_noise_sigma = Vector3::zeros();
-        let imu_gyro_drift = Vector3::zeros();
-        let imu_mag_noise_sigma = Vector3::zeros();
-        let imu_mag_offset = Vector3::zeros();
-        let imu_earth_magnetic_field = Vector3::new(0.000005, 0.0, 0.0);
+        let imu_accel_noise_sigma = Vector3::new(0.00137, 0.00137, 0.00137);
+        let imu_accel_offset = Vector3::new(0.0, 0.0, 0.0);
+        let imu_gyro_noise_sigma = Vector3::new(0.000061, 0.000061, 0.000061    );
+        let imu_gyro_drift = Vector3::new(0.0, 0.0, 0.0);
+        let imu_mag_noise_sigma = Vector3::new(14.0e-9, 14.0e-9, 14.0e-9);
+        let imu_mag_offset = Vector3::new(0.0, 0.0, 0.0);
+        let imu_earth_magnetic_field = Vector3::new(
+                                                    -0.0000020,  // -2.0 microTesla East
+                                                    0.0000220,  // +22.0 microTesla North
+                                                    -0.0000443); // -44.3 microTesla Up (Pointing Down!)
         let imu_update_rate = 300.0;
         let imu = IMU::new(imu_accel_noise_sigma, imu_accel_offset, imu_gyro_noise_sigma, imu_gyro_drift, imu_mag_noise_sigma, imu_mag_offset, imu_earth_magnetic_field, imu_update_rate);
         
@@ -442,14 +454,14 @@ impl Simulation {
         let q = Array2::<f64>::from_diag(&Array1::from(vec![
             20.0, 20.0, 70.0,   // position x, y, z
             6000.0, 6000.0, 6000.0, 0.0, // quaternion qx, qy, qz, qw
-            30.0, 30.0, 50.0,        // linear velocities x_dot, y_dot, z_dot
+            30.0, 30.0, 12000.0,        // linear velocities x_dot, y_dot, z_dot
             100.0, 100.0, 100.0          // angular velocities wx, wy, wz
         ]));
         let r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 1.0]));
         let qn = Array2::<f64>::from_diag(&Array1::from(vec![
             40.0, 40.0, 80.0,   // position x, y, z
             10000.0, 10000.0, 10000.0, 0.0, // quaternion qx, qy, qz, qw
-            20.0, 20.0, 100.0,        // linear velocities x_dot, y_dot, z_dot
+            20.0, 20.0, 50000.0,        // linear velocities x_dot, y_dot, z_dot
             50.0, 50.0, 50.0          // angular velocities wx, wy, wz
         ]));
         // let smoothing_weight = Array1::from(vec![150.0, 150.0, -2.0]);
@@ -466,7 +478,7 @@ impl Simulation {
     }
 
     fn get_lossless() -> Lossless {
-        let max_velocity = 50.0;
+        let max_velocity = 10.0;
         let dry_mass = 61.0;
         let alpha = 1.0 / (9.81 * 180.0);
         let lower_thrust_bound = 400.0;

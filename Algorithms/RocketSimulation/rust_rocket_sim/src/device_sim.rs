@@ -60,6 +60,8 @@ impl IMU {
             return self.last_reading.clone();
         }
 
+        let dt_sqrt = elapsed_time.sqrt();
+
         self.system_time = system_time;
 
         let mut rng = rand::rng();
@@ -77,7 +79,7 @@ impl IMU {
         // Add Bias + Noise
         let measured_accel = proper_accel_body 
             + self.accel_offset 
-            + noise_3_d(&self.accel_noise_sigma, &mut rng);
+            + noise_3_d(&(self.accel_noise_sigma / dt_sqrt), &mut rng);
 
 
         // 2. GYROSCOPE
@@ -87,7 +89,7 @@ impl IMU {
 
         let measured_gyro = ang_vel_body 
             + self.gyro_drift 
-            + noise_3_d(&self.gyro_noise_sigma, &mut rng);
+            + noise_3_d(&(self.gyro_noise_sigma / dt_sqrt), &mut rng);
 
 
         // 3. MAGNETOMETER
@@ -96,7 +98,7 @@ impl IMU {
         
         let measured_mag = mag_body 
             + self.mag_offset 
-            + noise_3_d(&self.mag_noise_sigma, &mut rng);
+            + noise_3_d(&(self.mag_noise_sigma / dt_sqrt), &mut rng);
 
         self.last_reading = IMUReading {
             accel: measured_accel,

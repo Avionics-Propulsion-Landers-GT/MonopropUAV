@@ -92,6 +92,10 @@ pub struct RocketDebugInfo{
     pub nitrous_masses: Vec<f64>,
     pub nitrogen_n2_tank_masses: Vec<f64>,
     pub nitrogen_n2o_tank_masses: Vec<f64>,
+    pub attitudes: Vec<UnitQuaternion<f64>>,
+    pub imu_readings: Vec<IMUReading>,
+    pub gps_readings: Vec<GPSReading>,
+    pub uwb_readings: Vec<UWBReading>,
 }
 
 impl Rocket {
@@ -164,6 +168,10 @@ impl Rocket {
                 nitrous_masses: Vec::new(),
                 nitrogen_n2_tank_masses: Vec::new(),
                 nitrogen_n2o_tank_masses: Vec::new(),
+                attitudes: Vec::new(),
+                imu_readings: Vec::new(),
+                gps_readings: Vec::new(),
+                uwb_readings: Vec::new(),
             },
         };
 
@@ -203,9 +211,13 @@ impl Rocket {
         self.debug_info.times.push(self.system_time);
 
         // Update Sensors
-        self.imu.update(self.accel, self.ang_vel, self.attitude, self.system_time);
-        self.gps.update(self.position, self.system_time);
-        self.uwb.update(self.position, self.system_time);
+        self.debug_info.attitudes.push(self.attitude);
+        let imu_reading = self.imu.update(self.accel, self.ang_vel, self.attitude, self.system_time);
+        let gps_reading = self.gps.update(self.position, self.system_time);
+        let uwb_reading = self.uwb.update(self.position, self.system_time);
+        self.debug_info.imu_readings.push(imu_reading);
+        self.debug_info.gps_readings.push(gps_reading);
+        self.debug_info.uwb_readings.push(uwb_reading);
 
         let com_offset = self.get_com_offset(self.thrust_vector);
         self.moi = self.get_moi(self.thrust_vector, com_offset);
@@ -288,7 +300,7 @@ impl Rocket {
         self.debug_info.thrusts.push(tvc_effect.thrust);
         self.debug_info.slosh_forces.push(slosh_force);
 
-        self.accel = total_force / mass;        
+        self.accel = total_force / mass;
         self.velocity += self.accel * dt;
         self.position += self.velocity * dt;
 
