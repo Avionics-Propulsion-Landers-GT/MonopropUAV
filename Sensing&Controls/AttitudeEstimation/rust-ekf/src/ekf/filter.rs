@@ -55,9 +55,15 @@ impl<T: EKFModel> ExtendedKalmanFilter<T> {
             + &self.process_noise_covariance;
     }
 
-    pub fn update(&mut self, data: &[f64]) {
-        let measurement = self.model.parse_data(data);
+    fn sync_delta_time_from_model(&mut self) {
+        if let Some(model_dt) = self.model.delta_time() {
+            if model_dt.is_finite() && model_dt > 0.0 {
+                self.delta_time = model_dt;
+            }
+        }
+    }
 
+    fn apply_measurement_update(&mut self, measurement: Array1<f64>) {
         let h_pred = self.model.measurement_prediction_function(&self.state);
         let residual = &measurement - &h_pred;
 
@@ -69,7 +75,10 @@ impl<T: EKFModel> ExtendedKalmanFilter<T> {
         // TODO: Make sure this error doesn't impact the filter's ability to run (Can we give some default value on error instead of returning directly)
         let s_inv = match s.inv() {
             Ok(m) => m,
-            Err(_) => return, // Prevent panic on singular matrix
+            Err(_) => {
+                self.error_covariance = &self.error_covariance + &(Array2::<f64>::eye(self.state.len()) * 1e-6); // Prevent panic on singular matrix by adding small diagonal before falling back to prediction
+                return;
+            }
         };
 
         let k = self.error_covariance.dot(&h_jac.t()).dot(&s_inv);
@@ -79,6 +88,21 @@ impl<T: EKFModel> ExtendedKalmanFilter<T> {
 
         let identity = Array2::eye(self.state.len());
         self.error_covariance = (identity - k.dot(&h_jac)).dot(&self.error_covariance);
+    }
+
+    pub fn update(&mut self, data: &[f64]) {
+        let measurement = self.model.parse_data(data);
+        self.sync_delta_time_from_model();
+        self.apply_measurement_update(measurement);
+    }
+
+    /// Parse a timestamped measurement, update dt from the model, then run a
+    /// full predict/update cycle using that same sample.
+    pub fn step(&mut self, data: &[f64]) {
+        let measurement = self.model.parse_data(data);
+        self.sync_delta_time_from_model();
+        self.predict();
+        self.apply_measurement_update(measurement);
     }
 
     pub fn get_state(&self) -> &Array1<f64> {

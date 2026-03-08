@@ -1,88 +1,92 @@
-use ndarray::{Array1, Array2, s};
+use std::io::{Error as IoError, ErrorKind};
+use ndarray::{arr1, Array1, Array2, s};
 use crate::ekf::model::EKFModel;
 
 pub struct AttitudeModel {
     pub current_time: f64,
     pub previous_time: f64,
     pub delta_time: f64,
+    gravity_reference: Array1<f64>,
+    magnetic_reference: Array1<f64>,
 }
 
 impl AttitudeModel {
     pub fn new(delta_time: f64) -> Self {
-        Self {
+        Self::with_reference_vectors(
+            delta_time,
+            [0.0, 0.0, -1.0],
+            Self::default_magnetic_reference(),
+        )
+        .expect("default gravity and magnetic reference vectors must be valid")
+    }
+
+    /// Construct the model with caller-provided reference vectors.
+    ///
+    /// `gravity_reference` should point along gravity in the world frame.
+    /// `magnetic_reference` should be the local magnetic field direction in the
+    /// world frame, including dip/inclination.
+    pub fn with_reference_vectors(
+        delta_time: f64,
+        gravity_reference: [f64; 3],
+        magnetic_reference: [f64; 3],
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let gravity_reference = Self::normalize_vector(&arr1(&gravity_reference));
+        let magnetic_reference = Self::normalize_vector(&arr1(&magnetic_reference));
+
+        if gravity_reference.iter().all(|value| value.abs() <= f64::EPSILON) {
+            return Err(IoError::new(
+                ErrorKind::InvalidInput,
+                "gravity reference vector must be non-zero",
+            ).into());
+        }
+
+        if magnetic_reference.iter().all(|value| value.abs() <= f64::EPSILON) {
+            return Err(IoError::new(
+                ErrorKind::InvalidInput,
+                "magnetic reference vector must be non-zero",
+            ).into());
+        }
+
+        Ok(Self {
             current_time: -delta_time,
             previous_time: -2.0 * delta_time,
             delta_time,
-        }
-    }
-}
-
-impl EKFModel for AttitudeModel {
-    fn parse_data(&mut self, data: &[f64]) -> Array1<f64> {
-        self.previous_time = self.current_time;
-        self.current_time = data[0];
-        self.delta_time = self.current_time - self.previous_time;
-
-        Array1::from(vec![
-            data[1], data[2], data[3], // gyro
-            data[4], data[5], data[6], // accel
-            data[7], data[8], data[9], // mag
-        ])
+            gravity_reference,
+            magnetic_reference,
+        })
     }
 
-    // TODO: Add the state transition function (Dynamics Model)
-    fn state_transition_function(&self, state: &Array1<f64>, _dt: f64) -> Array1<f64> {
-        state.clone()
+    // ── Private helpers ────────────────────────────────────────────────────
+
+    fn default_magnetic_reference() -> [f64; 3] {
+        [0.45, 0.0, -0.89]
     }
 
-    fn state_transition_jacobian(&self, state: &Array1<f64>, _dt: f64) -> Array2<f64> {
-        Array2::eye(state.len())
+    /// ZYX Euler kinematic equation: [roll_dot, pitch_dot, yaw_dot] = W * omega
+    #[inline]
+    fn euler_angle_rates(phi: f64, theta: f64, omega: &[f64; 3]) -> [f64; 3] {
+        let (sp, cp) = (phi.sin(), phi.cos());
+        let (tt, ct) = (theta.tan(), theta.cos());
+        [
+            omega[0] + omega[1] * sp * tt + omega[2] * cp * tt,
+            omega[1] * cp - omega[2] * sp,
+            (omega[1] * sp + omega[2] * cp) / ct,
+        ]
     }
 
-    fn measurement_prediction_function(&self, state: &Array1<f64>) -> Array1<f64> { 
-        let rotation_matrix = euler_to_rotation_matrix(state);
-
-        let gyro_pred = Array1::from(vec![0.0, 0.0, 0.0]); 
-
-        let gravity = Array1::from(vec![0.0, 0.0, -9.81]);
-        let accel_pred = normalize_vector(&(rotation_matrix.dot(&gravity)));
-
-        let mag_field = Array1::from(vec![0.00005, 0.0, 0.0]);
-        let mag_pred = normalize_vector(&(rotation_matrix.dot(&mag_field)));
-
-        let mut result = Array1::zeros(9);
-        result.slice_mut(s![0..3]).assign(&gyro_pred);
-        result.slice_mut(s![3..6]).assign(&accel_pred);
-        result.slice_mut(s![6..9]).assign(&mag_pred);
-
-        result
-    }
-
-    fn measurement_prediction_jacobian(&self, state: &Array1<f64>) -> Array2<f64> {
-        let n = state.len();
-        let mut jac = Array2::zeros((9, n));
-        jac[[0, 0]] = 1.0;
-        jac[[1, 1]] = 1.0;
-        jac[[2, 2]] = 1.0;
-        jac
-    }
-    
-    pub fn euler_to_rotation_matrix(euler: &Array1<f64>) -> Array2<f64> {
-        let (roll, pitch, yaw) = (euler[0], euler[1], euler[2]);
-
-        let cr = roll.cos();
-        let sr = roll.sin();
-        let cp = pitch.cos();
-        let sp = pitch.sin();
-        let cy = yaw.cos();
-        let sy = yaw.sin();
+    /// ZYX rotation matrix R(φ, θ, ψ): transforms vectors from world to body frame.
+    fn euler_to_rotation_matrix(state: &Array1<f64>) -> Array2<f64> {
+        let (phi, theta, psi) = (state[0], state[1], state[2]);
+        let (cr, sr) = (phi.cos(), phi.sin());
+        let (cp, sp) = (theta.cos(), theta.sin());
+        let (cy, sy) = (psi.cos(), psi.sin());
 
         Array2::from_shape_vec(
             (3, 3),
             vec![
-                cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr,
-                sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr,
-                -sp, cp * sr, cp * cr,
+                cy * cp,  cy * sp * sr - sy * cr,  cy * sp * cr + sy * sr,
+                sy * cp,  sy * sp * sr + cy * cr,  sy * sp * cr - cy * sr,
+                -sp,      cp * sr,                 cp * cr,
             ],
         )
         .unwrap()
@@ -90,6 +94,181 @@ impl EKFModel for AttitudeModel {
 
     pub fn normalize_vector(v: &Array1<f64>) -> Array1<f64> {
         let norm = v.mapv(|x| x * x).sum().sqrt();
-        if norm == 0.0 { v.clone() } else { v / norm }
+        if norm <= f64::EPSILON {
+            Array1::zeros(v.len())
+        } else {
+            v / norm
+        }
+    }
+
+    #[inline]
+    fn safe_pitch(theta: f64) -> f64 {
+        theta.clamp(
+            -std::f64::consts::FRAC_PI_2 + 1e-4,
+             std::f64::consts::FRAC_PI_2 - 1e-4,
+        )
+    }
+
+    fn dcm_angle_derivatives(state: &Array1<f64>) -> (Array2<f64>, Array2<f64>, Array2<f64>) {
+        let (phi, theta, psi) = (state[0], state[1], state[2]);
+        let (cr, sr) = (phi.cos(), phi.sin());
+        let (cp, sp) = (theta.cos(), theta.sin());
+        let (cy, sy) = (psi.cos(), psi.sin());
+
+        let dr_dphi = Array2::from_shape_vec(
+            (3, 3),
+            vec![
+                0.0, cy * sp * cr + sy * sr, -cy * sp * sr + sy * cr,
+                0.0, sy * sp * cr - cy * sr, -sy * sp * sr - cy * cr,
+                0.0, cp * cr,                -cp * sr,
+            ],
+        ).unwrap();
+
+        let dr_dtheta = Array2::from_shape_vec(
+            (3, 3),
+            vec![
+                -cy * sp, cy * cp * sr, cy * cp * cr,
+                -sy * sp, sy * cp * sr, sy * cp * cr,
+                -cp,      -sp * sr,     -sp * cr,
+            ],
+        ).unwrap();
+
+        let dr_dpsi = Array2::from_shape_vec(
+            (3, 3),
+            vec![
+                -sy * cp, -sy * sp * sr - cy * cr, -sy * sp * cr + cy * sr,
+                 cy * cp,  cy * sp * sr - sy * cr,  cy * sp * cr + sy * sr,
+                 0.0,      0.0,                      0.0,
+            ],
+        ).unwrap();
+
+        (dr_dphi, dr_dtheta, dr_dpsi)
+    }
+
+    fn theta_is_clamped(theta: f64) -> bool {
+        (theta - Self::safe_pitch(theta)).abs() > f64::EPSILON
+    }
+}
+
+impl EKFModel for AttitudeModel {
+    fn delta_time(&self) -> Option<f64> {
+        Some(self.delta_time)
+    }
+
+    /// Parse a 10-element data row `[t, gx, gy, gz, ax, ay, az, mx, my, mz]`.
+    fn parse_data(&mut self, data: &[f64]) -> Array1<f64> {
+        self.previous_time = self.current_time;
+        self.current_time = data[0];
+        let parsed_dt = self.current_time - self.previous_time;
+        if parsed_dt.is_finite() && parsed_dt > 0.0 {
+            self.delta_time = parsed_dt;
+        }
+
+        let accel = Self::normalize_vector(&arr1(&[data[4], data[5], data[6]]));
+        let mag = Self::normalize_vector(&arr1(&[data[7], data[8], data[9]]));
+
+        Array1::from(vec![
+            data[1], data[2], data[3], // gyro  (rad/s)
+            accel[0], accel[1], accel[2],
+            mag[0], mag[1], mag[2],
+        ])
+    }
+
+    /// Discrete state transition x[k+1] = x[k] + dt * f(x[k]).
+    fn state_transition_function(&self, state: &Array1<f64>, dt: f64) -> Array1<f64> {
+        if !dt.is_finite() || dt <= 0.0 {
+            return state.clone();
+        }
+
+        let phi = state[0];
+        let theta = Self::safe_pitch(state[1]);
+        let omega = [state[3], state[4], state[5]];
+        let euler_dot = Self::euler_angle_rates(phi, theta, &omega);
+
+        arr1(&[
+            state[0] + dt * euler_dot[0],
+            state[1] + dt * euler_dot[1],
+            state[2] + dt * euler_dot[2],
+            state[3],
+            state[4],
+            state[5],
+        ])
+    }
+
+    fn state_transition_jacobian(&self, state: &Array1<f64>, dt: f64) -> Array2<f64> {
+        if !dt.is_finite() || dt <= 0.0 {
+            return Array2::eye(state.len());
+        }
+
+        let phi = state[0];
+        let theta = Self::safe_pitch(state[1]);
+        let omega = [state[3], state[4], state[5]];
+
+        let (sp, cp) = (phi.sin(), phi.cos());
+        let (tt, ct) = (theta.tan(), theta.cos());
+        let st = theta.sin();
+
+        let mut f = Array2::<f64>::eye(6);
+
+        f[[0, 0]] += dt * (omega[1] * cp * tt - omega[2] * sp * tt);
+        if !Self::theta_is_clamped(state[1]) {
+            f[[0, 1]] += dt * (omega[1] * sp + omega[2] * cp) / (ct * ct);
+        }
+        f[[0, 3]] = dt;
+        f[[0, 4]] = dt * sp * tt;
+        f[[0, 5]] = dt * cp * tt;
+
+        f[[1, 0]] += dt * (-omega[1] * sp - omega[2] * cp);
+        f[[1, 4]] = dt * cp;
+        f[[1, 5]] = -dt * sp;
+
+        f[[2, 0]] += dt * (omega[1] * cp - omega[2] * sp) / ct;
+        if !Self::theta_is_clamped(state[1]) {
+            f[[2, 1]] += dt * (omega[1] * sp + omega[2] * cp) * st / (ct * ct);
+        }
+        f[[2, 4]] = dt * sp / ct;
+        f[[2, 5]] = dt * cp / ct;
+
+        f
+    }
+
+    /// Measurement prediction h(x) for the 9-axis IMU.
+    fn measurement_prediction_function(&self, state: &Array1<f64>) -> Array1<f64> {
+        let euler = state.slice(s![0..3]).to_owned();
+        let r = Self::euler_to_rotation_matrix(&euler);
+        let gyro_pred = state.slice(s![3..6]).to_owned();
+        let accel_pred = r.dot(&self.gravity_reference);
+        let mag_pred = r.dot(&self.magnetic_reference);
+
+        let mut z = Array1::zeros(9);
+        z.slice_mut(s![0..3]).assign(&gyro_pred);
+        z.slice_mut(s![3..6]).assign(&accel_pred);
+        z.slice_mut(s![6..9]).assign(&mag_pred);
+        z
+    }
+
+    fn measurement_prediction_jacobian(&self, state: &Array1<f64>) -> Array2<f64> {
+        let (dr_dphi, dr_dtheta, dr_dpsi) = Self::dcm_angle_derivatives(state);
+        let accel_dphi = dr_dphi.dot(&self.gravity_reference);
+        let accel_dtheta = dr_dtheta.dot(&self.gravity_reference);
+        let accel_dpsi = dr_dpsi.dot(&self.gravity_reference);
+        let mag_dphi = dr_dphi.dot(&self.magnetic_reference);
+        let mag_dtheta = dr_dtheta.dot(&self.magnetic_reference);
+        let mag_dpsi = dr_dpsi.dot(&self.magnetic_reference);
+
+        let mut h = Array2::<f64>::zeros((9, 6));
+        h[[0, 3]] = 1.0;
+        h[[1, 4]] = 1.0;
+        h[[2, 5]] = 1.0;
+
+        h.slice_mut(s![3..6, 0]).assign(&accel_dphi);
+        h.slice_mut(s![3..6, 1]).assign(&accel_dtheta);
+        h.slice_mut(s![3..6, 2]).assign(&accel_dpsi);
+
+        h.slice_mut(s![6..9, 0]).assign(&mag_dphi);
+        h.slice_mut(s![6..9, 1]).assign(&mag_dtheta);
+        h.slice_mut(s![6..9, 2]).assign(&mag_dpsi);
+
+        h
     }
 }
