@@ -244,10 +244,11 @@ pub fn dynamics(x: &Array1<f64>, u: &Array1<f64>, mass: f64, moi: &Array2<f64>, 
             cos_half_theta,
         ]);
 
-        q_new[0] = q_step[3]*q[0] + q_step[0]*q[3] + q_step[1]*q[2] - q_step[2]*q[1];
-        q_new[1] = q_step[3]*q[1] - q_step[0]*q[2] + q_step[1]*q[3] + q_step[2]*q[0];
-        q_new[2] = q_step[3]*q[2] + q_step[0]*q[1] - q_step[1]*q[0] + q_step[2]*q[3];
-        q_new[3] = q_step[3]*q[3] - q_step[0]*q[0] - q_step[1]*q[1] - q_step[2]*q[2];
+        // FIXED: Post-multiplication (q_old * q_step) applies rotation in the Local Body Frame!
+        q_new[0] = q[3]*q_step[0] + q[0]*q_step[3] + q[1]*q_step[2] - q[2]*q_step[1];
+        q_new[1] = q[3]*q_step[1] - q[0]*q_step[2] + q[1]*q_step[3] + q[2]*q_step[0];
+        q_new[2] = q[3]*q_step[2] + q[0]*q_step[1] - q[1]*q_step[0] + q[2]*q_step[3];
+        q_new[3] = q[3]*q_step[3] - q[0]*q_step[0] - q[1]*q_step[1] - q[2]*q_step[2];
     }
 
     let q_new_norm = q_new.dot(&q_new).sqrt();

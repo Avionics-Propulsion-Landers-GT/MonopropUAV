@@ -30,7 +30,7 @@ impl Default for Simulation {
             rocket: Self::get_rocket(),
             mpc: Self::get_mpc(),
             lossless: Self::get_lossless(),
-            dt: 0.02,
+            dt: 0.01,
             current_time: 0.0,
             debug: false,
             has_exceeded_angle: false,
@@ -232,28 +232,48 @@ impl Simulation {
         let uref_traj;
 
         if self.traj_stage == 0 {
+            // 1. Stage Cost (Q) - Massive penalty for Z errors
+            self.mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
+                150.0, 150.0, 200.0,  // Stiffened Z-Position spring (from 40.0 to 1500.0)
+                40000.0, 40000.0, 0.0, 0.0,
+                100.0, 100.0, 6000.0,  // Stiffened Z-Velocity damper (from 300.0 to 2500.0)
+                500.0, 500.0, 500.0   
+            ]));
+
+            // 2. Control Cost (R) - Remove the fear of using the throttle!
+            // Gimbal X/Y stay at 50 (because radians are tiny numbers), Thrust drops to 0.005!
+            self.mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 0.005]));
+
+            // 3. Terminal Cost (QN) - Land softly!
+            self.mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
+                150.0, 150.0, 200.0, 
+                50000.0, 50000.0, 0.0, 0.0,
+                100.0, 100.0, 80000.0, 
+                1000.0, 1000.0, 1000.0 
+            ]));
+            self.lossless.max_velocity = 5.0;
             let trajectory = self.lossless.update([self.rocket.position.x, self.rocket.position.y, self.rocket.position.z], [self.rocket.velocity.x, self.rocket.velocity.y, self.rocket.velocity.z], [0.0, 0.0, 50.0], self.rocket.get_mass() - self.rocket.get_dry_mass(), self.current_time);
             (xref_traj, uref_traj) = self.get_mpc_reference(&trajectory, self.current_time - self.lossless.last_solve_time, self.rocket.attitude, self.mpc.min_thrust, self.mpc.dt, self.lossless.fine_delta_t, self.mpc.n_steps + 1);
-            if self.rocket.position.z >= 25.0 {
+            if self.rocket.position.z >= 45.0 {
                 self.traj_stage = 1;
                 self.traj_timer = self.current_time;
             }
             // uref_traj = vec![Array1::from(vec![0.0, 0.0, mass * 9.81]); mpc.n_steps]; // Warm start with zero control inputs
         } else if self.traj_stage == 1 {
             self.mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
-                100.0, 100.0, 120.0,   // position x, y, z
-                600000.0, 600000.0, 600000.0, 0.0, // quaternion qx, qy, qz, qw
-                30.0, 30.0, 10.0,        // linear velocities x_dot, y_dot, z_dot
-                100.0, 100.0, 100.0          // angular velocities wx, wy, wz
+                200.0, 200.0, 600.0,   // position x, y, z
+                60000.0, 60000.0, 0.0, 0.0, // quaternion qx, qy, qz, qw
+                100.0, 100.0, 250.0,        // linear velocities x_dot, y_dot, z_dot
+                500.0, 500.0, 500.0          // angular velocities wx, wy, wz
             ]));
             self.mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 1.0]));
             self.mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
-                100.0, 100.0, 150.0,   // position x, y, z
-                1000000.0, 1000000.0, 1000000.0, 0.0, // quaternion qx, qy, qz, qw
-                40.0, 40.0, 60.0,        // linear velocities x_dot, y_dot, z_dot
-                50.0, 50.0, 50.0          // angular velocities wx, wy, wz
+                200.0, 200.0, 800.0,   // position x, y, z
+                100000.0, 100000.0, 0.0, 0.0, // quaternion qx, qy, qz, qw
+                100.0, 100.0, 200.0,        // linear velocities x_dot, y_dot, z_dot
+                1000.0, 1000.0, 1000.0          // angular velocities wx, wy, wz
             ]));
-            xref_traj = vec![Array1::from(vec![0.0, 0.0, 10.0, // x, y, z
+            xref_traj = vec![Array1::from(vec![0.0, 0.0, 50.0, // x, y, z
                                                 0.0, 0.0, 0.0, 1.0, // qx, qy, qz, qw (upright)
                                                 0.0, 0.0, 0.0, // x_dot, y_dot, z_dot
                                                 0.0, 0.0, 0.0]); // wx, wy, wz
@@ -266,9 +286,9 @@ impl Simulation {
         } else if self.traj_stage == 2 {
             // 1. Stage Cost (Q) - Massive penalty for Z errors
             self.mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
-                150.0, 150.0, 1500.0,  // Stiffened Z-Position spring (from 40.0 to 1500.0)
-                400000.0, 400000.0, 400000.0, 0.0,
-                100.0, 100.0, 2500.0,  // Stiffened Z-Velocity damper (from 300.0 to 2500.0)
+                150.0, 150.0, 500.0,  // Stiffened Z-Position spring (from 40.0 to 1500.0)
+                40000.0, 40000.0, 0.0, 0.0,
+                100.0, 100.0, 250.0,  // Stiffened Z-Velocity damper (from 300.0 to 2500.0)
                 500.0, 500.0, 500.0   
             ]));
 
@@ -278,64 +298,22 @@ impl Simulation {
 
             // 3. Terminal Cost (QN) - Land softly!
             self.mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
-                150.0, 150.0, 5000.0, 
-                500000.0, 500000.0, 500000.0, 0.0,
-                100.0, 100.0, 8000.0, 
+                150.0, 150.0, 500.0, 
+                50000.0, 50000.0, 0.0, 0.0,
+                100.0, 100.0, 800.0, 
                 1000.0, 1000.0, 1000.0 
             ]));
-            // if self.rocket.position.z > 10.0 {
-            //     self.mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
-            //         50.0, 50.0, 70.0,   // position x, y, z
-            //         150000.0, 150000.0, 150000.0, 0.0, // quaternion qx, qy, qz, qw
-            //         30.0, 30.0, 100.0,        // linear velocities x_dot, y_dot, z_dot
-            //         500.0, 500.0, 500.0          // angular velocities wx, wy, wz
-            //     ]));
-            //     self.mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 1.0]));
-            //     self.mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
-            //         20.0, 20.0, 600.0,   // position x, y, z
-            //         175000.0, 175000.0, 175000.0, 0.0, // quaternion qx, qy, qz, qw
-            //         30.0, 30.0, 25000.0,        // linear velocities x_dot, y_dot, z_dot
-            //         1000.0, 1000.0, 1000.0          // angular velocities wx, wy, wz
-            //     ]));
-            // } else if self.rocket.position.z > 3.0 {
-            //     self.mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
-            //         50.0, 50.0, 70.0,   // position x, y, z
-            //         150000.0, 150000.0, 150000.0, 0.0, // quaternion qx, qy, qz, qw
-            //         30.0, 30.0, 100.0,        // linear velocities x_dot, y_dot, z_dot
-            //         500.0, 500.0, 500.0          // angular velocities wx, wy, wz
-            //     ]));
-            //     self.mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 1.0]));
-            //     self.mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
-            //         10000.0, 10000.0, 1000.0,   // position x, y, z
-            //         175000.0, 175000.0, 175000.0, 0.0, // quaternion qx, qy, qz, qw
-            //         30.0, 30.0, 200000.0,        // linear velocities x_dot, y_dot, z_dot
-            //         1000.0, 1000.0, 1000.0          // angular velocities wx, wy, wz
-            //     ]));
-            // } else {
-            //     self.mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
-            //         50.0, 50.0, 70.0,   // position x, y, z
-            //         150000.0, 150000.0, 150000.0, 0.0, // quaternion qx, qy, qz, qw
-            //         30.0, 30.0, 100.0,        // linear velocities x_dot, y_dot, z_dot
-            //         500.0, 500.0, 500.0          // angular velocities wx, wy, wz
-            //     ]));
-            //     self.mpc.r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 1.0]));
-            //     self.mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
-            //         4000.0, 4000.0, 500.0,   // position x, y, z
-            //         175000.0, 175000.0, 175000.0, 0.0, // quaternion qx, qy, qz, qw
-            //         30.0, 30.0, 450000.0,        // linear velocities x_dot, y_dot, z_dot
-            //         1000.0, 1000.0, 1000.0          // angular velocities wx, wy, wz
-            //     ]));
-            // }
-            self.lossless.lower_thrust_bound = 500.0;
+            self.lossless.lower_thrust_bound = 400.0;
             self.lossless.flip_glide_slope = false;
             self.lossless.use_glide_slope = true;
+            // self.lossless.glide_slope = 20.0_f64.to_radians();
             self.lossless.max_velocity = 5.0;
             // if self.rocket.velocity.norm() >= 5.0 {
             //     self.lossless.max_velocity = self.rocket.velocity.norm() * 1.25;
             // }
-            let trajectory = self.lossless.update([self.rocket.position.x, self.rocket.position.y, self.rocket.position.z], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], self.rocket.get_mass() - self.rocket.get_dry_mass(), self.current_time);
-            (xref_traj, uref_traj) = self.get_mpc_reference(&trajectory, self.current_time - self.lossless.last_solve_time, self.rocket.attitude, self.mpc.max_thrust, self.mpc.dt, self.lossless.fine_delta_t, self.mpc.n_steps + 1);
-            if self.traj_timer > 20.0 {
+            let trajectory = self.lossless.update([self.rocket.position.x, self.rocket.position.y, self.rocket.position.z], [self.rocket.velocity.x, self.rocket.velocity.y, self.rocket.velocity.z], [0.0, 0.0, 0.0], self.rocket.get_mass() - self.rocket.get_dry_mass(), self.current_time);
+            (xref_traj, uref_traj) = self.get_mpc_reference(&trajectory, self.current_time - self.lossless.last_solve_time, self.rocket.attitude, self.mpc.min_thrust, self.mpc.dt, self.lossless.fine_delta_t, self.mpc.n_steps + 1);
+            if self.current_time - self.traj_timer > 20.0 {
                 self.traj_stage = -1;
                 self.end_stage = -1;
             }
@@ -570,13 +548,41 @@ impl Simulation {
             let mut interp_v = [0.0; 3];
             let mut interp_u = [0.0; 3];
 
-            // 2. Are we past the end of the flight profile?
-            if t_target >= traj.time_of_flight_s || num_points == 1 {
-                // Park the rocket at the final coordinate
-                interp_p = traj.positions[num_points - 1];
-                interp_v = [0.0, 0.0, 0.0]; // Force target velocity to 0 to hold the hover
-                interp_u = [0.0, 0.0, default_thrust];
-                
+            // // 2. Are we past the end of the flight profile?
+            // if t_target >= traj.time_of_flight_s || num_points == 1 {
+            //     // Park the rocket at the final coordinate
+            //     interp_p = traj.positions[num_points - 1];
+            //     interp_v = [0.0, 0.0, 0.0]; // Force target velocity to 0 to hold the hover
+            //     interp_u = [0.0, 0.0, default_thrust];
+            if t_target >= traj.time_of_flight_s || num_points <= 1 {
+                if num_points <= 1 {
+                    // 🚨 TRAJECTORY CRASHED: Fallback to a safe, slow vertical drop
+                    interp_p = [0.0, 0.0, -2.0];
+                    interp_v = [0.0, 0.0, -2.0]; 
+                    interp_u = [0.0, 0.0, default_thrust];
+                } else {
+                    // Normal completion: Extrapolate the final state smoothly!
+                    // Get the final known position and velocity from the solver
+                    let final_p = traj.positions[num_points - 1];
+                    let final_v = traj.velocities[num_points - 1];
+                    
+                    // Calculate how much time has passed SINCE the trajectory ended
+                    let dt_overfill = t_target - traj.time_of_flight_s;
+                    
+                    // Extrapolate position: p = p_final + v_final * dt
+                    interp_p = [
+                        final_p[0] + final_v[0] * dt_overfill,
+                        final_p[1] + final_v[1] * dt_overfill,
+                        final_p[2] + final_v[2] * dt_overfill,
+                    ];
+                    
+                    // Keep asking for the final velocity to prevent the MPC from braking too early
+                    interp_v = final_v; 
+                    
+                    // If the trajectory ended, it likely commanded max or min thrust. 
+                    // We'll just ask for enough thrust to maintain the hover mass as a neutral baseline.
+                    interp_u = [0.0, 0.0, default_thrust];
+                }
             } else if t_target <= 0.0 {
                 // We haven't launched yet (or t_target is 0)
                 interp_p = traj.positions[0];
