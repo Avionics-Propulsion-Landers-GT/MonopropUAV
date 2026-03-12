@@ -53,7 +53,7 @@ fn main() {
         fine_delta_t: 0.025,
         use_glide_slope: true,
         glide_slope: 45_f64.to_radians(),
-        use_terminal_lateral_soft_penalty: true,
+        use_terminal_lateral_soft_penalty: false,
         terminal_lateral_soft_penalty_ratio: 0.5,
         terminal_lateral_soft_penalty_weight: 100000.0,
         use_terminal_lateral_hard_tube: true,
