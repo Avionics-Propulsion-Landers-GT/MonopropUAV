@@ -32,6 +32,8 @@ pub struct LosslessSolver {
     pub delta_t: f64,
     pub pointing_direction: [f64; 3],
     pub N: i64,
+    pub start_time: Instant,
+    pub timeout: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -141,7 +143,9 @@ impl Default for LosslessSolver {
             fine_delta_t: 1.0,
             delta_t: 1.0,
             pointing_direction: [0.0, 0.0, 1.0],
-            N: 1
+            N: 1,
+            start_time: Instant::now(),
+            timeout: 3.0,
         }
     }
 }
@@ -619,6 +623,7 @@ impl LosslessSolver {
 
     pub fn solve(&mut self) -> SolveRunResult {
         let solve_wall_start = Instant::now();
+        self.start_time = Instant::now();
         self.delta_t = self.coarse_delta_t;
 
         let t_min = self.min_time_s;
@@ -647,6 +652,10 @@ impl LosslessSolver {
                     break;
                 },
                 None => println!("Failed to converge at step {}.", k),
+            }
+
+            if self.start_time.elapsed().as_secs_f64() > self.timeout {
+                break;
             }
         }
 
@@ -688,6 +697,10 @@ impl LosslessSolver {
                 }
             }
             k -= fine_n_step;
+
+            if self.start_time.elapsed().as_secs_f64() > self.timeout {
+                break;
+            }
         }
 
         if traj_result.is_none() {

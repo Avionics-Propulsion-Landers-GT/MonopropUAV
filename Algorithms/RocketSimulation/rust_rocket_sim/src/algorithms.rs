@@ -56,7 +56,7 @@ impl MPC {
         }
     }
 
-    pub fn update(&mut self, x0: &Array1<f64>, xref_traj: &Vec<Array1<f64>>, u_warm: &Vec<Array1<f64>>, mass: f64, system_time: f64) -> Vec<Array1<f64>> {
+    pub fn update(&mut self, x0: &Array1<f64>, xref_traj: &Vec<Array1<f64>>, u_warm: &Vec<Array1<f64>>, mass: f64, moi: &Array2<f64>, system_time: f64) -> Vec<Array1<f64>> {
         let elapsed_time = system_time - self.system_time;
         if elapsed_time < 1.0 / self.update_rate {
             // Not time to update yet, return previous control sequence
@@ -65,14 +65,14 @@ impl MPC {
             self.system_time = system_time;
             self.last_solve_time = system_time;
 
-            let control_sequence = self.solve(x0, xref_traj, u_warm, mass);
+            let control_sequence = self.solve(x0, xref_traj, u_warm, mass, moi);
             self.previous_control = control_sequence.clone();
             return control_sequence;
         }
 
     }
 
-    pub fn solve(&mut self, x0: &Array1<f64>, xref_traj: &Vec<Array1<f64>>, u_warm: &Vec<Array1<f64>>, mass: f64) -> Vec<Array1<f64>> {
+    pub fn solve(&mut self, x0: &Array1<f64>, xref_traj: &Vec<Array1<f64>>, u_warm: &Vec<Array1<f64>>, mass: f64, moi: &Array2<f64>) -> Vec<Array1<f64>> {
         let mut x = x0.clone(); // initial state
         let mut xref_traj = xref_traj.clone(); // reference trajectory
         let mut u_warm = u_warm.clone(); // warm start control sequence
@@ -104,7 +104,7 @@ impl MPC {
 
             // Solve MPC to get optimal control sequence
             // solve using OpEn
-            let (mut u_apply, u_warm) = mpc_crate::OpEnSolve(&x, &u_warm, &xref_traj_k, &self.q, &self.r, &self.qn, &self.smoothing_weight, &mut panoc_cache, mass, self.min_thrust, self.max_thrust, self.gimbal_limit, self.dt);
+            let (mut u_apply, u_warm) = mpc_crate::OpEnSolve(&x, &u_warm, &xref_traj_k, &self.q, &self.r, &self.qn, &self.smoothing_weight, &mut panoc_cache, mass, moi, self.min_thrust, self.max_thrust, self.gimbal_limit, self.dt);
 
             // exponential filter
             if k >= 1 {

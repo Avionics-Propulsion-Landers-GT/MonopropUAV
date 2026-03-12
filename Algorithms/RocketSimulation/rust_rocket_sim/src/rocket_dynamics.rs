@@ -3,7 +3,7 @@ use nalgebra::{Matrix3, Vector3, Vector4, UnitQuaternion, Quaternion};
 use crate::device_sim::*;
 use crate::sloshing_sim::*;
 use crate::fluid_dynamics::*;
-use ndarray::Array1;
+use ndarray::{Array1, Array2, array};
 use std::error::Error;
 use std::fs::File;
 
@@ -34,6 +34,7 @@ pub struct Rocket {
     pub frame_com_to_gimbal: Vector3<f64>, // Vector offset from frame CoM to the gimbal point (thrust plate)
     pub gimbal_to_tvc_com: Vector3<f64>, // Vector offset from gimbal point to the TVC's center of mass
 
+    pub moi: Matrix3<f64>,
     pub frame_moi: Matrix3<f64>,
     pub dry_nitrogen_moi: Matrix3<f64>,
     pub wet_nitrogen_moi: Matrix3<f64>,
@@ -91,6 +92,10 @@ pub struct RocketDebugInfo{
     pub nitrous_masses: Vec<f64>,
     pub nitrogen_n2_tank_masses: Vec<f64>,
     pub nitrogen_n2o_tank_masses: Vec<f64>,
+    pub attitudes: Vec<UnitQuaternion<f64>>,
+    pub imu_readings: Vec<IMUReading>,
+    pub gps_readings: Vec<GPSReading>,
+    pub uwb_readings: Vec<UWBReading>,
 }
 
 impl Rocket {
@@ -118,6 +123,7 @@ impl Rocket {
             starting_fuel_grain_mass,
             frame_com_to_gimbal,
             gimbal_to_tvc_com,
+            moi: Matrix3::zeros(),
             frame_moi,
             dry_nitrogen_moi,
             wet_nitrogen_moi,
@@ -162,12 +168,19 @@ impl Rocket {
                 nitrous_masses: Vec::new(),
                 nitrogen_n2_tank_masses: Vec::new(),
                 nitrogen_n2o_tank_masses: Vec::new(),
+                attitudes: Vec::new(),
+                imu_readings: Vec::new(),
+                gps_readings: Vec::new(),
+                uwb_readings: Vec::new(),
             },
         };
 
         rocket.imu.update(rocket.accel, rocket.ang_vel, rocket.attitude, rocket.system_time);
         rocket.gps.update(rocket.position, rocket.system_time);
         rocket.uwb.update(rocket.position, rocket.system_time);
+
+        let com_offset = rocket.get_com_offset(Vector3::z());
+        rocket.moi = rocket.get_moi(Vector3::z(), com_offset);
 
         rocket
     }
@@ -198,12 +211,19 @@ impl Rocket {
         self.debug_info.times.push(self.system_time);
 
         // Update Sensors
-        self.imu.update(self.accel, self.ang_vel, self.attitude, self.system_time);
-        self.gps.update(self.position, self.system_time);
-        self.uwb.update(self.position, self.system_time);
+        self.debug_info.attitudes.push(self.attitude);
+        let imu_reading = self.imu.update(self.accel, self.ang_vel, self.attitude, self.system_time);
+        let gps_reading = self.gps.update(self.position, self.system_time);
+        let uwb_reading = self.uwb.update(self.position, self.system_time);
+        self.debug_info.imu_readings.push(imu_reading);
+        self.debug_info.gps_readings.push(gps_reading);
+        self.debug_info.uwb_readings.push(uwb_reading);
 
         let com_offset = self.get_com_offset(self.thrust_vector);
-        let moi = self.get_moi(self.thrust_vector, com_offset);
+        self.moi = self.get_moi(self.thrust_vector, com_offset);
+        println!("ROCKET MOI: {:?}", self.moi);
+        println!("TVC_LEVER_ARM: {:?}", self.frame_com_to_gimbal - com_offset);
+        // std::process::exit(0);
 
         // Update actuated devices
         let tvc_effect: TVCEffect = self.tvc.update(Vector3::new(control_input.x, control_input.y, control_input.z), self.frame_com_to_gimbal - com_offset, self.nitrogen_mass, self.pressurizing_nitrogen_mass, self.nitrous_mass, self.fuel_grain_mass, dt, self.system_time);
@@ -250,7 +270,7 @@ impl Rocket {
         self.nitrous_m_dot = fluid_dynamics_output.mdot_ox;
 
         self.debug_info.com_offsets.push(com_offset);
-        self.debug_info.mois.push(moi);
+        self.debug_info.mois.push(self.moi);
         self.debug_info.nitrous_m_dots.push(self.nitrous_m_dot);
         self.debug_info.valve_angles.push(fluid_dynamics_output.valve_angle); // This is in degrees!
         self.debug_info.chamber_pressures.push(fluid_dynamics_output.pc_bar);
@@ -274,13 +294,13 @@ impl Rocket {
         self.thrust_vector = self.attitude.transform_vector(&tvc_effect.thrust);
         let slosh_force_world = self.attitude.transform_vector(&slosh_force);
         let body_vel = self.attitude.transform_vector(&self.velocity);
-        let drag = 0.5 * 1.225 * Vector3::new(body_vel.x.powi(2) * 2.0 * 1.2, body_vel.y.powi(2) * 2.0 * 1.2, body_vel.z.powi(2) * 0.85 * 0.25);
+        let drag = 0.5 * 1.225 * Vector3::new(body_vel.x.powi(2) * 2.2 * 0.639, body_vel.y.powi(2) * 2.2 * 0.639, body_vel.z.powi(2) * 1.0 * 0.09);
         let total_force = outside_forces + (gravity * mass) + self.thrust_vector + slosh_force_world - drag;
         self.debug_info.total_force = total_force;
         self.debug_info.thrusts.push(tvc_effect.thrust);
         self.debug_info.slosh_forces.push(slosh_force);
 
-        self.accel = total_force / mass;        
+        self.accel = total_force / mass;
         self.velocity += self.accel * dt;
         self.position += self.velocity * dt;
 
@@ -289,7 +309,7 @@ impl Rocket {
         // alpha = I_inv * (Torque - omega x (I * omega))
         
         // We calculate I * omega manually since inertia is a diagonal Vector3 here
-        let i_omega = moi * self.ang_vel;
+        let i_omega = self.moi * self.ang_vel;
 
         let gyro_torque = self.ang_vel.cross(&i_omega);
         let slosh_lever_arm = self.nitrous_tank_offset - com_offset;
@@ -299,7 +319,7 @@ impl Rocket {
         self.debug_info.total_torque = net_torque;
 
         // Angular acceleration (alpha)
-        let moi_inv = moi.try_inverse().expect("MOI matrix must be invertible");
+        let moi_inv = self.moi.try_inverse().expect("MOI matrix must be invertible");
         let alpha = moi_inv * net_torque;
 
         // Update Angular Velocity
@@ -441,6 +461,14 @@ impl Rocket {
         state[12] = self.ang_vel.z;
 
         state
+    }
+
+    pub fn get_moi_mpc(&self) -> Array2<f64> {
+        array![
+            [self.moi[(0, 0)], self.moi[(0, 1)], self.moi[(0, 2)]],
+            [self.moi[(1, 0)], self.moi[(1, 1)], self.moi[(1, 2)]],
+            [self.moi[(2, 0)], self.moi[(2, 1)], self.moi[(2, 2)]],
+        ]
     }
 
     pub fn save_debug_to_csv(&self, file_path: &str) -> Result<(), Box<dyn Error>> {

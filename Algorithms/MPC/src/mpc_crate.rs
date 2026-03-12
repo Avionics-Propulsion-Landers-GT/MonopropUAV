@@ -9,17 +9,135 @@ use ndarray::ArrayView1;
 use optimization_engine::{panoc::*, *};
 use std::time::Instant;
 
-pub fn dynamics(x: &Array1<f64>, u: &Array1<f64>, mass: f64, dt: f64) -> Array1<f64> {
-    // let mut x_next = Array1::<f64>::zeros(x.len());
-    // Constants
+// pub fn dynamics(x: &Array1<f64>, u: &Array1<f64>, mass: f64, moi: &Array2<f64>, dt: f64) -> Array1<f64> {
+//     // let mut x_next = Array1::<f64>::zeros(x.len());
+//     // Constants
+//     let m = mass;
+//     let g = 9.81;
+//     // let ixx = 50.0;
+//     // let iyy = 50.0;
+//     // let izz = 3.0;
+//     // let ixx = 71.0;
+//     // let iyy = 71.0;
+//     // let izz = 3.8;
+
+//     // Inertia matrix and inverse
+//     // let i = Array2::from_diag(&Array1::from(vec![ixx, iyy, izz]));
+//     let i = moi.clone();
+//     let i_inv = i.clone().inv().unwrap();
+
+//     // Unpack state
+//     let x_pos = x[0];
+//     let y_pos = x[1];
+//     let z_pos = x[2];
+//     let qx = x[3];
+//     let qy = x[4];
+//     let qz = x[5];
+//     let qw = x[6];
+//     let x_dot = x[7];
+//     let y_dot = x[8];
+//     let z_dot = x[9];
+//     let wx = x[10];
+//     let wy = x[11];
+//     let wz = x[12];
+
+//     // Unpack control
+//     let gimbal_theta = u[0];
+//     let gimbal_phi = u[1];
+//     let mut thrust = u[2];
+//     if thrust < 0.0 { thrust = 0.0; }
+
+//     // Thrust direction in body frame
+//     let tx = gimbal_theta.sin() * gimbal_phi.cos();
+//     let ty = gimbal_phi.sin();
+//     let tz = gimbal_theta.cos() * gimbal_phi.cos();
+//     let thrust_b = Array1::from(vec![tx * thrust, ty * thrust, tz * thrust]);
+
+//     // Quaternion normalization
+//     let mut q = Array1::from(vec![qx, qy, qz, qw]);
+//     let q_norm = q.dot(&q).sqrt();
+//     if q_norm < 1e-8 {
+//         q = Array1::from(vec![0.0, 0.0, 0.0, 1.0]);
+//     } else {
+//         q = q.mapv(|v| v / q_norm);
+//     }
+//     let qx = q[0];
+//     let qy = q[1];
+//     let qz = q[2];
+//     let qw = q[3];
+
+//     // Rotation matrix from quaternion
+//     let r = Array2::from_shape_vec((3, 3), vec![
+//         1.0 - 2.0 * qy * qy - 2.0 * qz * qz, 2.0 * qx * qy - 2.0 * qz * qw, 2.0 * qx * qz + 2.0 * qy * qw,
+//         2.0 * qx * qy + 2.0 * qz * qw, 1.0 - 2.0 * qx * qx - 2.0 * qz * qz, 2.0 * qy * qz - 2.0 * qx * qw,
+//         2.0 * qx * qz - 2.0 * qy * qw, 2.0 * qy * qz + 2.0 * qx * qw, 1.0 - 2.0 * qx * qx - 2.0 * qy * qy,
+//     ]).unwrap();
+
+//     // Acceleration in world frame
+//     let acc = r.dot(&thrust_b) / m - Array1::from(vec![0.0, 0.0, g]);
+//     let x_ddot = acc[0];
+//     let y_ddot = acc[1];
+//     let z_ddot = acc[2];
+
+//     // TVC torque
+//     let d = 0.663834203726;
+//     let r_cp = Array1::from(vec![0.0, 0.0, -d]);
+//     let torque_b = Array1::from(vec![
+//         r_cp[1] * thrust_b[2] - r_cp[2] * thrust_b[1],
+//         r_cp[2] * thrust_b[0] - r_cp[0] * thrust_b[2],
+//         r_cp[0] * thrust_b[1] - r_cp[1] * thrust_b[0],
+//     ]);
+
+//     // Angular velocity
+//     let omega = Array1::from(vec![wx, wy, wz]);
+//     // TODO: make it full matrix
+//     let omega_cross_i_omega = Array1::from(vec![
+//         omega[1] * (i[(1, 1)] * omega[2]) - omega[2] * (i[(2, 2)] * omega[1]),
+//         omega[2] * (i[(2, 2)] * omega[0]) - omega[0] * (i[(0, 0)] * omega[2]),
+//         omega[0] * (i[(0, 0)] * omega[1]) - omega[1] * (i[(1, 1)] * omega[0]),
+//     ]);
+//     let omega_dot = i_inv.dot(&(torque_b - omega_cross_i_omega));
+
+//     // Quaternion derivative
+//     let dqdt = Array1::from(vec![
+//         qw * wx + qy * wz - qz * wy,
+//         qw * wy + qz * wx - qx * wz,
+//         qw * wz + qx * wy - qy * wx,
+//         -qx * wx - qy * wy - qz * wz,
+//     ]).mapv(|v| 0.5 * v);
+
+//     // Euler integration
+//     // let x_pos_new = x_pos + dt * x_dot;
+//     // let y_pos_new = y_pos + dt * y_dot;
+//     // let z_pos_new = z_pos + dt * z_dot;
+//     let x_pos_new = x_pos + dt * x_dot + 0.5 * dt * dt * x_ddot;
+//     let y_pos_new = y_pos + dt * y_dot + 0.5 * dt * dt * y_ddot;
+//     let z_pos_new = z_pos + dt * z_dot + 0.5 * dt * dt * z_ddot;
+//     let mut q_new = q.clone() + dqdt.mapv(|v| dt * v);
+//     let q_new_norm = q_new.dot(&q_new).sqrt();
+//     q_new = q_new.mapv(|v| v / q_new_norm);
+//     let x_dot_new = x_dot + dt * x_ddot;
+//     let y_dot_new = y_dot + dt * y_ddot;
+//     let z_dot_new = z_dot + dt * z_ddot;
+//     let wx_new = wx + dt * omega_dot[0];
+//     let wy_new = wy + dt * omega_dot[1];
+//     let wz_new = wz + dt * omega_dot[2];
+
+//     let x_next = Array1::from(vec![
+//         x_pos_new, y_pos_new, z_pos_new,
+//         q_new[0], q_new[1], q_new[2], q_new[3],
+//         x_dot_new, y_dot_new, z_dot_new,
+//         wx_new, wy_new, wz_new,
+//     ]);
+
+//     x_next
+// }
+pub fn dynamics(x: &Array1<f64>, u: &Array1<f64>, mass: f64, moi: &Array2<f64>, dt: f64) -> Array1<f64> {
     let m = mass;
     let g = 9.81;
-    let ixx = 50.0;
-    let iyy = 50.0;
-    let izz = 3.0;
 
     // Inertia matrix and inverse
-    let i = Array2::from_diag(&Array1::from(vec![ixx, iyy, izz]));
+    let i = moi.clone();
     let i_inv = i.clone().inv().unwrap();
 
     // Unpack state
@@ -76,7 +194,7 @@ pub fn dynamics(x: &Array1<f64>, u: &Array1<f64>, mass: f64, dt: f64) -> Array1<
     let z_ddot = acc[2];
 
     // TVC torque
-    let d = 1.0;
+    let d = 0.663834203726;
     let r_cp = Array1::from(vec![0.0, 0.0, -d]);
     let torque_b = Array1::from(vec![
         r_cp[1] * thrust_b[2] - r_cp[2] * thrust_b[1],
@@ -84,39 +202,58 @@ pub fn dynamics(x: &Array1<f64>, u: &Array1<f64>, mass: f64, dt: f64) -> Array1<
         r_cp[0] * thrust_b[1] - r_cp[1] * thrust_b[0],
     ]);
 
-    // Angular velocity
+    // --- MODIFICATION 1: Full Matrix Gyroscopic Precession ---
     let omega = Array1::from(vec![wx, wy, wz]);
+    let i_omega = i.dot(&omega);
+    
     let omega_cross_i_omega = Array1::from(vec![
-        omega[1] * (iyy * omega[2]) - omega[2] * (izz * omega[1]),
-        omega[2] * (izz * omega[0]) - omega[0] * (ixx * omega[2]),
-        omega[0] * (ixx * omega[1]) - omega[1] * (iyy * omega[0]),
+        omega[1] * i_omega[2] - omega[2] * i_omega[1],
+        omega[2] * i_omega[0] - omega[0] * i_omega[2],
+        omega[0] * i_omega[1] - omega[1] * i_omega[0],
     ]);
     let omega_dot = i_inv.dot(&(torque_b - omega_cross_i_omega));
 
-    // Quaternion derivative
-    let dqdt = Array1::from(vec![
-        qw * wx + qy * wz - qz * wy,
-        qw * wy + qz * wx - qx * wz,
-        qw * wz + qx * wy - qy * wx,
-        -qx * wx - qy * wy - qz * wz,
-    ]).mapv(|v| 0.5 * v);
-
-    // Euler integration
-    // let x_pos_new = x_pos + dt * x_dot;
-    // let y_pos_new = y_pos + dt * y_dot;
-    // let z_pos_new = z_pos + dt * z_dot;
+    // Linear Integration
     let x_pos_new = x_pos + dt * x_dot + 0.5 * dt * dt * x_ddot;
     let y_pos_new = y_pos + dt * y_dot + 0.5 * dt * dt * y_ddot;
     let z_pos_new = z_pos + dt * z_dot + 0.5 * dt * dt * z_ddot;
-    let mut q_new = q.clone() + dqdt.mapv(|v| dt * v);
-    let q_new_norm = q_new.dot(&q_new).sqrt();
-    q_new = q_new.mapv(|v| v / q_new_norm);
+    
     let x_dot_new = x_dot + dt * x_ddot;
     let y_dot_new = y_dot + dt * y_ddot;
     let z_dot_new = z_dot + dt * z_ddot;
+    
     let wx_new = wx + dt * omega_dot[0];
     let wy_new = wy + dt * omega_dot[1];
     let wz_new = wz + dt * omega_dot[2];
+
+    // --- MODIFICATION 2: Quaternion Exponential Integration ---
+    let omega_norm = (wx * wx + wy * wy + wz * wz).sqrt();
+    let mut q_new = Array1::zeros(4);
+
+    if omega_norm < 1e-8 {
+        q_new = q.clone();
+    } else {
+        let half_theta = 0.5 * omega_norm * dt;
+        let cos_half_theta = half_theta.cos();
+        let sin_half_theta = half_theta.sin();
+        
+        let q_step = Array1::from(vec![
+            (wx / omega_norm) * sin_half_theta,
+            (wy / omega_norm) * sin_half_theta,
+            (wz / omega_norm) * sin_half_theta,
+            cos_half_theta,
+        ]);
+
+        // FIXED: Post-multiplication (q_old * q_step) applies rotation in the Local Body Frame!
+        q_new[0] = q[3]*q_step[0] + q[0]*q_step[3] + q[1]*q_step[2] - q[2]*q_step[1];
+        q_new[1] = q[3]*q_step[1] - q[0]*q_step[2] + q[1]*q_step[3] + q[2]*q_step[0];
+        q_new[2] = q[3]*q_step[2] + q[0]*q_step[1] - q[1]*q_step[0] + q[2]*q_step[3];
+        q_new[3] = q[3]*q_step[3] - q[0]*q_step[0] - q[1]*q_step[1] - q[2]*q_step[2];
+    }
+
+    let q_new_norm = q_new.dot(&q_new).sqrt();
+    q_new = q_new.mapv(|v| v / q_new_norm);
+    // ----------------------------------------------------------
 
     let x_next = Array1::from(vec![
         x_pos_new, y_pos_new, z_pos_new,
@@ -128,7 +265,7 @@ pub fn dynamics(x: &Array1<f64>, u: &Array1<f64>, mass: f64, dt: f64) -> Array1<
     x_next
 }
 
-fn compute_jacobian(x: &Array1<f64>, u: &Array1<f64>, mass: f64, dt: f64) -> (Array2<f64>, Array2<f64>) {
+fn compute_jacobian(x: &Array1<f64>, u: &Array1<f64>, mass: f64, moi: &Array2<f64>, dt: f64) -> (Array2<f64>, Array2<f64>) {
     let n = x.len();
     let m = u.len();
     let mut A = Array2::<f64>::zeros((n, n));
@@ -141,8 +278,8 @@ fn compute_jacobian(x: &Array1<f64>, u: &Array1<f64>, mass: f64, dt: f64) -> (Ar
         let mut x_minus = x.clone();
         x_plus[i] += eps;
         x_minus[i] -= eps;
-        let fx_plus = dynamics(&x_plus, u, mass, dt);
-        let fx_minus = dynamics(&x_minus, u, mass, dt);
+        let fx_plus = dynamics(&x_plus, u, mass, moi, dt);
+        let fx_minus = dynamics(&x_minus, u, mass, moi, dt);
         A.column_mut(i).assign(&((fx_plus - fx_minus) / (2.0 * eps)));
     }
     for i in 0..m {
@@ -150,31 +287,31 @@ fn compute_jacobian(x: &Array1<f64>, u: &Array1<f64>, mass: f64, dt: f64) -> (Ar
         let mut u_minus = u.clone();
         u_plus[i] += eps;
         u_minus[i] -= eps;
-        let fx_plus = dynamics(x, &u_plus, mass, dt);
-        let fx_minus = dynamics(x, &u_minus, mass, dt);
+        let fx_plus = dynamics(x, &u_plus, mass, moi, dt);
+        let fx_minus = dynamics(x, &u_minus, mass, moi, dt);
         B.column_mut(i).assign(&((fx_plus - fx_minus) / (2.0 * eps)));
     }
 
     (A, B)
 }
 
-fn rollout(x0: &Array1<f64>, U: &Vec<Array1<f64>>, mass: f64, dt: f64) -> Vec<Array1<f64>> {
+fn rollout(x0: &Array1<f64>, U: &Vec<Array1<f64>>, mass: f64, moi: &Array2<f64>, dt: f64) -> Vec<Array1<f64>> {
     let mut xs = Vec::new();
     let mut x = x0.clone();
     xs.push(x.clone());
     for u in U.iter() {
-        x = dynamics(&x, u, mass, dt);
+        x = dynamics(&x, u, mass, moi, dt);
         xs.push(x.clone());
     }
     xs
 }
 
-fn linearize_trajectory(xs: &Vec<Array1<f64>>, U: &Vec<Array1<f64>>, mass: f64, dt: f64) -> (Vec<Array2<f64>>, Vec<Array2<f64>>) {
+fn linearize_trajectory(xs: &Vec<Array1<f64>>, U: &Vec<Array1<f64>>, mass: f64, moi: &Array2<f64>, dt: f64) -> (Vec<Array2<f64>>, Vec<Array2<f64>>) {
     let mut A_seq = Vec::new();
     let mut B_seq = Vec::new();
 
     for k in 0..U.len() {
-        let (A, B) = compute_jacobian(&xs[k], &U[k], mass, dt);
+        let (A, B) = compute_jacobian(&xs[k], &U[k], mass, moi, dt);
         A_seq.push(A.clone());
         B_seq.push(B.clone());
     }
@@ -333,8 +470,8 @@ fn solve_qp_pgd(H: &Array2<f64>, g: &Array1<f64>, dU_min: &Array1<f64>, dU_max: 
 
 // TO DO: implement QP solver using active set method with BOX CONSTRAINTS. 
 
-fn true_cost(x0: &Array1<f64>, U: &Vec<Array1<f64>>, xref_traj: &Vec<Array1<f64>>, Q: &Array2<f64>, R: &Array2<f64>, QN: &Array2<f64>, mass: f64, dt: f64) -> f64 {
-    let xs = rollout(x0, U, mass, dt);
+fn true_cost(x0: &Array1<f64>, U: &Vec<Array1<f64>>, xref_traj: &Vec<Array1<f64>>, Q: &Array2<f64>, R: &Array2<f64>, QN: &Array2<f64>, mass: f64, moi: &Array2<f64>, dt: f64) -> f64 {
+    let xs = rollout(x0, U, mass, moi, dt);
     let N = U.len();
     let mut cost = 0.0;
 
@@ -352,7 +489,7 @@ fn true_cost(x0: &Array1<f64>, U: &Vec<Array1<f64>>, xref_traj: &Vec<Array1<f64>
     cost
 }
 
-fn nmpc_step(x0: &Array1<f64>, U_init: &Vec<Array1<f64>>, xref_traj: &Vec<Array1<f64>>, Q: &Array2<f64>, R: &Array2<f64>, QN: &Array2<f64>, u_min: &Array1<f64>, u_max: &Array1<f64>, sqp_iters: usize, alpha_pgd: f64, mass: f64, dt: f64) -> (Vec<Array1<f64>>, Vec<Array1<f64>>) {
+fn nmpc_step(x0: &Array1<f64>, U_init: &Vec<Array1<f64>>, xref_traj: &Vec<Array1<f64>>, Q: &Array2<f64>, R: &Array2<f64>, QN: &Array2<f64>, u_min: &Array1<f64>, u_max: &Array1<f64>, sqp_iters: usize, alpha_pgd: f64, mass: f64, moi: &Array2<f64>, dt: f64) -> (Vec<Array1<f64>>, Vec<Array1<f64>>) {
     let N = U_init.len();
     let m = U_init[0].len();
     // initialize xs trajectory
@@ -360,8 +497,8 @@ fn nmpc_step(x0: &Array1<f64>, U_init: &Vec<Array1<f64>>, xref_traj: &Vec<Array1
     let mut U = U_init.clone();
     let start_time = Instant::now();
     for _ in 0..sqp_iters {
-        xs = rollout(x0, &U, mass, dt);
-        let (A_seq, B_seq) = linearize_trajectory(&xs, &U, mass, dt);
+        xs = rollout(x0, &U, mass, moi, dt);
+        let (A_seq, B_seq) = linearize_trajectory(&xs, &U, mass, moi, dt);
         let (H, g, dU_min, dU_max, _Su, _Q_bar, _R_bar) = assemble_qp_increment(&xs, &U, &xref_traj, &A_seq, &B_seq, &Q, &R, &QN, &u_min, &u_max);
         let dU0 = Array1::<f64>::zeros(m * N);
         let dU = solve_qp_pgd(&H, &g, &dU_min, &dU_max, &dU0, 20, alpha_pgd);
@@ -371,7 +508,7 @@ fn nmpc_step(x0: &Array1<f64>, U_init: &Vec<Array1<f64>>, xref_traj: &Vec<Array1
         for k in 0..N {
             flatU.slice_mut(s![k*m..(k+1)*m]).assign(&U[k]);
         }
-        let J0 = true_cost(x0, &U, xref_traj, Q, R, QN, mass, dt);
+        let J0 = true_cost(x0, &U, xref_traj, Q, R, QN, mass, moi, dt);
         let mut step = 1.0;
         while step > 1e-3 {
             let U_try_flat = &flatU + &(step * &dU);
@@ -385,7 +522,7 @@ fn nmpc_step(x0: &Array1<f64>, U_init: &Vec<Array1<f64>>, xref_traj: &Vec<Array1
                 }
                 U_try.push(u_k);
             }
-            let Jtry = true_cost(x0, &U_try, xref_traj, Q, R, QN, mass, dt);
+            let Jtry = true_cost(x0, &U_try, xref_traj, Q, R, QN, mass, moi, dt);
             if Jtry < J0 {
                 U = U_try;
                 break;
@@ -469,6 +606,7 @@ pub fn OpEnSolve(
     smoothing_weight: &Array1<f64>,
     panoc_cache: &mut PANOCCache,
     mass: f64,
+    moi: &Array2<f64>,
     min_thrust: f64,
     max_thrust: f64,
     gimbal_limit_rad: f64,
@@ -488,8 +626,8 @@ pub fn OpEnSolve(
     let u_nom = Array1::from(u_nom_flat.clone());
 
     // Linearize about current rollout, assemble QP in delta-U space
-    let xs = rollout(x0, U, mass, dt);
-    let (A_seq, B_seq) = linearize_trajectory(&xs, U, mass, dt);
+    let xs = rollout(x0, U, mass, moi, dt);
+    let (A_seq, B_seq) = linearize_trajectory(&xs, U, mass, moi, dt);
     let (H, g, _dU_min, _dU_max, _Su, _Q_bar, _R_bar) =
         assemble_qp_increment(&xs, U, xref_traj, &A_seq, &B_seq, Q, R, QN,
                               &Array1::zeros(m), &Array1::zeros(m));
@@ -557,11 +695,11 @@ pub fn OpEnSolve(
 }
 
 // Main MPC function to be called externally
-pub fn mpc_main(x: &Array1<f64>, U_warm: &mut Vec<Array1<f64>>, xref_traj: &Vec<Array1<f64>>, Q: &Array2<f64>, R: &Array2<f64>, QN: &Array2<f64>, u_min: &Array1<f64>, u_max: &Array1<f64>, sqp_iters: usize, alpha_pgd: f64, mass: f64, dt: f64) -> (Vec<Array1<f64>>, Array1<f64>, Array1<f64>) {
-    let (U, _xs) = nmpc_step(x, &U_warm, &xref_traj, &Q, &R, &QN, &u_min, &u_max, sqp_iters, alpha_pgd, mass, dt);
+pub fn mpc_main(x: &Array1<f64>, U_warm: &mut Vec<Array1<f64>>, xref_traj: &Vec<Array1<f64>>, Q: &Array2<f64>, R: &Array2<f64>, QN: &Array2<f64>, u_min: &Array1<f64>, u_max: &Array1<f64>, sqp_iters: usize, alpha_pgd: f64, mass: f64, moi: &Array2<f64>, dt: f64) -> (Vec<Array1<f64>>, Array1<f64>, Array1<f64>) {
+    let (U, _xs) = nmpc_step(x, &U_warm, &xref_traj, &Q, &R, &QN, &u_min, &u_max, sqp_iters, alpha_pgd, mass, moi, dt);
     let u_apply = U[0].clone(); // apply first control
 
-    let x_new = dynamics(x, &u_apply, mass, dt);
+    let x_new = dynamics(x, &u_apply, mass, moi, dt);
     *U_warm = U[1..].to_vec(); // shift warm start
     U_warm.push(U_warm.last().unwrap().clone()); // repeat last control for warm start
 
