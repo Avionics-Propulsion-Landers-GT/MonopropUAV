@@ -27,9 +27,9 @@ pub struct Simulation {
 impl Default for Simulation {
     fn default() -> Self {
         Self {
-            rocket: Self::get_rocket(),
-            mpc: Self::get_mpc(),
-            lossless: Self::get_lossless(),
+            rocket: Rocket::default(),
+            mpc: MPC::default(),
+            lossless: Lossless::default(),
             dt: 0.01,
             current_time: 0.0,
             debug: false,
@@ -69,6 +69,7 @@ impl Simulation {
 
     pub fn init(&mut self) {
         if self.debug {
+            // use "~/.cargo/bin/rerun --web-viewer" to run rereun viewer if "rerun --web-viewer" doesn't work
             println!("Connecting to Rerun Viewer...");
 
             // FIX: Use .connect_grpc() as the compiler suggested.
@@ -284,6 +285,8 @@ impl Simulation {
                 self.traj_timer = self.current_time;
             }
         } else if self.traj_stage == 2 {
+            // TODO: fix the vertical (and horizontal) drift during hovering
+
             // 1. Stage Cost (Q) - Massive penalty for Z errors
             self.mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
                 150.0, 150.0, 500.0,  // Stiffened Z-Position spring (from 40.0 to 1500.0)
@@ -325,191 +328,6 @@ impl Simulation {
         }
 
         (xref_traj, uref_traj)
-    }
-
-    pub fn get_rocket() -> Rocket {
-        let position = Vector3::new(0.0, 0.0, 0.0);
-        let velocity = Vector3::new(0.0, 0.0, 0.0);
-        let acceleration = Vector3::new(0.0, 0.0, 0.0);
-        let attitude = UnitQuaternion::identity();
-        let angular_velocity = Vector3::new(0.0, 0.0, 0.0);
-        let angular_acceleration = Vector3::new(0.0, 0.0, 0.0);
-
-        let frame_mass = 15.66;
-        let nitrogen_tank_empty_mass = 15.6;
-        let starting_nitrogen_mass = 5.0;
-        let nitrogen_tank_offset = Vector3::new(-0.02, -0.01, 0.76);
-        let nitrous_tank_empty_mass = 15.86;
-        let starting_pressurizing_nitrogen_mass = 0.0;
-        let starting_nitrous_mass = 16.0;
-        let nitrous_tank_offset = Vector3::new(-0.02, -0.01, 0.592);
-        let tvc_module_empty_mass = 8.76;
-        let starting_fuel_grain_mass = 3.0;
-        let frame_com_to_gimbal = Vector3::new(-0.02, -0.01, -0.24);
-        let gimbal_to_tvc_com = Vector3::new(0.0, 0.0, -0.25);
-        
-        let frame_moi = Matrix3::new(6.65, 0.35, -0.02,
-                                    0.35, 6.65, -0.02,
-                                    -0.02, -0.02, 2.3);
-        let dry_nitrogen_moi = Matrix3::new(0.9275, 0.0, 0.0,
-                                            0.0, 0.9275, 0.0,
-                                            0.0, 0.0, 1.055);
-        let wet_nitrogen_moi = Matrix3::new(1.0075, 0.0, 0.0,
-                                            0.0, 1.0075, 0.0,
-                                            0.0, 0.0, 1.055);
-        let nitrous_tank_radius = 0.0;
-        let nitrous_tank_length = 0.0;
-        let nitrous_level = 0.85 * 0.75;
-        let dry_nitrous_moi = Matrix3::new(1.31, 0.0, 0.0,
-                                            0.0, 1.31, 0.0,
-                                            0.0, 0.0, 0.21);
-        let dry_tvc_moi = Matrix3::new(0.64, 0.0, 0.0,
-                                        0.0, 0.64, 0.0,
-                                        0.0, 0.0, 0.06);
-        let wet_tvc_moi = Matrix3::new(0.84, 0.0, 0.0,
-                                        0.0, 0.84, 0.0,
-                                        0.0, 0.0, 0.07);
-        let tvc_range = 15_f64.to_radians();
-
-        let mtv_angle = 60.0;
-        let mtv_ang_vel = 0.0;
-        let mtv_ang_accel = 0.0;
-        let mtv_unloaded_speed = 60.0;
-        let mtv_stall_torque = 70.0;
-        let mtv_p_gain = 1000.0;
-        let mtv_valve_torque = 30.0;
-        let mtv_update_rate = 200.0;
-        let mtv = MTV::new(mtv_angle, mtv_ang_vel, mtv_ang_accel, mtv_unloaded_speed, mtv_stall_torque, mtv_p_gain, mtv_valve_torque, starting_fuel_grain_mass, mtv_update_rate);
-
-        let actuator_start_position = 0.0;
-        let actuator_extension_limit = 0.08;
-        let acuator_unloaded_speed = 0.14986;
-        let actuator_stall_force = 102.06;
-        let actuator_p_gain = 10.0;
-        let actuator_pos_noise_sigma = 0.0;
-        let actuator_update_rate = 200.0;
-        let x_actuator = TVCActuator::new(actuator_start_position, actuator_extension_limit, acuator_unloaded_speed, actuator_stall_force, actuator_p_gain, actuator_pos_noise_sigma, actuator_update_rate);
-        let y_actuator = TVCActuator::new(actuator_start_position, actuator_extension_limit, acuator_unloaded_speed, actuator_stall_force, actuator_p_gain, actuator_pos_noise_sigma, actuator_update_rate);
-        
-        let tvc_actuator_lever_arm = 0.1;
-        // TODO: Whenever properly implementing TVC, fix these values
-        let tvc_max_fuel_inertia = 3.0;
-        let tvc_min_fuel_inertia = 8.0;
-        let tvc = TVC::new(mtv, x_actuator, y_actuator, tvc_actuator_lever_arm, frame_com_to_gimbal, tvc_max_fuel_inertia, tvc_min_fuel_inertia, starting_fuel_grain_mass);
-
-        let rcs_thrust = 10.0;
-        let rcs_lever_arm = 0.15;
-        let rcs_nitrogen_consumption_rate = 0.1;
-        let rcs_update_rate = 10.0;
-        let rcs = RCS::new(rcs_thrust, rcs_lever_arm, rcs_nitrogen_consumption_rate, rcs_update_rate);
-
-        let imu_accel_noise_sigma = Vector3::new(0.00137, 0.00137, 0.00137);
-        let imu_accel_offset = Vector3::new(0.0, 0.0, 0.0);
-        let imu_gyro_noise_sigma = Vector3::new(0.000061, 0.000061, 0.000061    );
-        let imu_gyro_drift = Vector3::new(0.0, 0.0, 0.0);
-        let imu_mag_noise_sigma = Vector3::new(14.0e-9, 14.0e-9, 14.0e-9);
-        let imu_mag_offset = Vector3::new(0.0, 0.0, 0.0);
-        let imu_earth_magnetic_field = Vector3::new(
-                                                    -0.0000020,  // -2.0 microTesla East
-                                                    0.0000220,  // +22.0 microTesla North
-                                                    -0.0000443); // -44.3 microTesla Up (Pointing Down!)
-        let imu_update_rate = 300.0;
-        let imu = IMU::new(imu_accel_noise_sigma, imu_accel_offset, imu_gyro_noise_sigma, imu_gyro_drift, imu_mag_noise_sigma, imu_mag_offset, imu_earth_magnetic_field, imu_update_rate);
-        
-        let gps_position_noise_sigma = Vector3::zeros();
-        let gps_position_offset = Vector3::zeros();
-        let gps_update_rate = 5.0;
-        let gps = GPS::new(gps_position_noise_sigma, gps_position_offset, gps_update_rate);
-
-        let uwb_position_noise_sigma = Vector3::zeros();
-        let uwb_position_offset = Vector3::zeros();
-        let uwb_origin = Vector3::zeros();
-        let uwb_range = 8.0;
-        let uwb_update_rate = 5.0;
-        let uwb = UWB::new(uwb_position_noise_sigma, uwb_position_offset, uwb_origin, uwb_range, uwb_update_rate);
-
-        let slosh_model = Self::get_slosh_model();
-        let nist_data = NistData::new();
-        let nitrogen_iso_data = IsoData::new("isobaric_nitrogen.csv");
-        let nitrous_iso_data = IsoData::new("isobaric_liquid_nitrous_oxide.csv");
-        let port_d = 0.05;
-        let nitrous_m_dot = 0.0;
-
-        let com_to_ground = Vector3::new(0.0, 0.0, -1.5);
-
-
-        Rocket::new(position, velocity, acceleration, attitude, angular_velocity, angular_acceleration, frame_mass, nitrogen_tank_empty_mass, starting_nitrogen_mass, nitrogen_tank_offset, nitrous_tank_empty_mass, starting_pressurizing_nitrogen_mass, starting_nitrous_mass, nitrous_tank_offset, tvc_module_empty_mass, starting_fuel_grain_mass, frame_com_to_gimbal, gimbal_to_tvc_com, frame_moi, dry_nitrogen_moi, wet_nitrogen_moi, nitrous_tank_radius, nitrous_tank_length, nitrous_level, dry_nitrous_moi, dry_tvc_moi, wet_tvc_moi, tvc_range, tvc, rcs, imu, gps, uwb, slosh_model, nist_data, nitrogen_iso_data, nitrous_iso_data, port_d, nitrous_m_dot, com_to_ground)
-    }
-
-    fn get_mpc() -> MPC {
-        let n = 13; // [x, y, z, qx, qy, qz, qw, x_dot, y_dot, z_dot, wx, wy, wz]
-        let m = 3;  // [gimbal_theta, gimbal_phi, thrust]
-        let n_steps = 10;
-        let dt = 0.2;
-        // let integral_gains = (0.001, 0.001, 0.002);
-        let integral_gains = (0.0, 0.0, 0.0);
-        let q = Array2::<f64>::from_diag(&Array1::from(vec![
-            60.0, 60.0, 80.0,   // position x, y, z
-            60000.0, 60000.0, 60000.0, 0.0, // quaternion qx, qy, qz, qw
-            30.0, 30.0, 12000.0,        // linear velocities x_dot, y_dot, z_dot
-            100.0, 100.0, 100.0          // angular velocities wx, wy, wz
-        ]));
-        let r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 1.0]));
-        let qn = Array2::<f64>::from_diag(&Array1::from(vec![
-            60.0, 60.0, 80.0,   // position x, y, z
-            100000.0, 100000.0, 100000.0, 0.0, // quaternion qx, qy, qz, qw
-            20.0, 20.0, 50000.0,        // linear velocities x_dot, y_dot, z_dot
-            50.0, 50.0, 50.0          // angular velocities wx, wy, wz
-        ]));
-        // let smoothing_weight = Array1::from(vec![150.0, 150.0, -2.0]);
-        let smoothing_weight = Array1::from(vec![0.0, 0.0, 0.0]);
-        let panoc_cache_tolerance = 1e-4;
-        let panoc_cache_lbfgs_memory = 20;
-        let min_thrust = 400.0;
-        let max_thrust = 1000.0;
-        let gimbal_limit = 15_f64.to_radians();
-        let system_time = -1.0;
-        let update_rate = 50.0;
-
-        MPC::new(n, m, n_steps, dt, integral_gains, q, r, qn, smoothing_weight, panoc_cache_tolerance, panoc_cache_lbfgs_memory, min_thrust, max_thrust, gimbal_limit, system_time, update_rate)
-    }
-
-    fn get_lossless() -> Lossless {
-        let max_velocity = 10.0;
-        let dry_mass = 61.0;
-        let alpha = 1.0 / (9.81 * 180.0);
-        let lower_thrust_bound = 400.0;
-        let upper_thrust_bound = 900.0;
-        let tvc_range_rad = 15_f64.to_radians();
-        let coarse_delta_t = 0.25;
-        let fine_delta_t = 0.1;
-        let glide_slope = 0.05_f64.to_radians();
-        let use_glide_slope = true;
-        let flip_glide_slope = true;
-        let system_time = -1.0;
-        let update_rate = 3.0;
-
-        Lossless::new(max_velocity, dry_mass, alpha, lower_thrust_bound, upper_thrust_bound, tvc_range_rad, coarse_delta_t, fine_delta_t, glide_slope, use_glide_slope, flip_glide_slope, [0.0; 3], system_time, update_rate)
-    }
-
-    fn get_slosh_model() -> SloshModel {
-        let radius_m = 0.12;
-        let length_m = 0.75;
-        let density_liquid = 731.18;
-        let gravity = 9.81;
-        let tank_config = TankConfig::new(radius_m, length_m, density_liquid, gravity);
-
-        let m_frac = 0.5;
-        let c_lin = 200.0;
-        let alpha = 0.0;
-        let omega_scale = 1.0;
-        let slosh_params = SloshParams::new(m_frac, c_lin, alpha, omega_scale);
-
-        let initial_fill_frac = 0.85;
-
-        let slosh_state = SloshState::default();
-
-        SloshModel::new(tank_config, slosh_params, initial_fill_frac, slosh_state)
     }
 
     // TODO: make all the print satements locked behind an if self.debug {} statement

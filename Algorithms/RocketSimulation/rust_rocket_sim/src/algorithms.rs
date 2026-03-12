@@ -56,6 +56,39 @@ impl MPC {
         }
     }
 
+    pub fn default() -> Self {
+        let n = 13; // [x, y, z, qx, qy, qz, qw, x_dot, y_dot, z_dot, wx, wy, wz]
+        let m = 3;  // [gimbal_theta, gimbal_phi, thrust]
+        let n_steps = 10;
+        let dt = 0.2;
+        // let integral_gains = (0.001, 0.001, 0.002);
+        let integral_gains = (0.0, 0.0, 0.0);
+        let q = Array2::<f64>::from_diag(&Array1::from(vec![
+            150.0, 150.0, 200.0,   // position x, y, z
+            40000.0, 40000.0, 0.0, 0.0, // quaternion qx, qy, qz, qw
+            100.0, 100.0, 6000.0,        // linear velocities x_dot, y_dot, z_dot
+            500.0, 500.0, 500.0          // angular velocities wx, wy, wz
+        ]));
+        let r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 0.005]));
+        let qn = Array2::<f64>::from_diag(&Array1::from(vec![
+            150.0, 150.0, 200.0,   // position x, y, z
+            50000.0, 50000.0, 0.0, 0.0, // quaternion qx, qy, qz, qw
+            100.0, 100.0, 80000.0,        // linear velocities x_dot, y_dot, z_dot
+            1000.0, 1000.0, 1000.0          // angular velocities wx, wy, wz
+        ]));
+        // let smoothing_weight = Array1::from(vec![150.0, 150.0, -2.0]);
+        let smoothing_weight = Array1::from(vec![0.0, 0.0, 0.0]);
+        let panoc_cache_tolerance = 1e-4;
+        let panoc_cache_lbfgs_memory = 20;
+        let min_thrust = 400.0;
+        let max_thrust = 1000.0;
+        let gimbal_limit = 15_f64.to_radians();
+        let system_time = -1.0;
+        let update_rate = 50.0;
+
+        Self::new(n, m, n_steps, dt, integral_gains, q, r, qn, smoothing_weight, panoc_cache_tolerance, panoc_cache_lbfgs_memory, min_thrust, max_thrust, gimbal_limit, system_time, update_rate)
+    }
+
     pub fn update(&mut self, x0: &Array1<f64>, xref_traj: &Vec<Array1<f64>>, u_warm: &Vec<Array1<f64>>, mass: f64, moi: &Array2<f64>, system_time: f64) -> Vec<Array1<f64>> {
         let elapsed_time = system_time - self.system_time;
         if elapsed_time < 1.0 / self.update_rate {
@@ -165,6 +198,24 @@ impl Lossless {
             },
             last_solve_time: 0.0,
         }
+    }
+
+    pub fn default() -> Self {
+        let max_velocity = 5.0;
+        let dry_mass = 61.0;
+        let alpha = 1.0 / (9.81 * 180.0);
+        let lower_thrust_bound = 400.0;
+        let upper_thrust_bound = 900.0;
+        let tvc_range_rad = 15_f64.to_radians();
+        let coarse_delta_t = 0.25;
+        let fine_delta_t = 0.1;
+        let glide_slope = 0.05_f64.to_radians();
+        let use_glide_slope = true;
+        let flip_glide_slope = true;
+        let system_time = -1.0;
+        let update_rate = 3.0;
+
+        Self::new(max_velocity, dry_mass, alpha, lower_thrust_bound, upper_thrust_bound, tvc_range_rad, coarse_delta_t, fine_delta_t, glide_slope, use_glide_slope, flip_glide_slope, [0.0; 3], system_time, update_rate)
     }
 
     pub fn update(&mut self, current_position: [f64; 3], current_velocity: [f64; 3], target_position: [f64; 3], propellant_mass: f64, system_time: f64) -> lossless::TrajectoryResult {
