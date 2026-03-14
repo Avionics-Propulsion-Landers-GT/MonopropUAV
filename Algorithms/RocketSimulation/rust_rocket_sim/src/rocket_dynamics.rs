@@ -309,17 +309,80 @@ impl Rocket {
 
         // Relative velocity: how fast we're moving through the air (not the ground)
         let relative_vel_world = self.velocity - wind_vel_world;
+        // Rotate into body frame so we can decompose into axial vs. lateral components.
         let body_vel = self.attitude.inverse_transform_vector(&relative_vel_world);
 
-        // Drag per axis: F_drag = -sign(v) * 0.5 * rho * Cd * A * v^2
-        // The sign flip makes sure drag always opposes motion on each axis.
-        // Cd*A values match the original (lateral faces vs. axial face).
-        let drag_body = Vector3::new(
-            -body_vel.x.signum() * 0.5 * 1.225 * 2.0 * 1.2 * body_vel.x.powi(2),
-            -body_vel.y.signum() * 0.5 * 1.225 * 2.0 * 1.2 * body_vel.y.powi(2),
-            -body_vel.z.signum() * 0.5 * 1.225 * 0.85 * 0.25 * body_vel.z.powi(2),
-        );
+        // --- Atmospheric Model ---
+        // ISA barometric formula: rho(h) = 1.225 * exp(-h / 8500)  [kg/m^3]
+        // Clamp altitude to zero so rho doesn't blow up underground.
+        let h = self.position.z.max(0.0);
+        let rho = 1.225_f64 * (-h / 8500.0_f64).exp();
+
+        let speed = body_vel.norm();  // magnitude of the relative wind in body frame [m/s]
+
+        // --- Drag & Aerodynamic Moment ---
+        //
+        // Everything below lives in the BODY FRAME until we explicitly rotate.
+        // Body frame convention (Z-up sim):
+        //   +X = rocket starboard (right when looking from aft)
+        //   +Y = rocket "up" in the lateral plane
+        //   +Z = nose direction (body axis)
+        //
+        // We use a single lookup point (alpha, Mach) rather than per-axis Cd*A because
+        // real aero data is parameterised this way and it naturally handles cross-coupling.
+        let (drag_body, aero_moment_body) = if let Some(table) = &self.aero_table {
+            // Compute Mach number — speed of sound is ISA sea-level (343 m/s).
+            // A proper ISA model would make this altitude-dependent; left as a TODO.
+            let speed_of_sound = 343.0_f64;
+            let mach = speed / speed_of_sound;
+
+            // Angle of attack: angle between the relative wind vector and the body Z axis.
+            // lateral = crossflow component (sqrt of x^2 + y^2); axial = along-axis component.
+            // alpha=0 means the wind is perfectly head-on; alpha=90 means pure crossflow.
+            let lateral = (body_vel.x.powi(2) + body_vel.y.powi(2)).sqrt();
+            let alpha_deg = lateral.atan2(body_vel.z.abs()).to_degrees();
+
+            // Bilinear lookup — both axes are clamped inside lookup() so no panic here.
+            let rec = table.lookup(alpha_deg, mach);
+
+            let q_dyn     = 0.5 * rho * speed * speed;   // dynamic pressure [Pa]
+            let drag_mag  = q_dyn * rec.cd * rec.area_ref; // scalar drag force magnitude [N]
+
+            // Drag force vector opposes the relative wind direction, in body frame.
+            let drag_body = if speed > 1e-6 {
+                -(body_vel / speed) * drag_mag
+            } else {
+                Vector3::zeros()
+            };
+
+            // Lever arm from current CoM to the centre of pressure, body frame.
+            // r_lever = r_cp_from_nose - r_com_from_nose (per the design spec).
+            // This sim uses Z-UP in world; body +Z = nose direction.
+            // cp_z_from_nose is measured aft from nose along body Z, so is a positive number.
+            // r_com_from_nose is the nose-to-CoM distance (also positive, nose is forward).
+            // Subtracting gives a signed offset: positive = CP is aft of CoM (stable config).
+            let r_com_from_nose = self.get_nose_to_com_z();
+            let r_lever = Vector3::new(0.0, 0.0, rec.cp_z_from_nose - r_com_from_nose);
+
+            // M_aero = r_lever × F_drag  (torque about CoM in body frame [N·m])
+            // This stays in body frame — Euler's equations operate there directly.
+            let aero_moment = r_lever.cross(&drag_body);
+
+            (drag_body, aero_moment)
+        } else {
+            // Fallback: hard-coded Cd*A per axis (original behaviour).
+            // We still use the altitude-corrected rho to improve accuracy vs. before.
+            let drag_fallback = Vector3::new(
+                -body_vel.x.signum() * 0.5 * rho * 2.0  * 1.2  * body_vel.x.powi(2),
+                -body_vel.y.signum() * 0.5 * rho * 2.0  * 1.2  * body_vel.y.powi(2),
+                -body_vel.z.signum() * 0.5 * rho * 0.85 * 0.25 * body_vel.z.powi(2),
+            );
+            (drag_fallback, Vector3::zeros())  // no moment term in the simple model
+        };
+
+        // Rotate the body-frame drag into world frame for Newton's second law.
         let drag_world = self.attitude.transform_vector(&drag_body);
+
         let total_force = outside_forces + (gravity * mass) + self.thrust_vector + slosh_force_world + drag_world;
         self.debug_info.total_force = total_force;
         self.debug_info.thrusts.push(tvc_effect.thrust);
