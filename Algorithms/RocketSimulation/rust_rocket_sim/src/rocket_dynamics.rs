@@ -387,6 +387,8 @@ impl Rocket {
         self.debug_info.total_force = total_force;
         self.debug_info.thrusts.push(tvc_effect.thrust);
         self.debug_info.slosh_forces.push(slosh_force);
+        self.debug_info.aero_drags.push(drag_body);
+        self.debug_info.aero_moments.push(aero_moment_body);
 
         self.accel = total_force / mass;        
         self.velocity += self.accel * dt;
@@ -402,7 +404,9 @@ impl Rocket {
         let gyro_torque = self.ang_vel.cross(&i_omega);
         let slosh_lever_arm = self.nitrous_tank_offset - com_offset;
         let slosh_torque = slosh_lever_arm.cross(&slosh_force);
-        let net_torque = outside_torques - gyro_torque + tvc_effect.torque + rcs_effect.torque + slosh_torque;
+        // aero_moment_body is in body frame — add it directly here alongside TVC and slosh.
+        // DO NOT rotate to world frame first; Euler's equations already operate in body frame.
+        let net_torque = outside_torques - gyro_torque + tvc_effect.torque + rcs_effect.torque + slosh_torque + aero_moment_body;
         self.debug_info.thrust_torque = tvc_effect.torque;
         self.debug_info.total_torque = net_torque;
 
