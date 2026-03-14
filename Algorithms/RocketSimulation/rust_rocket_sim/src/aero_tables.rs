@@ -160,3 +160,65 @@ fn bilinear_interp(
         cp_z_from_nose: w00*q00.cp_z_from_nose + w10*q10.cp_z_from_nose + w01*q01.cp_z_from_nose + w11*q11.cp_z_from_nose,
     }
 }
+
+// ─── Unit Tests ───────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Build a minimal in-memory 2×2 table so tests are hermetic (no file I/O).
+    fn tiny_table() -> AeroTable {
+        let alphas = vec![0.0, 10.0];
+        let machs  = vec![0.5, 1.0];
+        let grid = vec![
+            vec![
+                AeroRecord { alpha_deg: 0.0,  mach: 0.5, cd: 0.30, area_ref: 0.05, cp_z_from_nose: 1.50 },
+                AeroRecord { alpha_deg: 0.0,  mach: 1.0, cd: 0.55, area_ref: 0.05, cp_z_from_nose: 1.45 },
+            ],
+            vec![
+                AeroRecord { alpha_deg: 10.0, mach: 0.5, cd: 0.45, area_ref: 0.08, cp_z_from_nose: 1.40 },
+                AeroRecord { alpha_deg: 10.0, mach: 1.0, cd: 0.70, area_ref: 0.08, cp_z_from_nose: 1.35 },
+            ],
+        ];
+        AeroTable { alphas, machs, grid }
+    }
+
+    #[test]
+    fn exact_corner_lookup() {
+        let t = tiny_table();
+        let rec = t.lookup(0.0, 0.5);
+        assert!((rec.cd - 0.30).abs() < 1e-10, "cd mismatch at corner (0°, M0.5)");
+        assert!((rec.cp_z_from_nose - 1.50).abs() < 1e-10);
+
+        let rec2 = t.lookup(10.0, 1.0);
+        assert!((rec2.cd - 0.70).abs() < 1e-10, "cd mismatch at corner (10°, M1.0)");
+    }
+
+    #[test]
+    fn mach_clamping_no_panic() {
+        let t = tiny_table();
+        // Mach way beyond the table — should silently clamp to M=1.0.
+        let rec = t.lookup(0.0, 999.0);
+        assert!((rec.cd - 0.55).abs() < 1e-10, "should clamp to last Mach column");
+    }
+
+    #[test]
+    fn alpha_clamping_no_panic() {
+        let t = tiny_table();
+        let rec = t.lookup(-5.0, 0.5);
+        assert!((rec.cd - 0.30).abs() < 1e-10, "should clamp to first alpha row");
+    }
+
+    #[test]
+    fn bilinear_midpoint_is_average() {
+        let t = tiny_table();
+        // At the exact cell midpoint the result must equal the simple average of all 4 corners.
+        let rec = t.lookup(5.0, 0.75);
+        let expected_cd = (0.30 + 0.55 + 0.45 + 0.70) / 4.0;
+        assert!(
+            (rec.cd - expected_cd).abs() < 1e-10,
+            "midpoint cd = {:.6}, expected {:.6}", rec.cd, expected_cd
+        );
+    }
+}
