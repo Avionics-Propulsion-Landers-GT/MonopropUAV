@@ -4,6 +4,7 @@ use crate::device_sim::*;
 use crate::sloshing_sim::*;
 use crate::fluid_dynamics::*;
 use crate::wind_sim::WindModel;
+use crate::aero_tables::AeroTable;
 use ndarray::Array1;
 use std::error::Error;
 use std::fs::File;
@@ -69,6 +70,13 @@ pub struct Rocket {
     // Optional wind model — None means no wind (clean-air baseline)
     pub wind_model: Option<WindModel>,
 
+    // Optional aerodynamic lookup table — None falls back to the hard-coded drag model.
+    pub aero_table: Option<AeroTable>,
+    // Distance from the rocket's body-frame origin (frame CoM reference) to the
+    // physical nose tip, measured along the body Z axis (positive = aft of nose).
+    // Used to convert cp_z_from_nose into a lever arm relative to the current CoM.
+    pub nose_offset_z: f64,
+
     system_time: f64,
 
     pub debug_info: RocketDebugInfo,
@@ -97,10 +105,14 @@ pub struct RocketDebugInfo{
     pub nitrogen_n2o_tank_masses: Vec<f64>,
     // Wind velocity applied this tick [m/s], world frame
     pub wind_vels: Vec<Vector3<f64>>,
+    // Drag force applied this tick, body frame [N]
+    pub aero_drags: Vec<Vector3<f64>>,
+    // Aerodynamic moment (r_lever × F_drag), body frame [N·m]
+    pub aero_moments: Vec<Vector3<f64>>,
 }
 
 impl Rocket {
-    pub fn new(position: Vector3<f64>, velocity: Vector3<f64>, accel: Vector3<f64>, attitude: UnitQuaternion<f64>, ang_vel: Vector3<f64>, ang_accel: Vector3<f64>, frame_mass: f64, nitrogen_tank_empty_mass: f64, starting_nitrogen_mass: f64, nitrogen_tank_offset: Vector3<f64>, nitrous_tank_empty_mass: f64, starting_pressurizing_nitrogen_mass: f64, starting_nitrous_mass: f64, nitrous_tank_offset: Vector3<f64>, tvc_module_empty_mass: f64, starting_fuel_grain_mass: f64, frame_com_to_gimbal: Vector3<f64>, gimbal_to_tvc_com: Vector3<f64>, frame_moi: Matrix3<f64>, dry_nitrogen_moi: Matrix3<f64>, wet_nitrogen_moi: Matrix3<f64>, nitrous_tank_radius: f64, nitrous_tank_length: f64, nitrous_level: f64, dry_nitrous_moi: Matrix3<f64>, dry_tvc_moi: Matrix3<f64>, wet_tvc_moi: Matrix3<f64>, tvc_range: f64, tvc: TVC, rcs: RCS, imu: IMU, gps: GPS, uwb: UWB, sloshing_model: SloshModel, nist_data: NistData, nitrogen_iso_data: IsoData, nitrous_iso_data: IsoData, port_d: f64, nitrous_m_dot: f64, com_to_ground: Vector3<f64>, wind_model: Option<WindModel>) -> Self {
+    pub fn new(position: Vector3<f64>, velocity: Vector3<f64>, accel: Vector3<f64>, attitude: UnitQuaternion<f64>, ang_vel: Vector3<f64>, ang_accel: Vector3<f64>, frame_mass: f64, nitrogen_tank_empty_mass: f64, starting_nitrogen_mass: f64, nitrogen_tank_offset: Vector3<f64>, nitrous_tank_empty_mass: f64, starting_pressurizing_nitrogen_mass: f64, starting_nitrous_mass: f64, nitrous_tank_offset: Vector3<f64>, tvc_module_empty_mass: f64, starting_fuel_grain_mass: f64, frame_com_to_gimbal: Vector3<f64>, gimbal_to_tvc_com: Vector3<f64>, frame_moi: Matrix3<f64>, dry_nitrogen_moi: Matrix3<f64>, wet_nitrogen_moi: Matrix3<f64>, nitrous_tank_radius: f64, nitrous_tank_length: f64, nitrous_level: f64, dry_nitrous_moi: Matrix3<f64>, dry_tvc_moi: Matrix3<f64>, wet_tvc_moi: Matrix3<f64>, tvc_range: f64, tvc: TVC, rcs: RCS, imu: IMU, gps: GPS, uwb: UWB, sloshing_model: SloshModel, nist_data: NistData, nitrogen_iso_data: IsoData, nitrous_iso_data: IsoData, port_d: f64, nitrous_m_dot: f64, com_to_ground: Vector3<f64>, wind_model: Option<WindModel>, nose_offset_z: f64, aero_table: Option<AeroTable>) -> Self {
         let mut rocket = Self {
             position,
             velocity,
@@ -148,6 +160,8 @@ impl Rocket {
             nitrous_m_dot,
             com_to_ground,
             wind_model,
+            aero_table,
+            nose_offset_z,
             system_time: 0.0,
             debug_info: RocketDebugInfo {
                 thrust_torque: Vector3::zeros(),
@@ -170,6 +184,8 @@ impl Rocket {
                 nitrogen_n2_tank_masses: Vec::new(),
                 nitrogen_n2o_tank_masses: Vec::new(),
                 wind_vels: Vec::new(),
+                aero_drags: Vec::new(),
+                aero_moments: Vec::new(),
             },
         };
 
@@ -365,6 +381,25 @@ impl Rocket {
 
     pub fn get_dry_mass(&self) -> f64 {
         self.frame_mass + self.nitrogen_tank_empty_mass + self.nitrous_tank_empty_mass + self.tvc_module_empty_mass
+    }
+
+    /// Returns the signed distance from the nose tip to the current composite CoM,
+    /// measured along the body Z axis [m].
+    ///
+    /// In our body frame, +Z points from tail to nose (Z-up in world when the
+    /// rocket stands upright). nose_offset_z is the distance from the frame CoM
+    /// reference to the nose, stored as a positive number (nose is "above" CoM in Z).
+    /// We then subtract the current CoM shift to get the nose-to-CoM distance.
+    ///
+    /// This is used to compute: r_lever = cp_z_from_nose - r_com_from_nose,
+    /// which gives the moment arm from the current CoM to the pressure centre.
+    pub fn get_nose_to_com_z(&self) -> f64 {
+        // com_offset is the shift of the composite CoM from the frame CoM reference.
+        // Since the frame CoM reference is our body-frame origin, the nose sits at
+        // +nose_offset_z along body Z. The composite CoM is at com_offset.z from origin.
+        // So the nose is (nose_offset_z - com_offset.z) ahead of the current CoM.
+        let com_offset = self.get_com_offset(self.thrust_vector);
+        self.nose_offset_z - com_offset.z
     }
 
     // This is expressed as a vector offset from the frame CoM
