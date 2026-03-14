@@ -77,6 +77,58 @@ impl AeroTable {
     }
 }
 
+// ─── Lookup (public API) ──────────────────────────────────────────────────────
+
+impl AeroTable {
+    /// Bilinearly interpolate the table at (alpha_deg, mach).
+    ///
+    /// Both axes are CLAMPED to the table's known range, so Mach 3.0 in a table
+    /// that only goes to 2.0 returns the extrapolated (last-row) record rather
+    /// than panicking. That's the correct conservative behaviour: past the table
+    /// edge we assume the last known aerodynamic state, not zeros.
+    pub fn lookup(&self, alpha_deg: f64, mach: f64) -> AeroRecord {
+        // 1. Clamp inputs to the table range.
+        let alpha_c = alpha_deg.clamp(
+            *self.alphas.first().unwrap(),
+            *self.alphas.last().unwrap(),
+        );
+        let mach_c = mach.clamp(
+            *self.machs.first().unwrap(),
+            *self.machs.last().unwrap(),
+        );
+
+        // 2. Find the lower bracket index for each axis.
+        //    windows(2) gives us overlapping pairs [a0,a1], [a1,a2], ...
+        //    We pick the first pair that contains the clamped query point.
+        let i_a = self.alphas
+            .windows(2)
+            .position(|w| alpha_c >= w[0] && alpha_c <= w[1])
+            .unwrap_or(self.alphas.len() - 1)          // exact-max edge case
+            .min(self.alphas.len().saturating_sub(2));  // keep i_a+1 in bounds
+
+        let i_m = self.machs
+            .windows(2)
+            .position(|w| mach_c >= w[0] && mach_c <= w[1])
+            .unwrap_or(self.machs.len() - 1)
+            .min(self.machs.len().saturating_sub(2));
+
+        // 3. Normalised fractional position within the cell — 0.0 = low corner, 1.0 = high.
+        let d_alpha = self.alphas[i_a + 1] - self.alphas[i_a];
+        let d_mach  = self.machs[i_m + 1]  - self.machs[i_m];
+
+        let t_alpha = if d_alpha > 1e-12 { (alpha_c - self.alphas[i_a]) / d_alpha } else { 0.0 };
+        let t_mach  = if d_mach  > 1e-12 { (mach_c  - self.machs[i_m])  / d_mach  } else { 0.0 };
+
+        // 4. Pull the four surrounding corners out of the grid.
+        //    grid is indexed [i_alpha][i_mach].
+        let q00 = &self.grid[i_a    ][i_m    ];  // low-alpha,  low-mach
+        let q10 = &self.grid[i_a + 1][i_m    ];  // high-alpha, low-mach
+        let q01 = &self.grid[i_a    ][i_m + 1];  // low-alpha,  high-mach
+        let q11 = &self.grid[i_a + 1][i_m + 1];  // high-alpha, high-mach
+
+        bilinear_interp(q00, q10, q01, q11, t_alpha, t_mach, alpha_c, mach_c)
+    }
+}
 // ─── Bilinear Interpolation ───────────────────────────────────────────────────
 
 /// Interpolate between four corner AeroRecords using normalised coordinates
