@@ -77,3 +77,34 @@ impl AeroTable {
     }
 }
 
+// ─── Bilinear Interpolation ───────────────────────────────────────────────────
+
+/// Interpolate between four corner AeroRecords using normalised coordinates
+/// t_alpha ∈ [0,1] and t_mach ∈ [0,1], where 0 = low corner, 1 = high corner.
+///
+/// Standard bilinear weights:
+///   (1-ta)(1-tm)·Q00 + ta(1-tm)·Q10 + (1-ta)tm·Q01 + ta·tm·Q11
+///
+/// Only the three physical scalars are mixed; alpha_deg and mach on the
+/// returned record are set to the queried (clamped) values.
+fn bilinear_interp(
+    q00: &AeroRecord, q10: &AeroRecord,  // low-mach:  (low-alpha, high-alpha)
+    q01: &AeroRecord, q11: &AeroRecord,  // high-mach: (low-alpha, high-alpha)
+    t_alpha: f64,
+    t_mach:  f64,
+    alpha_query: f64,
+    mach_query:  f64,
+) -> AeroRecord {
+    let w00 = (1.0 - t_alpha) * (1.0 - t_mach);
+    let w10 =        t_alpha  * (1.0 - t_mach);
+    let w01 = (1.0 - t_alpha) *        t_mach;
+    let w11 =        t_alpha  *        t_mach;
+
+    AeroRecord {
+        alpha_deg:      alpha_query,
+        mach:           mach_query,
+        cd:             w00*q00.cd             + w10*q10.cd             + w01*q01.cd             + w11*q11.cd,
+        area_ref:       w00*q00.area_ref       + w10*q10.area_ref       + w01*q01.area_ref       + w11*q11.area_ref,
+        cp_z_from_nose: w00*q00.cp_z_from_nose + w10*q10.cp_z_from_nose + w01*q01.cp_z_from_nose + w11*q11.cp_z_from_nose,
+    }
+}
