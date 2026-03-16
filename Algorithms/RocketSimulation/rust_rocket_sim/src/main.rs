@@ -4,6 +4,7 @@ mod algorithms;
 mod sloshing_sim;
 mod fluid_dynamics;
 mod wind_sim;
+mod aero_tables;
 use crate::rocket_dynamics::*;
 use crate::device_sim::*;
 use crate::algorithms::*;
@@ -293,8 +294,23 @@ fn get_rocket() -> Rocket {
 
     let com_to_ground = Vector3::new(0.0, 0.0, -1.5);
 
+    // Assume the nose is roughly 1.0m ahead of the frame reference.
+    let nose_offset_z = 1.0;
+    
+    // Load aero table from root. Fail gracefully if missing.
+    let aero_table = match crate::aero_tables::AeroTable::from_csv("aero_table.csv") {
+        Ok(t) => {
+            println!("Successfully loaded aero_table.csv");
+            Some(t)
+        },
+        Err(e) => {
+            eprintln!("Warning: Failed to load aero lookup table ({}); falling back to static drag.", e);
+            None
+        }
+    };
 
-    Rocket::new(position, velocity, acceleration, attitude, angular_velocity, angular_acceleration, frame_mass, nitrogen_tank_empty_mass, starting_nitrogen_mass, nitrogen_tank_offset, nitrous_tank_empty_mass, starting_pressurizing_nitrogen_mass, starting_nitrous_mass, nitrous_tank_offset, tvc_module_empty_mass, starting_fuel_grain_mass, frame_com_to_gimbal, gimbal_to_tvc_com, frame_moi, dry_nitrogen_moi, wet_nitrogen_moi, nitrous_tank_radius, nitrous_tank_length, nitrous_level, dry_nitrous_moi, dry_tvc_moi, wet_tvc_moi, tvc_range, tvc, rcs, imu, gps, uwb, slosh_model, nist_data, nitrogen_iso_data, nitrous_iso_data, port_d, nitrous_m_dot, com_to_ground, Some(get_wind_model()))
+
+    Rocket::new(position, velocity, acceleration, attitude, angular_velocity, angular_acceleration, frame_mass, nitrogen_tank_empty_mass, starting_nitrogen_mass, nitrogen_tank_offset, nitrous_tank_empty_mass, starting_pressurizing_nitrogen_mass, starting_nitrous_mass, nitrous_tank_offset, tvc_module_empty_mass, starting_fuel_grain_mass, frame_com_to_gimbal, gimbal_to_tvc_com, frame_moi, dry_nitrogen_moi, wet_nitrogen_moi, nitrous_tank_radius, nitrous_tank_length, nitrous_level, dry_nitrous_moi, dry_tvc_moi, wet_tvc_moi, tvc_range, tvc, rcs, imu, gps, uwb, slosh_model, nist_data, nitrogen_iso_data, nitrous_iso_data, port_d, nitrous_m_dot, com_to_ground, Some(get_wind_model()), nose_offset_z, aero_table)
 }
 
 fn get_wind_model() -> WindModel {
