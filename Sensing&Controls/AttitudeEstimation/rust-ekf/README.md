@@ -73,9 +73,9 @@ let mut ekf = AltitudeEKF::new(
     initial_state,
     initial_measurement,
     0.01,  // dt (seconds)
-    0.1,   // Process noise (Q)
-    0.01,  // Measurement noise (R)
-    1.0,   // Initial state covariance
+    array![[0.1]],  // Process noise covariance Q (1x1 matrix)
+    array![[0.01]], // Measurement noise covariance R (1x1 matrix)
+    array![[1.0]],  // Initial state covariance P (1x1 matrix)
     model,
 );
 
@@ -132,9 +132,9 @@ let mut ekf = AttitudeEKF::new(
     initial_state,
     initial_measurement,
     0.01,  // dt (seconds)
-    0.1,   // Process noise (Q)
-    0.01,  // Measurement noise (R)
-    1.0,   // Initial state covariance
+    Array2::eye(6) * 0.1,   // Process noise covariance Q (6x6 matrix)
+    Array2::eye(9) * 0.01,  // Measurement noise covariance R (9x9 matrix)
+    Array2::eye(6) * 1.0,   // Initial state covariance P (6x6 matrix)
     model,
 );
 
@@ -157,7 +157,7 @@ loop {
 }
 ```
 
-**Process noise tuning note**: The scalar Q is applied uniformly across all 6 states.
+**Process noise tuning note**: The Q matrix allows you to specify different noise levels for each state variable. For uniform noise, use `Array2::eye(n) * scalar` where `n` is the state dimension.
 
 ### 3. XYPositionModel
 
@@ -188,9 +188,9 @@ let mut ekf = XYPositionEKF::new(
     initial_state,
     initial_measurement,
     1.0,    // dt (1 second between updates)
-    0.1,    // Process noise
-    1.0,    // Measurement noise (higher for GPS)
-    10.0,   // Initial covariance
+    Array2::eye(4) * 0.1,    // Process noise covariance Q (4x4 matrix)
+    Array2::eye(2) * 1.0,    // Measurement noise covariance R (2x2 matrix)
+    Array2::eye(4) * 10.0,   // Initial state covariance P (4x4 matrix)
     model,
 );
 
@@ -209,20 +209,26 @@ loop {
 
 ## Model Tuning Tips
 
-1. **Process Noise (Q)**:
+1. **Process Noise Covariance (Q)**:
    - Higher values make the filter more responsive to measurements
    - Lower values make the filter trust the model more
-   - Typical range: 0.01 to 1.0
+   - Can specify different noise levels for each state variable
+   - For uniform noise: `Array2::eye(n) * scalar` where `n` is state dimension
+   - Typical diagonal values: 0.01 to 1.0
 
-2. **Measurement Noise (R)**:
+2. **Measurement Noise Covariance (R)**:
    - Should match your sensor's expected error characteristics
    - Lower values indicate more trust in the measurements
-   - Typical range: 0.001 to 1.0
+   - Can specify different noise levels for each measurement
+   - For uniform noise: `Array2::eye(m) * scalar` where `m` is measurement dimension
+   - Typical diagonal values: 0.001 to 1.0
 
-3. **Initial Covariance (P)**:
+3. **Initial State Covariance (P)**:
    - Represents uncertainty in initial state
    - Larger values allow faster initial convergence
-   - Typical range: 0.1 to 10.0
+   - Can specify different uncertainty for each state variable
+   - For uniform uncertainty: `Array2::eye(n) * scalar`
+   - Typical diagonal values: 0.1 to 10.0
 
 ## Adding a Custom Model
 

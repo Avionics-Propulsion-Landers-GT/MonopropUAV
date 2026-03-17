@@ -20,20 +20,17 @@ impl<T: EKFModel> ExtendedKalmanFilter<T> {
         initial_state: Array1<f64>,
         initial_measurements: Array1<f64>,
         delta_time: f64,
-        q_scalar: f64,
-        r_scalar: f64,
-        initial_p: f64,
+        q: Array2<f64>, // Should be the size of the state
+        r: Array2<f64>, // Should be the size of the measurement
+        initial_p: Array2<f64>, // Should be the size of the state
         model: T,
     ) -> Self {
-        let state_size = initial_state.len();
-        let measurement_size = initial_measurements.len();
-
         Self {
             previous_state: initial_state.clone(),
             state: initial_state,
-            error_covariance: Array2::eye(state_size) * initial_p,
-            process_noise_covariance: Array2::eye(state_size) * q_scalar,
-            measurement_noise_covariance: Array2::eye(measurement_size) * r_scalar,
+            error_covariance: initial_p,
+            process_noise_covariance: q,
+            measurement_noise_covariance: r,
             delta_time,
             current_time: -delta_time,
             previous_time: -2.0 * delta_time,
