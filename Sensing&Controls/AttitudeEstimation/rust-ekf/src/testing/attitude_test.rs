@@ -2,7 +2,7 @@ use std::fs::{self, File};
 use std::io::{self, BufWriter, Write};
 use std::path::PathBuf;
 
-use ndarray::{Array1, array};
+use ndarray::{Array1, Array2, array};
 use rust_ekf::{AttitudeEKF, AttitudeModel};
 
 fn parse_measurement_row(line: &str) -> io::Result<[f64; 10]> {
@@ -52,9 +52,9 @@ fn export_attitude_states_from_flight_data() -> io::Result<()> {
         initial_state,
         initial_measurement,
         0.01,
-        0.1,
-        0.01,
-        1.0,
+        Array2::eye(6) * 0.1, 
+        Array2::eye(9) * 0.01, 
+        Array2::eye(6) * 1.0,  
         model,
     );
 
