@@ -14,7 +14,7 @@ impl AttitudeModel {
     pub fn new(delta_time: f64) -> Self {
         Self::with_reference_vectors(
             delta_time,
-            [0.0, 0.0, -1.0],
+            [0.0, 0.0, 1.0],
             Self::default_magnetic_reference(),
         )
         .expect("default gravity and magnetic reference vectors must be valid")
@@ -22,7 +22,8 @@ impl AttitudeModel {
 
     /// Construct the model with caller-provided reference vectors.
     ///
-    /// `gravity_reference` should point along gravity in the world frame.
+    /// `gravity_reference` should match the accelerometer reference direction in
+    /// the world frame.
     /// `magnetic_reference` should be the local magnetic field direction in the
     /// world frame, including dip/inclination.
     pub fn with_reference_vectors(
@@ -59,7 +60,7 @@ impl AttitudeModel {
     // ── Private helpers ────────────────────────────────────────────────────
 
     fn default_magnetic_reference() -> [f64; 3] {
-        [0.45, 0.0, -0.89]
+        [-0.04, 0.44, -0.89]
     }
 
     /// ZYX Euler kinematic equation: [roll_dot, pitch_dot, yaw_dot] = W * omega
@@ -107,6 +108,17 @@ impl AttitudeModel {
             -std::f64::consts::FRAC_PI_2 + 1e-4,
              std::f64::consts::FRAC_PI_2 - 1e-4,
         )
+    }
+
+    #[inline]
+    fn wrap_angle(angle: f64) -> f64 {
+        let wrapped = (angle + std::f64::consts::PI).rem_euclid(2.0 * std::f64::consts::PI)
+            - std::f64::consts::PI;
+        if wrapped == -std::f64::consts::PI {
+            std::f64::consts::PI
+        } else {
+            wrapped
+        }
     }
 
     fn dcm_angle_derivatives(state: &Array1<f64>) -> (Array2<f64>, Array2<f64>, Array2<f64>) {
@@ -186,9 +198,9 @@ impl EKFModel for AttitudeModel {
         let euler_dot = Self::euler_angle_rates(phi, theta, &omega);
 
         arr1(&[
-            state[0] + dt * euler_dot[0],
-            state[1] + dt * euler_dot[1],
-            state[2] + dt * euler_dot[2],
+            Self::wrap_angle(state[0] + dt * euler_dot[0]),
+            Self::safe_pitch(state[1] + dt * euler_dot[1]),
+            Self::wrap_angle(state[2] + dt * euler_dot[2]),
             state[3],
             state[4],
             state[5],
