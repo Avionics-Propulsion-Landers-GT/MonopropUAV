@@ -1,6 +1,6 @@
 use crate::ekf::model::EKFModel;
+use nalgebra::DMatrix;
 use ndarray::{Array1, Array2};
-use ndarray_linalg::Inverse;
 
 /// Generic Extended Kalman Filter implementation
 pub struct ExtendedKalmanFilter<T: EKFModel> {
@@ -20,20 +20,17 @@ impl<T: EKFModel> ExtendedKalmanFilter<T> {
         initial_state: Array1<f64>,
         initial_measurements: Array1<f64>,
         delta_time: f64,
-        q_scalar: f64,
-        r_scalar: f64,
-        initial_p: f64,
+        q: Array2<f64>, // Should be the size of the state
+        r: Array2<f64>, // Should be the size of the measurement
+        initial_p: Array2<f64>, // Should be the size of the state
         model: T,
     ) -> Self {
-        let state_size = initial_state.len();
-        let measurement_size = initial_measurements.len();
-
         Self {
             previous_state: initial_state.clone(),
             state: initial_state,
-            error_covariance: Array2::eye(state_size) * initial_p,
-            process_noise_covariance: Array2::eye(state_size) * q_scalar,
-            measurement_noise_covariance: Array2::eye(measurement_size) * r_scalar,
+            error_covariance: initial_p,
+            process_noise_covariance: q,
+            measurement_noise_covariance: r,
             delta_time,
             current_time: -delta_time,
             previous_time: -2.0 * delta_time,
@@ -66,10 +63,14 @@ impl<T: EKFModel> ExtendedKalmanFilter<T> {
         let s = prediction_jacobian.dot(&self.error_covariance).dot(&prediction_jacobian.t())
             + &self.measurement_noise_covariance;
 
-        let s_inv = match s.inv() {
-            Ok(m) => m,
-            Err(_) => {
-                self.error_covariance += Array2::eye(self.state.len()) * 1e-6; // Prevent panic on singular matrix by adding small diagonal before falling back to prediction
+        let s_data: Vec<f64> = s.iter().copied().collect();
+        let s_matrix = DMatrix::from_row_slice(s.nrows(), s.ncols(), &s_data);
+        let s_inv = match s_matrix.try_inverse() {
+            Some(m) => Array2::from_shape_vec((s.nrows(), s.ncols()), m.iter().copied().collect())
+                .expect("inverse shape must match"),
+            None => {
+                self.error_covariance =
+                    &self.error_covariance + &(Array2::<f64>::eye(self.state.len()) * 1e-6); // Prevent panic on singular matrix by adding small diagonal before falling back to prediction
                 return;
             } 
         };
