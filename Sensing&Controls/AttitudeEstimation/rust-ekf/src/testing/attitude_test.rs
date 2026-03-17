@@ -3,7 +3,7 @@ use std::io::{self, BufWriter, Write};
 use std::path::PathBuf;
 
 use ndarray::{Array1, array};
-use crate::{AttitudeEKF, AttitudeModel};
+use rust_ekf::{AttitudeEKF, AttitudeModel};
 
 fn parse_measurement_row(line: &str) -> io::Result<[f64; 10]> {
     let columns: Vec<&str> = line.split(',').collect();
@@ -37,7 +37,6 @@ fn parse_measurement_row(line: &str) -> io::Result<[f64; 10]> {
     ])
 }
 
-#[test]
 fn export_attitude_states_from_flight_data() -> io::Result<()> {
     let base_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/testing");
     let input_path = base_path.join("flight_data.csv");
@@ -60,13 +59,17 @@ fn export_attitude_states_from_flight_data() -> io::Result<()> {
     );
 
     let mut outputs = Vec::new();
-
+    let mut printed_error_covariance = true;
     for line in csv_contents.lines().skip(1).filter(|line| !line.trim().is_empty()) {
         let measurement = parse_measurement_row(line)?;
         ekf.predict();
         ekf.update(&measurement);
 
         let state = ekf.get_state();
+        if  measurement[0] > 10.0 && !printed_error_covariance {
+            printed_error_covariance = true;
+            println!("Error Covariance: {}", ekf.get_covariance());
+        }
         outputs.push([
             measurement[0],
             state[0],
@@ -92,4 +95,11 @@ fn export_attitude_states_from_flight_data() -> io::Result<()> {
 
     writer.flush()?;
     Ok(())
+}
+
+fn main() {
+    if let Err(e) = export_attitude_states_from_flight_data() {
+        eprintln!("error: {e}");
+        std::process::exit(1);
+    }
 }

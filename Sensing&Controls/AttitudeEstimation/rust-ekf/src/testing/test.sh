@@ -1,2 +1,2 @@
-cargo test export_attitude_states_from_flight_data
+cargo run --bin attitude_test
 python3 visualize_attitude.py --mode animate
