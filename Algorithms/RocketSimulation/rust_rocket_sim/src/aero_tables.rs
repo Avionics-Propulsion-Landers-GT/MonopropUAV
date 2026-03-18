@@ -87,7 +87,7 @@ impl AeroTable {
                 eprintln!("Warning: Failed to load aero lookup table ({}); falling back to static drag.", e);
                 None
             }
-        };
+        }
     }
 }
 

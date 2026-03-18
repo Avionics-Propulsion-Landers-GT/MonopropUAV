@@ -267,7 +267,7 @@ impl Rocket {
 
         let com_to_ground = Vector3::new(0.0, 0.0, -1.5);
 
-        let wind_model = WindModel::default();
+        let wind_model = Some(WindModel::default());
 
         let aero_table = AeroTable::default();
 
@@ -313,10 +313,8 @@ impl Rocket {
 
         let com_offset = self.get_com_offset(self.thrust_vector);
         self.moi = self.get_moi(self.thrust_vector, com_offset);
-        if self.debug {
-            println!("ROCKET MOI: {:?}", self.moi);
-            println!("TVC_LEVER_ARM: {:?}", self.frame_com_to_gimbal - com_offset);
-        }
+        // println!("ROCKET MOI: {:?}", self.moi);
+        // println!("TVC_LEVER_ARM: {:?}", self.frame_com_to_gimbal - com_offset);
 
         // Update actuated devices
         let tvc_effect: TVCEffect = self.tvc.update(Vector3::new(control_input.x, control_input.y, control_input.z), self.frame_com_to_gimbal - com_offset, self.nitrogen_mass, self.pressurizing_nitrogen_mass, self.nitrous_mass, self.fuel_grain_mass, dt, self.system_time);
@@ -435,7 +433,7 @@ impl Rocket {
             // cp_z_from_nose is measured aft from nose along body Z, so is a positive number.
             // r_com_from_nose is the nose-to-CoM distance (also positive, nose is forward).
             // Subtracting gives a signed offset: positive = CP is aft of CoM (stable config).
-            let r_com_to_nose = self.nose_offset - com_offset
+            let r_com_to_nose = self.nose_offset - com_offset;
             let r_lever = r_com_to_nose - Vector3::new(0.0, 0.0, rec.cp_z_from_nose); // TODO: in actual mode, make cp_from_nose a 3d vector
 
             // M_aero = r_lever × F_drag  (torque about CoM in body frame [N·m])

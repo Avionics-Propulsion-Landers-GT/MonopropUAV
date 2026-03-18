@@ -26,10 +26,10 @@ impl WindProfile {
         // Altitude-keyed mean wind profile [m/s], world frame (x=east, y=north, z=up).
         // These are rough placeholder values — replace with site-specific data before flight.
         Self::new(vec![
-            WindBand { altitude_m:  0.0, wind_mps: Vector3::new(2.0, 0.0, 0.0) },   // near-ground, light crosswind
-            WindBand { altitude_m: 15.0, wind_mps: Vector3::new(5.0, 1.0, 0.0) },   // mid-range, picking up
-            WindBand { altitude_m: 35.0, wind_mps: Vector3::new(8.0, 3.0, 0.0) },   // upper range, higher shear
-            WindBand { altitude_m: 60.0, wind_mps: Vector3::new(10.0, 4.0, 0.0) },  // near apogee
+            WindBand { altitude_m:  0.0, wind_mps: Vector3::new(1.0, 0.0, 0.0) },   // near-ground, light crosswind
+            WindBand { altitude_m: 15.0, wind_mps: Vector3::new(2.5, 0.5, 0.0) },   // mid-range, picking up
+            WindBand { altitude_m: 35.0, wind_mps: Vector3::new(4.0, 1.5, 0.0) },   // upper range, higher shear
+            WindBand { altitude_m: 60.0, wind_mps: Vector3::new(5.0, 2.0, 0.0) },  // near apogee
         ])
     }
 
@@ -97,9 +97,9 @@ impl GustModel {
         // Gauss-Markov turbulence: sigma is how intense, tau is how "smooth" gusts are.
         // One-shot peak gust fires at t=5s for 0.5s to stress-test the controller early.
         Self::new(
-            Vector3::new(1.5, 1.0, 0.3), // sigma [m/s] per axis
+            Vector3::new(0.75, 0.5, 0.15), // sigma [m/s] per axis
             3.0,                          // tau [s] — 3 seconds is realistic for low-altitude turbulence
-            Vector3::new(4.0, 0.0, 0.0), // peak gust direction + magnitude [m/s]
+            Vector3::new(2.0, 0.0, 0.0), // peak gust direction + magnitude [m/s]
             5.0,                          // gust starts at t=5s
             0.5,                          // gust lasts 0.5s
         )
