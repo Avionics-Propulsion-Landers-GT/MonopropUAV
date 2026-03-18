@@ -1,180 +1,360 @@
 import numpy as np
-import scipy as sp
 import cvxpy as cp
+import glob
+import os
+import csv
+import matplotlib.pyplot as plt
 
-class LosslessSolver:
-    def __init__(self, landing_point:np.ndarray, initial_state:np.ndarray, glide_slope:float, max_velocity:float, dry_mass:float, fuel_mass:float, alpha:float, lower_thrust_bound:float, upper_thrust_bound:float, tvc_range:float, delta_t:float, pointing_constraing:np.ndarray=np.array([0,0,1])):
-        self.gravity_constant = 9.80665  # Gravitational acceleration in m/s^2
-        self.gravity_vector = np.array([0, 0, -self.gravity_constant])  # Gravity vector in the world frame
-        self.landing_point = landing_point # target point to land
-        self.initial_state = initial_state  # State vector: [x, y, z, vx, vy, vz]
-        self.glide_slope = glide_slope # makes the cone of allowed positions
-        self.max_velocity = max_velocity # Maximum velocity in m/s (mostly to ensure we don't exceed the controllable flight envelope)
-        self.tvc_range = tvc_range # Range of thrust vector control (TVC) angles in radians that are allowed to deviate from the desired direction (vertical)
-        # attitude dynamics are not explicitly modeled since instead the attitude is enforced by the pointing constraint
-        self.dry_mass = dry_mass  # Mass of the object
-        self.fuel_mass = fuel_mass # Mass of fuel
-        self.alpha = alpha  # Constant relating thrust to change in mass
-        self.pointing_constraint = pointing_constraing  # Constraint on the pointing direction of the thrust vector in the body frame
-        self.lower_thrust_bound = lower_thrust_bound  # Lower bound of thrust
-        self.upper_thrust_bound = upper_thrust_bound # Upper bound of thrust
-        self.delta_t = delta_t  # Time step for the solver
+class LosslessConvexTaylorSolver:
+    def __init__(
+        self,
+        landing_point,
+        initial_position,
+        initial_velocity,
+        glide_slope,
+        max_velocity,
+        dry_mass,
+        fuel_mass,
+        alpha,
+        lower_thrust_bound,
+        upper_thrust_bound,
+        tvc_range_rad,
+        delta_t,
+        pointing_direction=np.array([0, 0, 1]),
+        N=100
+    ):
+        self.g = np.array([0, 0, -9.80665])
+        self.landing_point = landing_point
+        self.initial_position = initial_position
+        self.initial_velocity = initial_velocity
+        self.glide_slope = glide_slope
+        self.max_velocity = max_velocity
+        self.dry_mass = dry_mass
+        self.fuel_mass = fuel_mass
+        self.alpha = alpha
+        self.lower_thrust_bound = lower_thrust_bound
+        self.upper_thrust_bound = upper_thrust_bound
+        self.tvc_range = tvc_range_rad
+        self.delta_t = delta_t
+        self.pointing_direction = pointing_direction / np.linalg.norm(pointing_direction)
+        self.N = N
 
-        # continuous-time state-space matrices
-        self.A_c = np.array([[0, 0, 0, 1, 0, 0, 0],
-                       [0, 0, 0, 0, 1, 0, 0],
-                       [0, 0, 0, 0, 0, 1, 0],
-                       [0, 0, 0, 0, 0, 0, 0],
-                       [0, 0, 0, 0, 0, 0, 0],
-                       [0, 0, 0, 0, 0, 0, 0],
-                       [0, 0, 0, 0, 0, 0, 0]])
-        self.B_c = np.array([[0, 0, 0, 0],
-                       [0, 0, 0, 0],
-                       [0, 0, 0, 0],
-                       [1, 0, 0, 0],
-                       [0, 1, 0, 0],
-                       [0, 0, 1, 0],
-                       [0, 0, 0, -self.alpha]])
+    def solve(self):
+        m0 = self.dry_mass + self.fuel_mass
+        m_dry = self.dry_mass
 
-    def update_parameters(self, landing_point:np.ndarray=None, initial_state:np.ndarray=None, glide_slope:float=None, max_velocity:float=None, dry_mass:float=None, fuel_mass:float=None, alpha:float=None, lower_thrust_bound:float=None, upper_thrust_bound:float=None, tvc_range:float=None, delta_t:float=None, pointing_constraing:np.ndarray=None):
-        # Basically, only updates the parameters that are not None so we can choose what we want to update
-        params = {
-        'landing_point': landing_point,
-        'initial_state': initial_state,
-        'glide_slope': glide_slope,
-        'max_velocity': max_velocity,
-        'tvc_range': tvc_range,
-        'dry_mass': dry_mass,
-        'fuel_mass': fuel_mass,
-        'alpha': alpha,
-        'lower_thrust_bound': lower_thrust_bound,
-        'upper_thrust_bound': upper_thrust_bound,
-        'delta_t': delta_t,
-        'pointing_constraing': pointing_constraing
-        }
-        for key, value in params.items():
-            if value is not None:
-                setattr(self, key, value)
-                if key == 'alpha':
-                    self.B_c = np.array([0, 0, 0, 0],
-                                [0, 0, 0, 0],
-                                [0, 0, 0, 0],
-                                [1, 0, 0, 0],
-                                [0, 1, 0, 0],
-                                [0, 0, 1, 0],
-                                [0, 0, 0, -self.alpha])
-        
-    def compute_trajectory(self):
-        # Discrete-time matrices
-        A = sp.linalg.expm(self.A_c * self.delta_t)
-        B = np.zeros_like(self.B_c)
-        for i in range(self.B_c.shape[1]):
-            for j in range(self.B_c.shape[0]):
-                result, _ = sp.integrate.quad(lambda s: (sp.linalg.expm(self.A_c * (self.delta_t - s)) @ self.B_c)[j, i], 0, self.delta_t)
-                B[j, i] = result
+        # Normalized thrust bounds (conservative)
+        sigma_min = self.lower_thrust_bound / m0
+        sigma_max = self.upper_thrust_bound / m_dry
 
-        t_min = self.dry_mass * np.linalg.norm(self.initial_state[3:6]) / self.upper_thrust_bound
-        t_max = self.fuel_mass / (self.alpha * self.lower_thrust_bound)
-        
-        N_min = int(t_min / self.delta_t) + 1
-        N_max = int(t_max / self.delta_t)
+        # Decision variables
+        x = cp.Variable((3, self.N + 1))
+        v = cp.Variable((3, self.N + 1))
+        w = cp.Variable(self.N + 1)  # log-mass
+        u = cp.Variable((3, self.N))
+        sigma = cp.Variable(self.N)
 
-        print(f"Time bounds: t_min = {t_min:.2f}s, t_max = {t_max:.2f}s")
-        print(f"Number of time steps: N_min = {N_min}, N_max = {N_max}")
+        constraints = []
 
-        # Line search for optimal N
-        for N in range(N_min, N_max + 1):
-            # Decision variables
-            x = cp.Variable((7, N + 1))  # State vector [x, y, z, vx, vy, vz, m]
-            u = cp.Variable((4, N))      # Control vector [Tx, Ty, Tz, T]
+        # Initial conditions
+        constraints += [
+            x[:, 0] == self.initial_position,
+            v[:, 0] == self.initial_velocity,
+            w[0] == np.log(m0)
+        ]
 
-            constraints = []
+        # Final conditions
+        constraints += [
+            x[:, -1] == self.landing_point,
+            v[:, -1] == np.zeros(3),
+            w[-1] >= np.log(m_dry)
+        ]
 
-            # Initial state constraints
-            initial_full_state = np.hstack((self.initial_state, self.dry_mass + self.fuel_mass))
-            constraints.append(x[:, 0] == initial_full_state)
+        # Dynamics and constraints
+        for k in range(self.N):
+            # Discrete-time dynamics
+            constraints += [
+                x[:, k + 1] == x[:, k] + self.delta_t * v[:, k],
+                v[:, k + 1] == v[:, k] + self.delta_t * (u[:, k] + self.g),
+                w[k + 1] == w[k] - self.delta_t * self.alpha * sigma[k]
+            ]
+            
+            # Thrust magnitude constraints
+            z_0 = np.log(m0 + self.alpha * self.upper_thrust_bound * self.delta_t * k)
+            constraints += [
+                cp.norm(u[:, k], 2) <= sigma[k],
+                self.lower_thrust_bound * np.exp(-z_0) * (1 - (w[k] - z_0) + ((w[k] - z_0**2)/2)) <= sigma[k],
+                sigma[k] <= self.upper_thrust_bound * np.exp(-z_0) * (1 - (w[k] - z_0))
+            ]
 
-            # Dynamics constraints (state propagation)
-            for k in range(N):
-                constraints.append(x[:, k + 1] == A @ x[:, k] + B @ u[:, k])
+            # Thrust pointing constraint
+            constraints += [
+                cp.norm(u[:, k] - sigma[k] * self.pointing_direction, 2)
+                <= sigma[k] * np.sin(self.tvc_range)  # Uses sin instead of tan
+            ]
+            # Max velocity constraint (optional)
+            constraints += [
+                cp.norm(v[:, k], 2) <= self.max_velocity
+            ]
 
-            # Mass constraints
-            constraints.append(x[6, :] >= self.dry_mass)  # Mass must stay above dry mass
-            constraints.append(x[6, -1] >= self.dry_mass)  # Final mass above dry mass
+        # # Glide slope constraint (cone)
+        # for k in range(self.N + 1):
+        #     constraints += [
+        #         cp.norm(x[:2, k], 2) <= (1.0 / self.glide_slope) * x[2, k]
+        #     ]
 
-            # Control constraints
-            for k in range(N):
-                # Thrust magnitude constraints
-                constraints.append(cp.SOC(u[3, k], u[:3, k]))  # ||T|| <= sigma
-                constraints.append(self.lower_thrust_bound <= u[3, k])  # Minimum thrust
-                constraints.append(u[3, k] <= self.upper_thrust_bound)  # Maximum thrust
+        # Objective: minimize total fuel used (equivalent to maximizing final mass)
+        objective = cp.Minimize(cp.sum(sigma) * self.delta_t)
 
-                # Thrust pointing constraints (using relaxed cone constraint)
-                constraints.append(cp.SOC(
-                    u[3, k] * np.cos(self.tvc_range),
-                    cp.vstack([u[:3, k] - u[3, k] * self.pointing_constraint])
-                ))
+        prob = cp.Problem(objective, constraints)
+        result = prob.solve(solver=cp.ECOS)
 
-            # State constraints
-            for k in range(N + 1):
-                # Velocity magnitude constraint
-                constraints.append(cp.SOC(self.max_velocity, x[3:6, k]))
-                
-                # Glide slope constraint (keep position within cone)
-                position = x[:3, k] - self.landing_point
-                constraints.append(cp.SOC(
-                    position[2],  # vertical distance
-                    position[:2] * self.glide_slope  # scaled horizontal distance
-                ))
+        if prob.status != cp.OPTIMAL:
+            print("Problem status:", prob.status)
+            raise RuntimeError("No feasible solution found.")
 
-            # Terminal constraints
-            constraints.append(x[:3, -1] == self.landing_point)  # Final position
-            constraints.append(x[3:6, -1] == 0)  # Final velocity
+        # Recover mass trajectory
+        mass_traj = np.exp(w.value)
 
-            # Objective: Minimize fuel usage
-            objective = cp.Minimize(cp.sum(u[3, :]) * self.delta_t)
-
-            problem = cp.Problem(objective, constraints)
-            try:
-                result = problem.solve(solver=cp.ECOS)
-                
-                if problem.status == cp.OPTIMAL:
-                    print(f"Optimal trajectory found with N = {N}")
-                    return x.value, u.value
-                elif problem.status == cp.INFEASIBLE:
-                    print(f"Problem is infeasible with N = {N}")
-                elif problem.status == cp.UNBOUNDED:
-                    print(f"Problem is unbounded with N = {N}")
-                else:
-                    print(f"Optimization failed with status: {problem.status}")
-                    
-            except cp.error.SolverError as e:
-                print(f"Solver Error: {e}")
-
-        raise ValueError("No feasible solution found within the given range of N.")
-
-        '''
-        the SOCP solver in MOSEK can only take in a list of single variables, so all lists will just have to be
-        represented as sections ithin a larger sequence of variables. Since our problem is relaxed to be a single SOCP,
-        we can just plug in Problem 4 from the 2007 paper and the thrust pointing constraints from the 2012 paper.
-        The only problem is figuring out how to express this programatically such that the solver can understand it.
-        '''
+        return x.value, v.value, mass_traj, u.value, sigma.value
 
 if __name__ == "__main__":
-    solver = LosslessSolver(
+    solver = LosslessConvexTaylorSolver(
         landing_point=np.array([0, 0, 0]),
-        initial_state=np.array([0, 0, 10, 0, 0, 0]),
-        glide_slope=0.1,
-        max_velocity=100,
-        dry_mass=10,
-        fuel_mass=60,
-        alpha=0.01,
-        lower_thrust_bound=1,
-        upper_thrust_bound=2500,
-        tvc_range=np.radians(10),
-        delta_t=0.1,
-        pointing_constraing=np.array([0, 0, 1])
+        initial_position=np.array([0, 0, 50]),
+        initial_velocity=np.array([0, 0, 0]),
+        # landing_point=np.array([0, 0, 50]),
+        # initial_position=np.array([0, 0, 0]),
+        # initial_velocity=np.array([0, 0, 0]),
+        glide_slope=-0.05,
+        max_velocity=5,
+        dry_mass=50,
+        # fuel_mass=60,
+        fuel_mass=22.59,
+        alpha=1/(9.81 * 180),
+        lower_thrust_bound=1000 * 0.4,
+        upper_thrust_bound=1000,
+        tvc_range_rad=np.radians(15),
+        #delta_t=0.05,
+        delta_t=0.5,
+        pointing_direction=np.array([0, 0, 1]),
+        N=100
     )
-    trajectory, controls = solver.compute_trajectory()
-    print("Optimal Trajectory:\n", trajectory)
-    print("Optimal Controls:\n", controls)
+
+    t_min = solver.dry_mass * np.linalg.norm(solver.initial_velocity) / solver.upper_thrust_bound
+    t_max = solver.fuel_mass / (solver.alpha * solver.lower_thrust_bound)
+    
+    N_min = int(t_min / solver.delta_t) + 1
+    N_max = int(t_max / solver.delta_t)
+
+    print(f"Time bounds: t_min = {t_min:.2f}s, t_max = {t_max:.2f}s")
+    print(f"Number of time steps: N_min = {N_min}, N_max = {N_max}")
+    
+    min_fuel_used = float('inf')
+    best_solution = None
+    for N in range(N_min, N_max + 1):
+        print(f"Trying with N = {N} time steps...")
+        solver.N = N
+        
+        try:
+            x, v, m, u, sigma = solver.solve()
+            total_fuel_used = m[0] - m[-1]
+            if total_fuel_used < min_fuel_used:
+                min_fuel_used = total_fuel_used
+                best_solution = (x, v, m, u, sigma)
+            elif total_fuel_used > min_fuel_used:
+                break
+        except RuntimeError as e:
+            print(f"Failed with N = {N}: {e}")
+            continue
+
+    # print("Optimal trajectory (positions):\n", best_solution[0])
+    # print("Optimal velocities:\n", best_solution[1])
+    # print("Optimal mass profile:\n", best_solution[2])
+    # print("Optimal specific thrusts:\n", best_solution[3])
+    # print("Optimal normalized thrust magnitudes:\n", best_solution[4])
+    # print("Total fuel used:", total_fuel_used)
+    # print(N, "time steps computed.")
+
+    # if best_solution is not None:
+    #     x, v, m, u, sigma = best_solution
+    #     time = np.linspace(0, solver.N * solver.delta_t, solver.N)
+
+    #     # Plot position trajectory in 3D
+    #     fig = plt.figure(figsize=(10, 6))
+    #     ax = fig.add_subplot(111, projection='3d')
+    #     ax.plot(x[0], x[1], x[2], '-o', color='C0', lw=2, markersize=4)
+    #     ax.set_title("Position Trajectory")
+    #     ax.set_xlabel("x")
+    #     ax.set_ylabel("y")
+    #     ax.set_zlabel("z")
+    #     ax.legend()
+    #     plt.grid()
+    #     plt.tight_layout()
+    #     plt.savefig("trajectory.png", dpi=150, bbox_inches="tight")
+    #     # Save view from multiple angles
+    #     angles = [
+    #         (45, 45),   # Corner view
+    #         (45, 135),  # Another corner
+    #         (45, 225),  # Another corner 
+    #         (45, 315),  # Another corner
+    #         (0, 0),     # Side view
+    #         (0, 90),    # Front view
+    #         (90, 0),    # Top view
+    #     ]
+        
+    #     for elevation, azimuth in angles:
+    #         ax.view_init(elev=elevation, azim=azimuth)
+    #         plt.savefig(f"trajectory_elev{elevation}_azim{azimuth}.png", 
+    #                dpi=150, bbox_inches="tight")
+    #     # # Plot velocity trajectory
+    #     # plt.figure(figsize=(10, 6))
+    #     # plt.plot(time, v[0, :], label="vx (East)")
+    #     # plt.plot(time, v[1, :], label="vy (North)")
+    #     # plt.plot(time, v[2, :], label="vz (Vertical)")
+    #     # plt.title("Velocity Trajectory")
+    #     # plt.xlabel("Time (s)")
+    #     # plt.ylabel("Velocity (m/s)")
+    #     # plt.legend()
+    #     # plt.grid()
+
+    #     # # Plot mass profile
+    #     # plt.figure(figsize=(10, 6))
+    #     # plt.plot(time, m, label="Mass")
+    #     # plt.title("Mass Profile")
+    #     # plt.xlabel("Time (s)")
+    #     # plt.ylabel("Mass (kg)")
+    #     # plt.legend()
+    #     # plt.grid()
+
+    #     # # Plot thrust magnitudes
+    #     # thrust_time = np.linspace(0, solver.N * solver.delta_t, solver.N)
+    #     # plt.figure(figsize=(10, 6))
+    #     # plt.plot(thrust_time, sigma, label="Normalized Thrust Magnitude")
+    #     # plt.title("Thrust Magnitude Profile")
+    #     # plt.xlabel("Time (s)")
+    #     # plt.ylabel("Normalized Thrust")
+    #     # plt.legend()
+    #     # plt.grid()
+
+    #     # plt.show()
+    # else:
+    #     print("No solution found to graph.")
+
+    print("Calculating optimal trajectory with finer resolution...")
+    
+    previous_solver_delta_t = solver.delta_t
+    solver.delta_t = 0.05
+    solver.N = N * int(previous_solver_delta_t / solver.delta_t)
+        
+    try:
+        x, v, m, u, sigma = solver.solve()
+        total_fuel_used = m[0] - m[-1]
+        min_fuel_used = total_fuel_used
+        best_solution = (x, v, m, u, sigma)
+    except RuntimeError as e:
+        print(f"Failed with N = {N}: {e}")
+
+    print("Optimal trajectory (positions):\n", best_solution[0])
+    print("Optimal velocities:\n", best_solution[1])
+    print("Optimal mass profile:\n", best_solution[2])
+    print("Optimal specific thrusts:\n", best_solution[3])
+    print("Optimal normalized thrust magnitudes:\n", best_solution[4])
+    print("Total fuel used:", total_fuel_used)
+    print(N, "time steps computed.")
+
+    if best_solution is not None:
+        x, v, m, u, sigma = best_solution
+        time = np.linspace(0, solver.N * solver.delta_t, solver.N + 1)
+        
+        # Save trajectory data to CSV (including actual thrust = mass * u)
+        traj_filename = "trajectory_data.csv"
+
+        # Compute actual thrust vector (N) at each timestep: thrust = mass * u
+        # u has length N, while time/m has length N+1. Set thrust at final time to zero.
+        thrust_vec = np.zeros((3, len(time)))
+        for k in range(len(time) - 1):
+            thrust_vec[:, k] = (u[:, k] * m[k])  # elementwise: accel * mass = force
+        thrust_mag = np.linalg.norm(thrust_vec, axis=0)
+
+        with open(traj_filename, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow([
+            "Time", "X", "Y", "Z",
+            "Vx", "Vy", "Vz",
+            "Mass",
+            "Thrust_X", "Thrust_Y", "Thrust_Z", "Thrust_Mag"
+            ])
+            for i in range(len(time)):
+                writer.writerow([
+                    float(time[i]),
+                    float(x[0, i]), float(x[1, i]), float(x[2, i]),
+                    float(v[0, i]), float(v[1, i]), float(v[2, i]),
+                    float(m[i]),
+                    float(thrust_vec[0, i]), float(thrust_vec[1, i]), float(thrust_vec[2, i]),
+                    float(thrust_mag[i])
+                ])
+
+        print(f"Trajectory data saved to {traj_filename}")
+
+
+        # Plot position trajectory in 3D
+        fig = plt.figure(figsize=(10, 6))
+        ax = fig.add_subplot(111, projection='3d')
+        ax.plot(x[0], x[1], x[2], '-o', color='C0', lw=2, markersize=4)
+        ax.set_title("Position Trajectory")
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        ax.set_zlabel("z")
+        ax.legend()
+        plt.grid()
+        plt.tight_layout()
+        plt.savefig("trajectory.png", dpi=150, bbox_inches="tight")
+        # Save view from multiple angles
+        angles = [
+            (45, 45),   # Corner view
+            (45, 135),  # Another corner
+            (45, 225),  # Another corner 
+            (45, 315),  # Another corner
+            (0, 0),     # Side view
+            (0, 90),    # Front view
+            (90, 0),    # Top view
+        ]
+        
+        for elevation, azimuth in angles:
+            ax.view_init(elev=elevation, azim=azimuth)
+            plt.savefig(f"trajectory_elev{elevation}_azim{azimuth}.png", 
+                   dpi=150, bbox_inches="tight")
+        # # Plot velocity trajectory
+        # plt.figure(figsize=(10, 6))
+        # plt.plot(time, v[0, :], label="vx (East)")
+        # plt.plot(time, v[1, :], label="vy (North)")
+        # plt.plot(time, v[2, :], label="vz (Vertical)")
+        # plt.title("Velocity Trajectory")
+        # plt.xlabel("Time (s)")
+        # plt.ylabel("Velocity (m/s)")
+        # plt.legend()
+        # plt.grid()
+
+        # # Plot mass profile
+        # plt.figure(figsize=(10, 6))
+        # plt.plot(time, m, label="Mass")
+        # plt.title("Mass Profile")
+        # plt.xlabel("Time (s)")
+        # plt.ylabel("Mass (kg)")
+        # plt.legend()
+        # plt.grid()
+
+        # # Plot thrust magnitudes
+        # thrust_time = np.linspace(0, solver.N * solver.delta_t, solver.N)
+        # plt.figure(figsize=(10, 6))
+        # plt.plot(thrust_time, sigma, label="Normalized Thrust Magnitude")
+        # plt.title("Thrust Magnitude Profile")
+        # plt.xlabel("Time (s)")
+        # plt.ylabel("Normalized Thrust")
+        # plt.legend()
+        # plt.grid()
+
+        # plt.show()
+    else:
+        print("No solution found to graph.")

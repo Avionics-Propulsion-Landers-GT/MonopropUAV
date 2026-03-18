@@ -1,0 +1,15 @@
+[package]
+name = "rust_rocket_sim"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rerun = "0.28"
+nalgebra = "0.32"
+clarabel = "0.7"
+rand = "0.9"
+rand_distr = "0.5"
+ndarray = "0.15"
+optimization_engine = "0.6.0"
+ndarray-linalg = { version = "0.16", features = ["intel-mkl"] }
+csv = "1.4.0"
