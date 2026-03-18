@@ -457,8 +457,10 @@ impl Simulation {
                 uref_traj.push(Array1::from(vec![interp_u[0], interp_u[1], interp_u[2]]));
             }
         }
-
-        println!("UREF_TRAJ: {:?}", uref_traj);
+        
+        if self.debug {
+            println!("UREF_TRAJ: {:?}", uref_traj);
+        }
         
         (xref_traj, uref_traj)
     }
