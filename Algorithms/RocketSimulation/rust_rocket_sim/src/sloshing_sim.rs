@@ -18,6 +18,15 @@ impl TankConfig {
             gravity,
         }
     }
+
+    pub fn default() -> Self {
+        let radius_m = 0.12;
+        let length_m = 0.75;
+        let density_liquid = 731.18;
+        let gravity = 9.81;
+
+        Self::new(radius_m, length_m, density_liquid, gravity)
+    }
 }
 
 impl TankConfig {
@@ -42,6 +51,15 @@ impl SloshParams {
             alpha,
             omega_scale,
         }
+    }
+
+    pub fn default() -> Self {
+        let m_frac = 0.5;
+        let c_lin = 200.0;
+        let alpha = 0.0;
+        let omega_scale = 1.0;
+
+        Self::new(m_frac, c_lin, alpha, omega_scale)
     }
 }
 
@@ -115,6 +133,18 @@ impl SloshModel {
 
         model.update_equivalent_parameters();
         model
+    }
+
+    pub fn default() -> Self {
+        let tank_config = TankConfig::default();
+
+        let slosh_params = SloshParams::default();
+
+        let initial_fill_frac = 0.85;
+
+        let slosh_state = SloshState::default();
+
+        SloshModel::new(tank_config, slosh_params, initial_fill_frac, slosh_state)
     }
 
     fn update_equivalent_parameters(&mut self) {

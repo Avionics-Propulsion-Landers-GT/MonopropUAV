@@ -154,8 +154,8 @@ def make_plot(
         group_ranges[group] = (start_x, end_x)
         cursor += group_spacing
 
-    fig_width = max(12.0, 1.05 * len(cluster_positions) + 3.0)
-    fig, ax = plt.subplots(figsize=(fig_width, 6.0))
+    # Use a stable near-16:9 canvas to avoid extra-wide output as clusters grow.
+    fig, ax = plt.subplots(figsize=(12.0, 6.75))
     all_y_values: list[float] = []
     bar_containers = []
 
