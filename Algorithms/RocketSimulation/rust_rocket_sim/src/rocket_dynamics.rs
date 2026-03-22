@@ -684,7 +684,11 @@ fn get_wind_model() -> WindModel {
             "of_ratio", "isp", "cstar", "port_d",
             "fuel_mass", "nitrous_mass", "n2_tank_mass", "n2o_tank_mass",
             // Wind velocity [m/s], world frame
-            "wind_x", "wind_y", "wind_z"
+            "wind_x", "wind_y", "wind_z",
+            // Aero Drag [N], body frame
+            "aero_drag_x", "aero_drag_y", "aero_drag_z",
+            // Aero Moment [N*m], body frame
+            "aero_moment_x", "aero_moment_y", "aero_moment_z"
         ])?;
 
         let num_records = self.debug_info.times.len();
@@ -701,6 +705,8 @@ fn get_wind_model() -> WindModel {
             let moi = self.debug_info.mois[i];
             let thrust = self.debug_info.thrusts[i];
             let slosh = self.debug_info.slosh_forces[i];
+            let aero_drag = self.debug_info.aero_drags[i];
+            let aero_moment = self.debug_info.aero_moments[i];
 
             // 3. Write the row data
             wtr.write_record(&[
@@ -729,6 +735,12 @@ fn get_wind_model() -> WindModel {
                 self.debug_info.wind_vels[i].x.to_string(),
                 self.debug_info.wind_vels[i].y.to_string(),
                 self.debug_info.wind_vels[i].z.to_string(),
+                aero_drag.x.to_string(),
+                aero_drag.y.to_string(),
+                aero_drag.z.to_string(),
+                aero_moment.x.to_string(),
+                aero_moment.y.to_string(),
+                aero_moment.z.to_string(),
             ])?;
         }
 
