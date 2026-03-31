@@ -199,8 +199,8 @@ def main():
     # Between two defined times the target remains at the earlier value.
     servo_schedule: dict = {
         0.0:   0.0,   # t=0 s  → servo at   0° (valve fully closed)
-        2.0:  60.0,   # t=2 s  → servo to  60° (valve at 50% open)
-        5.0: 120.0,   # t=5 s  → servo to 120° (valve fully open)
+        2.0:  60.0,   # t=2 s  → servo to  90° (valve at 50% open)
+        5.0: 120.0,   # t=5 s  → servo to 180° (valve fully open)
         8.0:   0.0,   # t=8 s  → close valve
     }
 
