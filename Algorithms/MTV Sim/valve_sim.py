@@ -180,10 +180,7 @@ def plot_results(
     plt.show()
 
 
-# ─── Main ──────────────────────────────────────────────────────────────────────
-
 def main():
-    # ── Simulation parameters ───────────────────────────────────────────────
 
     # Starting chamber pressure (bar)
     initial_pressure_bar: float = 1.0
@@ -207,7 +204,6 @@ def main():
         8.0:   0.0,   # t=8 s  → close valve
     }
 
-    # ── Run ────────────────────────────────────────────────────────────────
 
     total_time_s = max(servo_schedule.keys()) + 3.0   # 3 s buffer after last event
     
