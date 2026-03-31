@@ -12,9 +12,9 @@ pub fn real_dynamics(x: &Array1<f64>, u: &Array1<f64>, mass: Option<f64>) -> Arr
     // Constants
     let m = mass.unwrap_or(80.0);
     let g = 9.81;
-    let ixx = 20.0;
-    let iyy = 20.0;
-    let izz = 10.0;
+    let ixx = 50.0;
+    let iyy = 50.0;
+    let izz = 3.0;
     let dt = 0.1;
 
     // Inertia matrix and inverse
@@ -121,12 +121,21 @@ pub fn real_dynamics(x: &Array1<f64>, u: &Array1<f64>, mass: Option<f64>) -> Arr
         wx_new, wy_new, wz_new,
     ]);
 
-    // Add noise
+    // Add gaussian noise to simulate real dynamics, scaled per state dimension
     let mut rng = rand::thread_rng();
-    let noise_std = 0.01;
-    let noise = Array1::from_shape_fn(x_next.len(), |_| rng.gen_range(-noise_std..noise_std));
-    // println!("Noise: {:?}", noise);
+    // Define standard deviations for each state variable
+    let noise_stds = [
+        0.02, 0.02, 0.02,    // position (x, y, z)
+        0.001, 0.001, 0.001, 0.001, // quaternion (qx, qy, qz, qw)
+        0.05, 0.05, 0.05,    // velocity (x_dot, y_dot, z_dot)
+        0.001, 0.001, 0.001, // angular velocity (wx, wy, wz)
+    ];
+    let noise = Array1::from_shape_fn(x_next.len(), |i| {
+        let std = noise_stds.get(i).copied().unwrap_or(0.0);
+        rng.sample::<f64, _>(rand_distr::Normal::new(0.0, std).unwrap())
+    });
     let x_next_noisy = &x_next + &noise;
 
     x_next_noisy
+    // x_next
 }

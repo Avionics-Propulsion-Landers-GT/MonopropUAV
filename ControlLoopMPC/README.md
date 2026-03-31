@@ -1,25 +1,43 @@
 # Lander Control Loop
 
-There are two control loops. LoopHop and LoopTetheredHover. LoopHop will have navigation (from the Lossless algorithm) and LoopTetheredHover will maintain a tethered hover position with no need for navigation.
+There are two control loops:
 
-## Structure
+- **`LoopHop`**  
+  Includes navigation (from the *Lossless* algorithm).
 
-There are three sensor algorithms: IMU, UWB, and GPS.
+- **`LoopTetheredHover`**  
+  Maintains a tethered hover position and does **not** require navigation.
 
-There will be four threads which run asynchronously?
+---
 
-Three sensor threads continuously update their portion of a shared state estimate.
+## Architecture Overview
 
-The MPC control thread runs as fast as it can, using the latest available state estimate to compute the optimal control inputs.
+The system uses three sensor algorithms:
+
+- IMU  
+- UWB  
+- GPS  
+
+The software is organized into **four asynchronous threads**:
+
+1. **Sensor threads (×3)**  
+   Each sensor runs in its own thread and continuously updates its portion of a **shared state estimate**.
+
+2. **MPC control thread**  
+   Runs as fast as possible, using the most recent available state estimate to compute optimal control inputs.
+
+---
 
 ## File Structure
-This is what i think the file structure should be (for LoopTetheredHover at least)?
 
-src/ 
-├── main.rs              // Spawns threads and stores the shared state estimate
-├── mpc_control.rs       // Control logic (MPC thread)
+Proposed file structure (at least for `LoopTetheredHover`):
+
+```text
+src/
+├── main.rs              // Spawns threads and owns the shared state estimate
+├── mpc_control.rs       // MPC control loop logic (control thread)
+├── mpc_crate.rs         // MPC solver + internal dynamics model
 ├── sensors/
-│   ├── imu.rs           // IMU reading & processing
-│   ├── uwb.rs           // UWB ranging & trilateration
-│   └── gps.rs           // GPS reading & parsing
-├── mpc_crate.rs         // MPC solver and internal dynamics model for the MPC
+│   ├── imu.rs           // IMU reading and preprocessing
+│   ├── uwb.rs           // UWB ranging and trilateration
+│   └── gps.rs           // GPS reading and parsing

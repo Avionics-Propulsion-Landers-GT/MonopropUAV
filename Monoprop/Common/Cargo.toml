@@ -1,0 +1,10 @@
+[package]
+name = "Common"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serde = { version = "1.0", default-features = false, features = ["derive"] }
+teensy4-bsp = "0.5"
+embedded-hal = "0.2"
+embedded-io = "0.7.1"

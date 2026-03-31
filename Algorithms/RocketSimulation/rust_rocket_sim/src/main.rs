@@ -1,72 +1,85 @@
 mod rocket_dynamics;
 mod device_sim;
+mod algorithms;
+mod sloshing_sim;
+mod fluid_dynamics;
+mod wind_sim;
+mod aero_tables;
+mod simulation;
+use crate::rocket_dynamics::*;
+use crate::device_sim::*;
+use crate::algorithms::*;
+use crate::sloshing_sim::*;
+use crate::fluid_dynamics::*;
+use crate::wind_sim::*;
+use crate::aero_tables::*;
+use crate::simulation::*;
+use nalgebra::{Matrix3, Vector3, Vector4, UnitQuaternion};
+use ndarray::{Array1, Array2};
+use std::fs::File;
+use std::io::{Write, BufWriter, Result};
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("Connecting to Rerun Viewer...");
 
-    // FIX: Use .connect_grpc() as the compiler suggested.
-    // This connects to the 'rerun --web-viewer' running in your other terminal.
-    let rec = rerun::RecordingStreamBuilder::new("rocket_sim")
-        .connect_grpc()?; 
+pub fn export_imu_to_csv(
+    filename: &str, 
+    times: &[f64], 
+    readings: &[IMUReading],
+    attitudes: &[UnitQuaternion<f64>] // Added the attitudes slice!
+) -> Result<()> {
+    // Safety check: Ensure all arrays match in length so we don't truncate data
+    assert_eq!(
+        times.len(), 
+        readings.len(), 
+        "Times and readings vectors must be the exact same length!"
+    );
+    assert_eq!(
+        times.len(),
+        attitudes.len(),
+        "Times and attitudes vectors must be the exact same length!"
+    );
 
-    println!("Connected! Sending data...");
+    // 1. Open the file and wrap it in a BufWriter
+    let file = File::create(filename)?;
+    let mut writer = BufWriter::new(file);
 
-    // --- The Rest of Your Simulation Code ---
-    
-    // 1. Ground
-    rec.log(
-        "world/ground",
-        &rerun::Boxes3D::from_centers_and_half_sizes(
-            [(0.0, 0.0, -0.05)], // Center: Shift down slightly so y=0 is the top surface
-            [(100.0, 100.0, 0.05)], // Half-sizes: 200x200 wide, 0.1 thick
-        )
-        .with_colors([rerun::Color::from_rgb(40, 40, 40)]) // Dark Grey
-        .with_fill_mode(rerun::FillMode::Solid), // Make it solid, not wireframe
+    // 2. Write the CSV header (Now includes quaternion columns)
+    writeln!(
+        writer, 
+        "time,accel_x,accel_y,accel_z,gyro_x,gyro_y,gyro_z,mag_x,mag_y,mag_z,q_x,q_y,q_z,q_w"
     )?;
 
-
-    let position = [0.0, 0.0, 0.0];
-    let velocity = [0.0, 0.0, 0.0];
-    let attitude = [0.0, 0.0, 0.0, 0.0];
-    let angular_velocity = [0.0, 0.0, 0.0];
-    let u = [0.0, 0.0, 0.0, 0.0];
-
-
-    // 2. Loop
-    let mut t_step = 0;
-    loop {
-        let t = t_step as f32 * 0.02;
-
-        let x = (t * 2.0).cos() * 5.0;
-        let y = (t * 2.0).sin() * 5.0;
-        let z = 1.0 + (t * 0.1); 
-
-        // Log Vehicle
-        rec.log(
-            "world/rocket",
-            &rerun::Arrows3D::from_vectors([(0.0, 0.0, 1.5)]) 
-                .with_origins([(x, y, z)])                    
-                .with_colors([rerun::Color::from_rgb(255, 0, 0)]) 
+    // 3. Iterate through all three vectors simultaneously!
+    // Chaining .zip() nests the tuples like this: ((t, reading), attitude)
+    for ((t, reading), q) in times.iter().zip(readings.iter()).zip(attitudes.iter()) {
+        writeln!(
+            writer,
+            "{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.6},{:.9},{:.9},{:.9},{:.6},{:.6},{:.6},{:.6}",
+            t,
+            reading.accel.x, reading.accel.y, reading.accel.z,
+            reading.gyro.x, reading.gyro.y, reading.gyro.z,
+            reading.mag.x, reading.mag.y, reading.mag.z, // Tesla kept at high precision
+            q.coords[0], q.coords[1], q.coords[2], q.coords[3] // nalgebra's [x, y, z, w] format
         )?;
-        
-        // Log Trail
-        rec.log(
-            "world/path",
-            &rerun::Points3D::new([(x, y, z)])
-                .with_colors([rerun::Color::from_rgb(200, 200, 200)])
-                .with_radii([0.05])
-        )?;
-
-        t_step += 1;
-        std::thread::sleep(std::time::Duration::from_millis(16));
     }
+
+    // 4. Flush the buffer to ensure everything is saved to disk
+    writer.flush()?;
+
+    println!("✅ Successfully exported {} IMU/Attitude rows to {}", readings.len(), filename);
+    Ok(())
 }
 
-pub fn normalize_vector(vector: (f32, f32, f32)) -> (f32, f32, f32) {
-    let length = (vector.0.powi(2) + vector.1.powi(2) + vector.2.powi(2)).sqrt();
-    if length == 0.0 {
-        (0.0, 0.0, 0.0)
-    } else {
-        (vector.0 / length, vector.1 / length, vector.2 / length)
-    }
+fn main() {
+    let mut sim = Simulation::default();
+    sim.debug = true;
+    sim.rocket.position = Vector3::new(0.0, 0.0, 49.0);
+    sim.start_state = "hover".to_string();
+    sim.min_time = 3.0;
+
+    sim.init();
+
+    while sim.step() {}
+
+    export_imu_to_csv("flight_data.csv", &sim.rocket.debug_info.times, &sim.rocket.debug_info.imu_readings, &sim.rocket.debug_info.attitudes).unwrap();
+    
 }
