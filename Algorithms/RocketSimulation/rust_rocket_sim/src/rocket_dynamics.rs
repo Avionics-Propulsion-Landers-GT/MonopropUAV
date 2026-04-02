@@ -422,7 +422,7 @@ fn get_wind_model() -> WindModel {
             // lateral = crossflow component (sqrt of x^2 + y^2); axial = along-axis component.
             // alpha=0 means the wind is perfectly head-on; alpha=90 means pure crossflow.
             let lateral = (body_vel.x.powi(2) + body_vel.y.powi(2)).sqrt();
-            let alpha_deg = lateral.atan2(body_vel.z.abs()).to_degrees();
+            let alpha_deg = lateral.atan2(-body_vel.z).to_degrees();
 
             // Bilinear lookup — both axes are clamped inside lookup() so no panic here.
             let rec = table.lookup(alpha_deg, mach);
