@@ -289,7 +289,7 @@ impl Simulation {
 
             // 1. Stage Cost (Q) - Massive penalty for Z errors
             self.mpc.q = Array2::<f64>::from_diag(&Array1::from(vec![
-                150.0, 150.0, 500.0,  // Stiffened Z-Position spring (from 40.0 to 1500.0)
+                150.0, 150.0, 1000.0,  // Stiffened Z-Position spring (from 40.0 to 1500.0)
                 40000.0, 40000.0, 0.0, 0.0,
                 100.0, 100.0, 250.0,  // Stiffened Z-Velocity damper (from 300.0 to 2500.0)
                 500.0, 500.0, 500.0   
@@ -301,20 +301,20 @@ impl Simulation {
 
             // 3. Terminal Cost (QN) - Land softly!
             self.mpc.qn = Array2::<f64>::from_diag(&Array1::from(vec![
-                150.0, 150.0, 500.0, 
+                150.0, 150.0, 3000.0, 
                 50000.0, 50000.0, 0.0, 0.0,
-                100.0, 100.0, 800.0, 
+                100.0, 100.0, 400.0, 
                 1000.0, 1000.0, 1000.0 
             ]));
             self.lossless.lower_thrust_bound = 400.0;
             self.lossless.flip_glide_slope = false;
             self.lossless.use_glide_slope = true;
-            // self.lossless.glide_slope = 20.0_f64.to_radians();
-            self.lossless.max_velocity = 5.0;
+            self.lossless.glide_slope = 0.005_f64.to_radians();
+            // self.lossless.max_velocity = 5.0;
             // if self.rocket.velocity.norm() >= 5.0 {
             //     self.lossless.max_velocity = self.rocket.velocity.norm() * 1.25;
             // }
-            let trajectory = self.lossless.update([self.rocket.position.x, self.rocket.position.y, self.rocket.position.z], [self.rocket.velocity.x, self.rocket.velocity.y, self.rocket.velocity.z], [0.0, 0.0, 0.0], self.rocket.get_mass() - self.rocket.get_dry_mass(), self.current_time);
+            let trajectory = self.lossless.update([self.rocket.position.x, self.rocket.position.y, self.rocket.position.z], [0.0, 0.0, 0.0], [0.0, 0.0, 1.5], self.rocket.get_mass() - self.rocket.get_dry_mass(), self.current_time);
             (xref_traj, uref_traj) = self.get_mpc_reference(&trajectory, self.current_time - self.lossless.last_solve_time, self.rocket.attitude, self.mpc.min_thrust, self.mpc.dt, self.lossless.fine_delta_t, self.mpc.n_steps + 1);
             if self.current_time - self.traj_timer > 20.0 {
                 self.traj_stage = -1;

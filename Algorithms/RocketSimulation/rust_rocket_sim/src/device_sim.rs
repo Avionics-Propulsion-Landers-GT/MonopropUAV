@@ -2,6 +2,38 @@ use nalgebra::{Vector3, UnitQuaternion};
 use rand::prelude::*;
 use rand_distr::{Normal, Distribution};
 
+#[derive(Debug, Clone)]
+pub struct RefreshUpdater {
+    pub overhead: f64, // overhead on startup of process, in seconds
+    pub iteration_time: f64, // time each iteration takes, in seconds
+    pub iterations: f64,
+    pub start_time: f64,
+}
+
+impl RefreshUpdater {
+    pub fn new(overhead: f64, iteration_time: f64) -> Self {
+        Self {
+            overhead,
+            iteration_time,
+            iterations: 1.0,
+            start_time: 0.0,
+        }
+    }
+
+    pub fn iter_update(&mut self, iterations: f64, system_time: f64) -> bool {
+        self.iterations = iterations;
+        if system_time - self.start_time > self.overhead + self.iteration_time * iterations {
+            self.start_time = system_time;
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    pub fn update(&mut self, system_time: f64) -> bool {
+        self.iter_update(self.iterations, system_time)
+    }
+}
 
 /*
 Acceleration units are in m/s^2

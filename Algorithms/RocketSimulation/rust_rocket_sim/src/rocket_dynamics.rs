@@ -267,7 +267,8 @@ impl Rocket {
 
         let com_to_ground = Vector3::new(0.0, 0.0, -1.5);
 
-        let wind_model = Some(WindModel::default());
+        // let wind_model = Some(WindModel::default());
+        let wind_model = None;
 
         let aero_table = AeroTable::default();
 
@@ -364,6 +365,7 @@ impl Rocket {
         let mass = self.get_mass();
 
         let slosh_force = self.sloshing_model.step(dt, self.accel, self.attitude, self.nitrous_m_dot);
+        // let slosh_force = Vector3::zeros();
 
         // Translational Dynamics
         let gravity = Vector3::new(0.0, 0.0, -9.81);

@@ -7,6 +7,8 @@ use std::f64::consts::PI;
 use clarabel::algebra::*;
 use clarabel::solver::*;
 use std::time::Instant;
+use crate::mpc_crate::MPCDebugInfo;
+use crate::device_sim::RefreshUpdater;
 
 #[derive(Debug, Clone)]
 pub struct MPC {
@@ -26,13 +28,14 @@ pub struct MPC {
     pub max_thrust: f64, // maximum thrust
     pub gimbal_limit: f64, // maximum gimbal angle in radians
     pub system_time: f64, // internal time tracking for MPC updates
-    pub update_rate: f64, // rate at which MPC updates (e.g., 10 Hz)
+    // pub update_rate: f64, // rate at which MPC updates (e.g., 10 Hz)
+    pub refresh_updater: RefreshUpdater,
     previous_control: Vec<Array1<f64>>, // previous control input for smoothing
     pub last_solve_time: f64,
 }
 
 impl MPC {
-    pub fn new(n: usize, m: usize, n_steps: usize, dt: f64, integral_gains: (f64, f64, f64), q: Array2<f64>, r: Array2<f64>, qn: Array2<f64>, smoothing_weight: Array1<f64>, panoc_cache_tolerance: f64, panoc_cache_lbfgs_memory: usize, min_thrust: f64, max_thrust: f64, gimbal_limit: f64, system_time: f64, update_rate: f64) -> Self {
+    pub fn new(n: usize, m: usize, n_steps: usize, dt: f64, integral_gains: (f64, f64, f64), q: Array2<f64>, r: Array2<f64>, qn: Array2<f64>, smoothing_weight: Array1<f64>, panoc_cache_tolerance: f64, panoc_cache_lbfgs_memory: usize, min_thrust: f64, max_thrust: f64, gimbal_limit: f64, system_time: f64, refresh_updater: RefreshUpdater) -> Self {
         Self {
             n,
             m,
@@ -50,7 +53,8 @@ impl MPC {
             max_thrust,
             gimbal_limit,
             system_time: 0.0,
-            update_rate,
+            refresh_updater,
+            // update_rate,
             previous_control: vec![Array1::zeros(m); n_steps],
             last_solve_time: 0.0,
         }
@@ -84,12 +88,15 @@ impl MPC {
         let max_thrust = 1000.0;
         let gimbal_limit = 15_f64.to_radians();
         let system_time = -1.0;
-        let update_rate = 50.0;
+        // let update_rate = 50.0;
+        let refresh_updater = RefreshUpdater::new(0.0, 0.0);
 
-        Self::new(n, m, n_steps, dt, integral_gains, q, r, qn, smoothing_weight, panoc_cache_tolerance, panoc_cache_lbfgs_memory, min_thrust, max_thrust, gimbal_limit, system_time, update_rate)
+        Self::new(n, m, n_steps, dt, integral_gains, q, r, qn, smoothing_weight, panoc_cache_tolerance, panoc_cache_lbfgs_memory, min_thrust, max_thrust, gimbal_limit, system_time, refresh_updater)
     }
 
     pub fn update(&mut self, x0: &Array1<f64>, xref_traj: &Vec<Array1<f64>>, u_warm: &Vec<Array1<f64>>, mass: f64, moi: &Array2<f64>, system_time: f64) -> Vec<Array1<f64>> {
+        // basically, if the refresh updater allows us to update, we update previous control and calculate a new wait time with the number of itertions. otherwise, we return the previous control.
+
         let elapsed_time = system_time - self.system_time;
         if elapsed_time < 1.0 / self.update_rate {
             // Not time to update yet, return previous control sequence
@@ -105,7 +112,7 @@ impl MPC {
 
     }
 
-    pub fn solve(&mut self, x0: &Array1<f64>, xref_traj: &Vec<Array1<f64>>, u_warm: &Vec<Array1<f64>>, mass: f64, moi: &Array2<f64>) -> Vec<Array1<f64>> {
+    pub fn solve(&mut self, x0: &Array1<f64>, xref_traj: &Vec<Array1<f64>>, u_warm: &Vec<Array1<f64>>, mass: f64, moi: &Array2<f64>) -> (Vec<Array1<f64>>, MPCDebugInfo) {
         let mut x = x0.clone(); // initial state
         let mut xref_traj = xref_traj.clone(); // reference trajectory
         let mut u_warm = u_warm.clone(); // warm start control sequence
@@ -137,7 +144,7 @@ impl MPC {
 
             // Solve MPC to get optimal control sequence
             // solve using OpEn
-            let (mut u_apply, u_warm) = mpc_crate::OpEnSolve(&x, &u_warm, &xref_traj_k, &self.q, &self.r, &self.qn, &self.smoothing_weight, &mut panoc_cache, mass, moi, self.min_thrust, self.max_thrust, self.gimbal_limit, self.dt);
+            let (mut u_apply, u_warm, mpc_debug_info) = mpc_crate::OpEnSolve(&x, &u_warm, &xref_traj_k, &self.q, &self.r, &self.qn, &self.smoothing_weight, &mut panoc_cache, mass, moi, self.min_thrust, self.max_thrust, self.gimbal_limit, self.dt);
 
             // exponential filter
             if k >= 1 {
@@ -149,7 +156,7 @@ impl MPC {
             control_sequence.push(u_apply.clone());
         }
 
-        return control_sequence;
+        return control_sequence, debug_info;
     }
 }
 
