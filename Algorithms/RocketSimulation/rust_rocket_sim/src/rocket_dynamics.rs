@@ -414,7 +414,7 @@ impl Rocket {
             // lateral = crossflow component (sqrt of x^2 + y^2); axial = along-axis component.
             // alpha=0 means the wind is perfectly head-on; alpha=90 means pure crossflow.
             let lateral = (body_vel.x.powi(2) + body_vel.y.powi(2)).sqrt();
-            let alpha_deg = lateral.atan2(body_vel.z.abs()).to_degrees();
+            let alpha_deg = lateral.atan2(-body_vel.z).to_degrees();
 
             // Bilinear lookup — both axes are clamped inside lookup() so no panic here.
             let rec = table.lookup(alpha_deg, mach);
@@ -657,7 +657,11 @@ impl Rocket {
             "of_ratio", "isp", "cstar", "port_d",
             "fuel_mass", "nitrous_mass", "n2_tank_mass", "n2o_tank_mass",
             // Wind velocity [m/s], world frame
-            "wind_x", "wind_y", "wind_z"
+            "wind_x", "wind_y", "wind_z",
+            // Aero Drag [N], body frame
+            "aero_drag_x", "aero_drag_y", "aero_drag_z",
+            // Aero Moment [N*m], body frame
+            "aero_moment_x", "aero_moment_y", "aero_moment_z"
         ])?;
 
         let num_records = self.debug_info.times.len();
@@ -674,6 +678,8 @@ impl Rocket {
             let moi = self.debug_info.mois[i];
             let thrust = self.debug_info.thrusts[i];
             let slosh = self.debug_info.slosh_forces[i];
+            let aero_drag = self.debug_info.aero_drags[i];
+            let aero_moment = self.debug_info.aero_moments[i];
 
             // 3. Write the row data
             wtr.write_record(&[
@@ -702,6 +708,12 @@ impl Rocket {
                 self.debug_info.wind_vels[i].x.to_string(),
                 self.debug_info.wind_vels[i].y.to_string(),
                 self.debug_info.wind_vels[i].z.to_string(),
+                aero_drag.x.to_string(),
+                aero_drag.y.to_string(),
+                aero_drag.z.to_string(),
+                aero_moment.x.to_string(),
+                aero_moment.y.to_string(),
+                aero_moment.z.to_string(),
             ])?;
         }
 
