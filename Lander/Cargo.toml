@@ -1,0 +1,14 @@
+[package]
+name = "Lander"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+nalgebra = "0.33"
+ndarray = "0.15"
+rust-ekf = { path = "../Sensing&Controls/AttitudeEstimation/rust-ekf" }
+rust_lossless = { path = "../Algorithms/LosslessConvexification/rust_lossless" }
+MPC = { path = "../Algorithms/MPC" }
+tokio = { version = "1.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
