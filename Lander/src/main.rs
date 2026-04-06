@@ -459,8 +459,7 @@ impl ControlLoop {
     }
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
     println!("VTVL Rocket Control Loop Starting...");
     
     let mut control_loop = ControlLoop::new();
@@ -499,11 +498,7 @@ async fn main() {
             // println!("Control: {:?}", control_output);
         }
         
-        // Maintain timing
-        let elapsed = loop_start.elapsed();
-        if elapsed < target_dt {
-            tokio::time::sleep(target_dt - elapsed).await;
-        }
+        // TODO: Timing Controls for Multithreaded Loop
         
         // Print status every second
         let elapsed_time = control_loop.get_state().start_time.elapsed().as_secs_f64();
