@@ -273,3 +273,64 @@ impl Lossless {
         // return solver.solve().trajectory.expect("Failed to solve trajectory optimization problem");
     }
 }
+
+
+#[derive(Debug, Clone)]
+pub struct RcsController {
+    pub kp: f64,
+    pub kd: f64,
+    pub dead_theta: f64,
+    pub dead_omega: f64,
+    pub threshold: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct RcsCommand {
+    pub firing_positive: bool,
+    pub firing_negative: bool,
+}
+
+
+impl RcsController {
+    pub fn new(kp: f64, kd: f64, dead_theta: f64, dead_omega: f64, threshold: f64) -> Self {
+        Self{
+            kp,
+            kd,
+            dead_theta,
+            dead_omega,
+            threshold,
+        }
+    }
+
+    pub fn default() -> Self {
+        let kp = 59.9687;
+        let kd = 11.7118;
+        let dead_theta = 0.025;
+        let dead_omega = 0.08;
+        let threshold = 0.8;
+
+        Self::new(kp, kd, dead_theta, dead_omega, threshold)
+    }
+
+    pub fn update(&mut self, roll_angle: f64, roll_rate: f64) -> RcsCommand {
+
+        if roll_angle.abs() < self.dead_theta && roll_rate.abs() < self.dead_omega {
+            return RcsCommand {
+                firing_positive: false,
+                firing_negative: false,
+            };
+        }
+
+        let torque = -self.kp * roll_angle - self.kd * roll_rate;
+
+        if torque > self.threshold {
+            RcsCommand { firing_positive: true,  firing_negative: false }
+        } else if torque < -self.threshold {
+            RcsCommand { firing_positive: false, firing_negative: true  }
+        } else {
+            RcsCommand { firing_positive: false, firing_negative: false }
+        }
+
+    }
+
+}
