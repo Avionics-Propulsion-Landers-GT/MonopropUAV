@@ -14,7 +14,7 @@ enum FlightPhase {
     Descent,
 }
 
-// Tracks Vehicle State, Definitely going to need a mutex on this 
+// TODO: Tracks Vehicle State, Definitely going to need a mutex on this 
 #[derive(Debug, Clone)]
 pub struct VehicleState {
     pub position: Vector3<f64>,
