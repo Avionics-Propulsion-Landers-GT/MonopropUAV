@@ -20,18 +20,17 @@ impl RefreshUpdater {
         }
     }
 
-    pub fn iter_update(&mut self, iterations: f64, system_time: f64) -> bool {
+    pub fn reset(&mut self, iterations: f64, system_time: f64) {
         self.iterations = iterations;
-        if system_time - self.start_time > self.overhead + self.iteration_time * iterations {
-            self.start_time = system_time;
+        self.start_time = system_time;
+    }
+
+    pub fn update(&mut self, system_time: f64) -> bool {
+        if system_time - self.start_time > self.overhead + self.iteration_time * self.iterations {
             return true;
         } else {
             return false;
         }
-    }
-
-    pub fn update(&mut self, system_time: f64) -> bool {
-        self.iter_update(self.iterations, system_time)
     }
 }
 

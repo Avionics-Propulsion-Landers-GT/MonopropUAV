@@ -1,5 +1,5 @@
 #[path="../../../MPC/src/mpc_crate.rs"]
-mod mpc_crate;
+pub mod mpc_crate;
 #[path="../../../LosslessConvexification/rust_lossless/src/lossless.rs"]
 pub mod lossless;
 use ndarray::{Array1, Array2};
@@ -30,7 +30,8 @@ pub struct MPC {
     pub system_time: f64, // internal time tracking for MPC updates
     // pub update_rate: f64, // rate at which MPC updates (e.g., 10 Hz)
     pub refresh_updater: RefreshUpdater,
-    previous_control: Vec<Array1<f64>>, // previous control input for smoothing
+    current_control: Vec<Array1<f64>>, // current control input 
+    cached_control: Vec<Array1<f64>>, // previous control input for smoothing
     pub last_solve_time: f64,
 }
 
@@ -55,7 +56,8 @@ impl MPC {
             system_time: 0.0,
             refresh_updater,
             // update_rate,
-            previous_control: vec![Array1::zeros(m); n_steps],
+            current_control: vec![Array1::zeros(m); n_steps],
+            cached_control: vec![Array1::zeros(m); n_steps],
             last_solve_time: 0.0,
         }
     }
@@ -97,18 +99,28 @@ impl MPC {
     pub fn update(&mut self, x0: &Array1<f64>, xref_traj: &Vec<Array1<f64>>, u_warm: &Vec<Array1<f64>>, mass: f64, moi: &Array2<f64>, system_time: f64) -> Vec<Array1<f64>> {
         // basically, if the refresh updater allows us to update, we update previous control and calculate a new wait time with the number of itertions. otherwise, we return the previous control.
 
-        let elapsed_time = system_time - self.system_time;
-        if elapsed_time < 1.0 / self.update_rate {
-            // Not time to update yet, return previous control sequence
-            return self.previous_control.clone();
+        if self.refresh_updater.update(system_time) {
+            // rerun mpc, find iterations, run iter_update() on refresh_updater
+            let (control_sequence, mpc_debug_info) = self.solve(x0, xref_traj, u_warm, mass, moi);
+            self.current_control = self.cached_control.clone();
+            self.cached_control = control_sequence.clone();
+            self.refresh_updater.reset(mpc_debug_info.iterations as f64, system_time);
+            return self.current_control.clone();
         } else {
-            self.system_time = system_time;
-            self.last_solve_time = system_time;
-
-            let control_sequence = self.solve(x0, xref_traj, u_warm, mass, moi);
-            self.previous_control = control_sequence.clone();
-            return control_sequence;
+            // Not time to update yet, return previous control sequence
+            return self.current_control.clone();
         }
+
+        // let elapsed_time = system_time - self.system_time;
+        // if elapsed_time < 1.0 / self.update_rate {
+        // } else {
+        //     self.system_time = system_time;
+        //     self.last_solve_time = system_time;
+
+        //     let control_sequence = self.solve(x0, xref_traj, u_warm, mass, moi);
+        //     self.previous_control = control_sequence.clone();
+        //     return control_sequence;
+        // }
 
     }
 
@@ -121,6 +133,7 @@ impl MPC {
         let mut panoc_cache = optimization_engine::panoc::PANOCCache::new(self.m * self.n_steps, self.panoc_cache_tolerance, self.panoc_cache_lbfgs_memory);
 
         let mut control_sequence: Vec<Array1<f64>> = Vec::new();
+        let mut mpc_debug_info = MPCDebugInfo::new();
 
         for k in 0..self.n_steps {
             let mut xref = xref_traj[k].clone();
@@ -144,7 +157,8 @@ impl MPC {
 
             // Solve MPC to get optimal control sequence
             // solve using OpEn
-            let (mut u_apply, u_warm, mpc_debug_info) = mpc_crate::OpEnSolve(&x, &u_warm, &xref_traj_k, &self.q, &self.r, &self.qn, &self.smoothing_weight, &mut panoc_cache, mass, moi, self.min_thrust, self.max_thrust, self.gimbal_limit, self.dt);
+            let (mut u_apply, u_warm, debug_info) = mpc_crate::OpEnSolve(&x, &u_warm, &xref_traj_k, &self.q, &self.r, &self.qn, &self.smoothing_weight, &mut panoc_cache, mass, moi, self.min_thrust, self.max_thrust, self.gimbal_limit, self.dt);
+            mpc_debug_info = debug_info;
 
             // exponential filter
             if k >= 1 {
@@ -156,7 +170,7 @@ impl MPC {
             control_sequence.push(u_apply.clone());
         }
 
-        return control_sequence, debug_info;
+        return (control_sequence, mpc_debug_info);
     }
 }
 

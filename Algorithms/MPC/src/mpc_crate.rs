@@ -9,9 +9,16 @@ use ndarray::ArrayView1;
 use optimization_engine::{panoc::*, *};
 use std::time::Instant;
 
-struct MPCDebugInfo {
-    iterations: i32,
+pub struct MPCDebugInfo {
+    pub iterations: usize,
+}
 
+impl MPCDebugInfo {
+    pub fn new() -> Self {
+        Self {
+            iterations: 0,
+        }
+    }
 }
 
 // pub fn dynamics(x: &Array1<f64>, u: &Array1<f64>, mass: f64, moi: &Array2<f64>, dt: f64) -> Array1<f64> {
@@ -618,7 +625,7 @@ pub fn OpEnSolve(
     dt: f64,
 ) -> (Array1<f64>, Array2<f64>, MPCDebugInfo) {
     use ndarray::ArrayView1;
-    let debug_info = MPCDebugInfo::new();
+    let mut debug_info = MPCDebugInfo::new();
 
     let N = U.len();
     let m = U[0].len();
