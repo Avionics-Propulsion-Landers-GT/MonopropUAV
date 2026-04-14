@@ -382,19 +382,31 @@ impl LosslessSolver {
             if self.use_glide_slope {
                 // ---------- Glide slope SOC: ||x_k[:2]|| <= x_k[2] / tan(glide_slope) ----------
                 let x_offset = idx_x + 3 * k;
-                if self.flip_glide_slope {
-                    rows.push((row_counter as usize) + 0); cols.push((x_offset as usize) + 2); vals.push(1.0 / self.glide_slope.tan()); // x_k[2]
-                } else {
-                    rows.push((row_counter as usize) + 0); cols.push((x_offset as usize) + 2); vals.push(-1.0 / self.glide_slope.tan()); // x_k[2]
-                }
+                rows.push((row_counter as usize) + 0); cols.push((x_offset as usize) + 2); vals.push(-1.0 / self.glide_slope.tan()); // x_k[2]
                 rows.push((row_counter as usize) + 1); cols.push((x_offset as usize) + 0); vals.push(1.0); // -x_k[0]
                 rows.push((row_counter as usize) + 2); cols.push((x_offset as usize) + 1); vals.push(1.0); // -x_k[1]
                 cones.push(SupportedConeT::SecondOrderConeT(3));
-                b.push(0.0);
+                b.push(self.landing_point[2]);
                 b.push(self.landing_point[0]);
                 b.push(self.landing_point[1]);
                 row_counter += 3;
             }
+            // if self.use_glide_slope {
+            //     let x_offset = idx_x + 3 * k;
+                
+            //     // 1. THE GLIDE SLOPE CONE (Altitude vs Horizontal Distance)
+            //     // This creates the symmetric 3D cone. It NEVER flips.
+            //     // Formula: s_0 = 0.0 - (-1.0/tan)*Z = Z/tan >= ||X, Y||
+            //     rows.push((row_counter as usize) + 0); cols.push((x_offset as usize) + 2); vals.push(-1.0 / self.glide_slope.tan()); 
+            //     rows.push((row_counter as usize) + 1); cols.push((x_offset as usize) + 0); vals.push(1.0); // -X
+            //     rows.push((row_counter as usize) + 2); cols.push((x_offset as usize) + 1); vals.push(1.0); // -Y
+                
+            //     cones.push(SupportedConeT::SecondOrderConeT(3));
+            //     b.push(0.0);
+            //     b.push(self.landing_point[0]);
+            //     b.push(self.landing_point[1]);
+            //     row_counter += 3;
+            // }
 
             if use_terminal_hard_tube && k >= terminal_hard_tube_start {
                 let x_offset = idx_x + 3 * k;
