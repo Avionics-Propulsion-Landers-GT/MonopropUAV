@@ -369,13 +369,22 @@ fn get_wind_model() -> WindModel {
         self.nitrogen_mass = rcs_effect.nitrogen_mass;
 
         
-        // Fluid dynamics update
+        // Fluid dynamics update — pass valve states to control flow paths
         let thrust_command = control_input[2];
-        let is_rcs_on = control_input[3] != 0.0;
+        let is_rcs_on = rcs1_open || rcs2_open;
         let n2o_mass = self.nitrous_mass;
         let n2_mass_total = self.nitrogen_mass + self.pressurizing_nitrogen_mass;
         let fluid_dynamics_dt = dt;
-        let fluid_dynamics_output = self.thermo_fluid_solver.fluid_dynamics_update(thrust_command, is_rcs_on, n2o_mass, n2_mass_total, fluid_dynamics_dt);
+        let fluid_dynamics_output = self.thermo_fluid_solver.fluid_dynamics_update(
+            thrust_command,
+            is_rcs_on,
+            self.o_iso.is_open,
+            self.r_mv.is_open,
+            self.o_vnt.is_open,
+            n2o_mass,
+            n2_mass_total,
+            fluid_dynamics_dt,
+        );
 
         self.fuel_grain_mass = fluid_dynamics_output.new_fuel_mass;
         self.nitrous_mass = fluid_dynamics_output.new_n2o_mass;
