@@ -52,6 +52,14 @@ pub struct Rocket {
 
     pub rcs: RCS,
 
+    // Propellant Feed System Valves
+    pub fill_mv: Valve,  // Fill valve (entry to lander tanks — irrelevant in flight)
+    pub r_mv: Valve,     // Regulator isolation valve (N2 storage → N2O run tank)
+    pub rcs1_mv: Valve,  // RCS thruster pair 1 (controls one roll direction)
+    pub rcs2_mv: Valve,  // RCS thruster pair 2 (controls opposite roll direction)
+    pub o_iso: Valve,    // Oxidizer isolation valve (N2O run tank → MTV/engine)
+    pub o_vnt: Valve,    // Oxidizer vent valve (relieves run tank pressure)
+
     pub thrust_vector: Vector3<f64>,
 
     pub imu: IMU,
@@ -111,7 +119,7 @@ pub struct RocketDebugInfo{
 }
 
 impl Rocket {
-    pub fn new(position: Vector3<f64>, velocity: Vector3<f64>, accel: Vector3<f64>, attitude: UnitQuaternion<f64>, ang_vel: Vector3<f64>, ang_accel: Vector3<f64>, frame_mass: f64, nitrogen_tank_empty_mass: f64, starting_nitrogen_mass: f64, nitrogen_tank_offset: Vector3<f64>, nitrous_tank_empty_mass: f64, starting_pressurizing_nitrogen_mass: f64, starting_nitrous_mass: f64, nitrous_tank_offset: Vector3<f64>, tvc_module_empty_mass: f64, starting_fuel_grain_mass: f64, frame_com_to_gimbal: Vector3<f64>, gimbal_to_tvc_com: Vector3<f64>, frame_moi: Matrix3<f64>, dry_nitrogen_moi: Matrix3<f64>, wet_nitrogen_moi: Matrix3<f64>, nitrous_tank_radius: f64, nitrous_tank_length: f64, nitrous_level: f64, dry_nitrous_moi: Matrix3<f64>, dry_tvc_moi: Matrix3<f64>, wet_tvc_moi: Matrix3<f64>, tvc_range: f64, tvc: TVC, rcs: RCS, imu: IMU, gps: GPS, uwb: UWB, sloshing_model: SloshModel, thermo_fluid_solver: ThermoFluidSolver, com_to_ground: Vector3<f64>, wind_model: Option<WindModel>, nose_offset_z: f64, aero_table: Option<AeroTable>) -> Self {
+    pub fn new(position: Vector3<f64>, velocity: Vector3<f64>, accel: Vector3<f64>, attitude: UnitQuaternion<f64>, ang_vel: Vector3<f64>, ang_accel: Vector3<f64>, frame_mass: f64, nitrogen_tank_empty_mass: f64, starting_nitrogen_mass: f64, nitrogen_tank_offset: Vector3<f64>, nitrous_tank_empty_mass: f64, starting_pressurizing_nitrogen_mass: f64, starting_nitrous_mass: f64, nitrous_tank_offset: Vector3<f64>, tvc_module_empty_mass: f64, starting_fuel_grain_mass: f64, frame_com_to_gimbal: Vector3<f64>, gimbal_to_tvc_com: Vector3<f64>, frame_moi: Matrix3<f64>, dry_nitrogen_moi: Matrix3<f64>, wet_nitrogen_moi: Matrix3<f64>, nitrous_tank_radius: f64, nitrous_tank_length: f64, nitrous_level: f64, dry_nitrous_moi: Matrix3<f64>, dry_tvc_moi: Matrix3<f64>, wet_tvc_moi: Matrix3<f64>, tvc_range: f64, tvc: TVC, rcs: RCS, fill_mv: Valve, r_mv: Valve, rcs1_mv: Valve, rcs2_mv: Valve, o_iso: Valve, o_vnt: Valve, imu: IMU, gps: GPS, uwb: UWB, sloshing_model: SloshModel, thermo_fluid_solver: ThermoFluidSolver, com_to_ground: Vector3<f64>, wind_model: Option<WindModel>, nose_offset_z: f64, aero_table: Option<AeroTable>) -> Self {
         let mut rocket = Self {
             position,
             velocity,
@@ -148,6 +156,12 @@ impl Rocket {
             tvc_range,
             tvc,
             rcs,
+            fill_mv,
+            r_mv,
+            rcs1_mv,
+            rcs2_mv,
+            o_iso,
+            o_vnt,
             thrust_vector: Vector3::zeros(),
             imu,
             gps,
@@ -255,13 +269,21 @@ impl Rocket {
 
         let uwb = UWB::default();
 
+        // Propellant Feed System Valves — default operational states for flight
+        let fill_mv = Valve::new(false);   // Closed in flight (only used during ground fill)
+        let r_mv = Valve::new(true);       // Open: allows N2 to pressurize the N2O tank
+        let rcs1_mv = Valve::new(false);   // Closed by default: responsive to roll commands
+        let rcs2_mv = Valve::new(false);   // Closed by default: responsive to roll commands
+        let o_iso = Valve::new(true);      // Open: allows N2O to flow to engine
+        let o_vnt = Valve::new(false);     // Closed: only opens to relieve excess pressure
+
         let slosh_model = SloshModel::default();
         let thermo_fluid_solver = ThermoFluidSolver::default();
 
         let com_to_ground = Vector3::new(0.0, 0.0, -1.5);
 
 
-        Self::new(position, velocity, acceleration, attitude, angular_velocity, angular_acceleration, frame_mass, nitrogen_tank_empty_mass, starting_nitrogen_mass, nitrogen_tank_offset, nitrous_tank_empty_mass, starting_pressurizing_nitrogen_mass, starting_nitrous_mass, nitrous_tank_offset, tvc_module_empty_mass, starting_fuel_grain_mass, frame_com_to_gimbal, gimbal_to_tvc_com, frame_moi, dry_nitrogen_moi, wet_nitrogen_moi, nitrous_tank_radius, nitrous_tank_length, nitrous_level, dry_nitrous_moi, dry_tvc_moi, wet_tvc_moi, tvc_range, tvc, rcs, imu, gps, uwb, slosh_model, thermo_fluid_solver, com_to_ground)
+        Self::new(position, velocity, acceleration, attitude, angular_velocity, angular_acceleration, frame_mass, nitrogen_tank_empty_mass, starting_nitrogen_mass, nitrogen_tank_offset, nitrous_tank_empty_mass, starting_pressurizing_nitrogen_mass, starting_nitrous_mass, nitrous_tank_offset, tvc_module_empty_mass, starting_fuel_grain_mass, frame_com_to_gimbal, gimbal_to_tvc_com, frame_moi, dry_nitrogen_moi, wet_nitrogen_moi, nitrous_tank_radius, nitrous_tank_length, nitrous_level, dry_nitrous_moi, dry_tvc_moi, wet_tvc_moi, tvc_range, tvc, rcs, fill_mv, r_mv, rcs1_mv, rcs2_mv, o_iso, o_vnt, imu, gps, uwb, slosh_model, thermo_fluid_solver, com_to_ground, None, 0.0, None)
     }
 
 fn get_wind_model() -> WindModel {
@@ -334,9 +356,16 @@ fn get_wind_model() -> WindModel {
         self.fuel_grain_mass = tvc_effect.fuel_grain_mass;
 
         // TODO: implement throttle controller
-        // TODO: talk to team and change the control vector to have 4 dimensions (add in rcs control command)
-        let rcs_command = control_input.w; // Assuming the 4th element of control_input is for RCS
-        let rcs_effect = self.rcs.update(rcs_command, self.nitrogen_mass, dt, self.system_time);
+        // TODO: Consider expanding control_input to drive valve commands from GNC algorithms.
+        //       For now, RCS valves are toggled based on the sign of the roll command.
+        let rcs_command = control_input.w; // 4th element is the roll command
+        // Map the scalar roll command to individual valve states:
+        //   positive → rcs1_mv opens (clockwise roll)
+        //   negative → rcs2_mv opens (counter-clockwise roll)
+        //   zero     → both closed
+        let rcs1_open = self.rcs1_mv.is_open || rcs_command > 0.0;
+        let rcs2_open = self.rcs2_mv.is_open || rcs_command < 0.0;
+        let rcs_effect = self.rcs.update(rcs1_open, rcs2_open, self.nitrogen_mass, dt, self.system_time);
         self.nitrogen_mass = rcs_effect.nitrogen_mass;
 
         

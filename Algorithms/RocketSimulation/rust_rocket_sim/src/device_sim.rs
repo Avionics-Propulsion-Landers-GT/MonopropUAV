@@ -668,33 +668,46 @@ impl RCS {
         Self::new(rcs_thrust, rcs_lever_arm, rcs_nitrogen_consumption_rate, rcs_update_rate)
     }
 
-    // The command is either positive, 0, or negative. positive is roll right, negative is roll left
-    // returns the torque on the rocket body
-    pub fn update(&mut self, command: f64, nitrogen_mass: f64, dt: f64, system_time: f64) -> RCSEffect {
+    // Each RCS valve controls a pair of thrusters for one roll direction.
+    //   rcs1_mv open → clockwise roll  (negative Z torque)
+    //   rcs2_mv open → counter-clockwise roll (positive Z torque)
+    //
+    // TODO: Clarify if both rcs1_mv and rcs2_mv can be open simultaneously.
+    //       If so, the torques cancel out and only nitrogen is consumed.
+    pub fn update(&mut self, rcs1_open: bool, rcs2_open: bool, nitrogen_mass: f64, dt: f64, system_time: f64) -> RCSEffect {
         let mut remaining_nitrogen_mass = nitrogen_mass;
-        let mut actual_command = command;
 
         let elapsed_time = system_time - self.system_time;
-        if elapsed_time < 1.0 / self.update_rate {
-            actual_command = self.last_command;
+        // Determine the effective valve states — hold previous state between update ticks
+        let (active_rcs1, active_rcs2) = if elapsed_time < 1.0 / self.update_rate {
+            // Between update ticks: hold previous command
+            let prev_rcs1 = self.last_command > 0.0;
+            let prev_rcs2 = self.last_command < 0.0;
+            (prev_rcs1, prev_rcs2)
         } else {
             self.system_time = system_time;
-        }
+            // Encode the current valve state into last_command for hold logic
+            if rcs1_open && !rcs2_open {
+                self.last_command = 1.0;
+            } else if rcs2_open && !rcs1_open {
+                self.last_command = -1.0;
+            } else {
+                self.last_command = 0.0;
+            }
+            (rcs1_open, rcs2_open)
+        };
         
-        let torque_magnitude = 2.0 * self.thrust * self.lever_arm;
-        let mut torque;
-        if actual_command == 0.0 {
-            // No action needed
-            torque = Vector3::zeros();
-        } else if actual_command > 0.0 {
-            // Positive Command -> Negative Z Torque
-            // This will roll clockwise from a top view
-            torque = Vector3::new(0.0, 0.0, -torque_magnitude);
+        let torque_per_pair = 2.0 * self.thrust * self.lever_arm;
+        let mut torque = Vector3::zeros();
+
+        if active_rcs1 {
+            // rcs1_mv open → Negative Z Torque (clockwise from top view)
+            torque.z -= torque_per_pair;
             remaining_nitrogen_mass -= self.nitrogen_consumption_rate * dt;
-        } else {
-            // Negative Command -> Positive Z Torque
-            // This will roll counterclockwise from a top view
-            torque = Vector3::new(0.0, 0.0, torque_magnitude);
+        }
+        if active_rcs2 {
+            // rcs2_mv open → Positive Z Torque (counter-clockwise from top view)
+            torque.z += torque_per_pair;
             remaining_nitrogen_mass -= self.nitrogen_consumption_rate * dt;
         }
 
