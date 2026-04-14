@@ -3,6 +3,40 @@ use rand::prelude::*;
 use rand_distr::{Normal, Distribution};
 
 
+/// A simple on/off valve used throughout the propellant feed system.
+/// These model actuated valves (solenoid or pneumatic) that are either
+/// fully open or fully closed — no partial opening or transition dynamics.
+///
+/// Valves in the system:
+///   - fill_mv : Fill valve (entry to lander tanks, irrelevant in flight)
+///   - r_mv    : Regulator isolation valve (N2 storage → N2O run tank)
+///   - rcs1_mv : RCS thruster pair 1 (controls one roll direction)
+///   - rcs2_mv : RCS thruster pair 2 (controls opposite roll direction)
+///   - o_iso   : Oxidizer isolation valve (N2O run tank → MTV/engine)
+///   - o_vnt   : Oxidizer vent valve (relieves run tank pressure)
+///
+/// TODO: Consider integrating valve commands into the control_input vector
+///       when we want the GNC algorithms to drive these valves directly.
+#[derive(Debug, Clone)]
+pub struct Valve {
+    pub is_open: bool,
+}
+
+impl Valve {
+    pub fn new(is_open: bool) -> Self {
+        Self { is_open }
+    }
+
+    pub fn open(&mut self) {
+        self.is_open = true;
+    }
+
+    pub fn close(&mut self) {
+        self.is_open = false;
+    }
+}
+
+
 /*
 Acceleration units are in m/s^2
 Gyro units are in rad/s
