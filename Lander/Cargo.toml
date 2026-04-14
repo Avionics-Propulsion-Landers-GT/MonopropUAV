@@ -6,6 +6,8 @@ edition = "2024"
 [dependencies]
 nalgebra = "0.33"
 ndarray = "0.15"
+ndarray-linalg = "0.16"
+optimization_engine = "0.7"
 rust-ekf = { path = "../Sensing&Controls/AttitudeEstimation/rust-ekf" }
 rust_lossless = { path = "../Algorithms/LosslessConvexification/rust_lossless" }
 MPC = { path = "../Algorithms/MPC" }
