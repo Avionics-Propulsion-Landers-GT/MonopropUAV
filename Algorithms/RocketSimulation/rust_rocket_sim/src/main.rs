@@ -1,14 +1,18 @@
-mod rocket_dynamics;
-mod device_sim;
-mod algorithms;
-mod sloshing_sim;
-mod fluid_dynamics;
-mod simulation;
+pub mod rocket_dynamics;
+pub mod device_sim;
+pub mod algorithms;
+pub mod sloshing_sim;
+pub mod fluid_dynamics;
+pub mod wind_sim;
+pub mod aero_tables;
+pub mod simulation;
 use crate::rocket_dynamics::*;
 use crate::device_sim::*;
 use crate::algorithms::*;
 use crate::sloshing_sim::*;
 use crate::fluid_dynamics::*;
+use crate::wind_sim::*;
+use crate::aero_tables::*;
 use crate::simulation::*;
 use nalgebra::{Matrix3, Vector3, Vector4, UnitQuaternion};
 use ndarray::{Array1, Array2};
@@ -68,7 +72,7 @@ pub fn export_imu_to_csv(
 fn main() {
     let mut sim = Simulation::default();
     sim.debug = true;
-    // sim.rocket.position = Vector3::new(0.0, 0.0, 10.0);
+    // sim.rocket.position = Vector3::new(0.0, 0.0, 49.0);
     sim.start_state = "ascent".to_string();
     sim.min_time = 3.0;
 

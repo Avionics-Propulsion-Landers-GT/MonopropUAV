@@ -1,5 +1,5 @@
 #[path="../../../MPC/src/mpc_crate.rs"]
-mod mpc_crate;
+pub mod mpc_crate;
 #[path="../../../LosslessConvexification/rust_lossless/src/lossless.rs"]
 pub mod lossless;
 use ndarray::{Array1, Array2};
@@ -7,6 +7,8 @@ use std::f64::consts::PI;
 use clarabel::algebra::*;
 use clarabel::solver::*;
 use std::time::Instant;
+use crate::mpc_crate::MPCDebugInfo;
+use crate::device_sim::RefreshUpdater;
 
 #[derive(Debug, Clone)]
 pub struct MPC {
@@ -26,13 +28,15 @@ pub struct MPC {
     pub max_thrust: f64, // maximum thrust
     pub gimbal_limit: f64, // maximum gimbal angle in radians
     pub system_time: f64, // internal time tracking for MPC updates
-    pub update_rate: f64, // rate at which MPC updates (e.g., 10 Hz)
-    previous_control: Vec<Array1<f64>>, // previous control input for smoothing
+    // pub update_rate: f64, // rate at which MPC updates (e.g., 10 Hz)
+    pub refresh_updater: RefreshUpdater,
+    current_control: Vec<Array1<f64>>, // current control input 
+    cached_control: Vec<Array1<f64>>, // previous control input for smoothing
     pub last_solve_time: f64,
 }
 
 impl MPC {
-    pub fn new(n: usize, m: usize, n_steps: usize, dt: f64, integral_gains: (f64, f64, f64), q: Array2<f64>, r: Array2<f64>, qn: Array2<f64>, smoothing_weight: Array1<f64>, panoc_cache_tolerance: f64, panoc_cache_lbfgs_memory: usize, min_thrust: f64, max_thrust: f64, gimbal_limit: f64, system_time: f64, update_rate: f64) -> Self {
+    pub fn new(n: usize, m: usize, n_steps: usize, dt: f64, integral_gains: (f64, f64, f64), q: Array2<f64>, r: Array2<f64>, qn: Array2<f64>, smoothing_weight: Array1<f64>, panoc_cache_tolerance: f64, panoc_cache_lbfgs_memory: usize, min_thrust: f64, max_thrust: f64, gimbal_limit: f64, system_time: f64, refresh_updater: RefreshUpdater) -> Self {
         Self {
             n,
             m,
@@ -50,29 +54,77 @@ impl MPC {
             max_thrust,
             gimbal_limit,
             system_time: 0.0,
-            update_rate,
-            previous_control: vec![Array1::zeros(m); n_steps],
+            refresh_updater,
+            // update_rate,
+            current_control: vec![Array1::zeros(m); n_steps],
+            cached_control: vec![Array1::zeros(m); n_steps],
             last_solve_time: 0.0,
         }
     }
 
-    pub fn update(&mut self, x0: &Array1<f64>, xref_traj: &Vec<Array1<f64>>, u_warm: &Vec<Array1<f64>>, mass: f64, moi: &Array2<f64>, system_time: f64) -> Vec<Array1<f64>> {
-        let elapsed_time = system_time - self.system_time;
-        if elapsed_time < 1.0 / self.update_rate {
-            // Not time to update yet, return previous control sequence
-            return self.previous_control.clone();
-        } else {
-            self.system_time = system_time;
-            self.last_solve_time = system_time;
+    pub fn default() -> Self {
+        let n = 13; // [x, y, z, qx, qy, qz, qw, x_dot, y_dot, z_dot, wx, wy, wz]
+        let m = 3;  // [gimbal_theta, gimbal_phi, thrust]
+        let n_steps = 10;
+        let dt = 0.2;
+        // let integral_gains = (0.001, 0.001, 0.002);
+        let integral_gains = (0.0, 0.0, 0.0);
+        let q = Array2::<f64>::from_diag(&Array1::from(vec![
+            150.0, 150.0, 200.0,   // position x, y, z
+            40000.0, 40000.0, 0.0, 0.0, // quaternion qx, qy, qz, qw
+            100.0, 100.0, 6000.0,        // linear velocities x_dot, y_dot, z_dot
+            500.0, 500.0, 500.0          // angular velocities wx, wy, wz
+        ]));
+        let r = Array2::<f64>::from_diag(&Array1::from(vec![50.0, 50.0, 0.005]));
+        let qn = Array2::<f64>::from_diag(&Array1::from(vec![
+            150.0, 150.0, 200.0,   // position x, y, z
+            50000.0, 50000.0, 0.0, 0.0, // quaternion qx, qy, qz, qw
+            100.0, 100.0, 80000.0,        // linear velocities x_dot, y_dot, z_dot
+            1000.0, 1000.0, 1000.0          // angular velocities wx, wy, wz
+        ]));
+        // let smoothing_weight = Array1::from(vec![150.0, 150.0, -2.0]);
+        let smoothing_weight = Array1::from(vec![0.0, 0.0, 0.0]);
+        let panoc_cache_tolerance = 1e-4;
+        let panoc_cache_lbfgs_memory = 20;
+        let min_thrust = 400.0;
+        let max_thrust = 1000.0;
+        let gimbal_limit = 15_f64.to_radians();
+        let system_time = -1.0;
+        // let update_rate = 50.0;
+        let refresh_updater = RefreshUpdater::new(0.0, 0.0);
 
-            let control_sequence = self.solve(x0, xref_traj, u_warm, mass, moi);
-            self.previous_control = control_sequence.clone();
-            return control_sequence;
+        Self::new(n, m, n_steps, dt, integral_gains, q, r, qn, smoothing_weight, panoc_cache_tolerance, panoc_cache_lbfgs_memory, min_thrust, max_thrust, gimbal_limit, system_time, refresh_updater)
+    }
+
+    pub fn update(&mut self, x0: &Array1<f64>, xref_traj: &Vec<Array1<f64>>, u_warm: &Vec<Array1<f64>>, mass: f64, moi: &Array2<f64>, system_time: f64) -> Vec<Array1<f64>> {
+        // basically, if the refresh updater allows us to update, we update previous control and calculate a new wait time with the number of itertions. otherwise, we return the previous control.
+
+        if self.refresh_updater.update(system_time) {
+            // rerun mpc, find iterations, run iter_update() on refresh_updater
+            let (control_sequence, mpc_debug_info) = self.solve(x0, xref_traj, u_warm, mass, moi);
+            self.current_control = self.cached_control.clone();
+            self.cached_control = control_sequence.clone();
+            self.refresh_updater.reset(mpc_debug_info.iterations as f64, system_time);
+            return self.current_control.clone();
+        } else {
+            // Not time to update yet, return previous control sequence
+            return self.current_control.clone();
         }
+
+        // let elapsed_time = system_time - self.system_time;
+        // if elapsed_time < 1.0 / self.update_rate {
+        // } else {
+        //     self.system_time = system_time;
+        //     self.last_solve_time = system_time;
+
+        //     let control_sequence = self.solve(x0, xref_traj, u_warm, mass, moi);
+        //     self.previous_control = control_sequence.clone();
+        //     return control_sequence;
+        // }
 
     }
 
-    pub fn solve(&mut self, x0: &Array1<f64>, xref_traj: &Vec<Array1<f64>>, u_warm: &Vec<Array1<f64>>, mass: f64, moi: &Array2<f64>) -> Vec<Array1<f64>> {
+    pub fn solve(&mut self, x0: &Array1<f64>, xref_traj: &Vec<Array1<f64>>, u_warm: &Vec<Array1<f64>>, mass: f64, moi: &Array2<f64>) -> (Vec<Array1<f64>>, MPCDebugInfo) {
         let mut x = x0.clone(); // initial state
         let mut xref_traj = xref_traj.clone(); // reference trajectory
         let mut u_warm = u_warm.clone(); // warm start control sequence
@@ -81,6 +133,7 @@ impl MPC {
         let mut panoc_cache = optimization_engine::panoc::PANOCCache::new(self.m * self.n_steps, self.panoc_cache_tolerance, self.panoc_cache_lbfgs_memory);
 
         let mut control_sequence: Vec<Array1<f64>> = Vec::new();
+        let mut mpc_debug_info = MPCDebugInfo::new();
 
         for k in 0..self.n_steps {
             let mut xref = xref_traj[k].clone();
@@ -104,7 +157,8 @@ impl MPC {
 
             // Solve MPC to get optimal control sequence
             // solve using OpEn
-            let (mut u_apply, u_warm) = mpc_crate::OpEnSolve(&x, &u_warm, &xref_traj_k, &self.q, &self.r, &self.qn, &self.smoothing_weight, &mut panoc_cache, mass, moi, self.min_thrust, self.max_thrust, self.gimbal_limit, self.dt);
+            let (mut u_apply, u_warm, debug_info) = mpc_crate::OpEnSolve(&x, &u_warm, &xref_traj_k, &self.q, &self.r, &self.qn, &self.smoothing_weight, &mut panoc_cache, mass, moi, self.min_thrust, self.max_thrust, self.gimbal_limit, self.dt);
+            mpc_debug_info = debug_info;
 
             // exponential filter
             if k >= 1 {
@@ -116,7 +170,7 @@ impl MPC {
             control_sequence.push(u_apply.clone());
         }
 
-        return control_sequence;
+        return (control_sequence, mpc_debug_info);
     }
 }
 
@@ -167,6 +221,24 @@ impl Lossless {
         }
     }
 
+    pub fn default() -> Self {
+        let max_velocity = 5.0;
+        let dry_mass = 61.0;
+        let alpha = 1.0 / (9.81 * 180.0);
+        let lower_thrust_bound = 400.0;
+        let upper_thrust_bound = 900.0;
+        let tvc_range_rad = 15_f64.to_radians();
+        let coarse_delta_t = 0.25;
+        let fine_delta_t = 0.1;
+        let glide_slope = 0.05_f64.to_radians();
+        let use_glide_slope = true;
+        let flip_glide_slope = true;
+        let system_time = -1.0;
+        let update_rate = 3.0;
+
+        Self::new(max_velocity, dry_mass, alpha, lower_thrust_bound, upper_thrust_bound, tvc_range_rad, coarse_delta_t, fine_delta_t, glide_slope, use_glide_slope, flip_glide_slope, [0.0; 3], system_time, update_rate)
+    }
+
     pub fn update(&mut self, current_position: [f64; 3], current_velocity: [f64; 3], target_position: [f64; 3], propellant_mass: f64, system_time: f64) -> lossless::TrajectoryResult {
         let elapsed_time = system_time - self.system_time;
         if elapsed_time < 1.0 / self.update_rate {
@@ -214,4 +286,65 @@ impl Lossless {
 
         // return solver.solve().trajectory.expect("Failed to solve trajectory optimization problem");
     }
+}
+
+
+#[derive(Debug, Clone)]
+pub struct RcsController {
+    pub kp: f64,
+    pub kd: f64,
+    pub dead_theta: f64,
+    pub dead_omega: f64,
+    pub threshold: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct RcsCommand {
+    pub firing_positive: bool,
+    pub firing_negative: bool,
+}
+
+
+impl RcsController {
+    pub fn new(kp: f64, kd: f64, dead_theta: f64, dead_omega: f64, threshold: f64) -> Self {
+        Self{
+            kp,
+            kd,
+            dead_theta,
+            dead_omega,
+            threshold,
+        }
+    }
+
+    pub fn default() -> Self {
+        let kp = 59.9687;
+        let kd = 11.7118;
+        let dead_theta = 0.025;
+        let dead_omega = 0.08;
+        let threshold = 0.8;
+
+        Self::new(kp, kd, dead_theta, dead_omega, threshold)
+    }
+
+    pub fn update(&mut self, roll_angle: f64, roll_rate: f64) -> RcsCommand {
+
+        if roll_angle.abs() < self.dead_theta && roll_rate.abs() < self.dead_omega {
+            return RcsCommand {
+                firing_positive: false,
+                firing_negative: false,
+            };
+        }
+
+        let torque = -self.kp * roll_angle - self.kd * roll_rate;
+
+        if torque > self.threshold {
+            RcsCommand { firing_positive: true,  firing_negative: false }
+        } else if torque < -self.threshold {
+            RcsCommand { firing_positive: false, firing_negative: true  }
+        } else {
+            RcsCommand { firing_positive: false, firing_negative: false }
+        }
+
+    }
+
 }

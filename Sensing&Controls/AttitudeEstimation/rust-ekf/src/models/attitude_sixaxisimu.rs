@@ -2,37 +2,32 @@ use std::io::{Error as IoError, ErrorKind};
 use ndarray::{arr1, Array1, Array2, s};
 use crate::ekf::model::EKFModel;
 
-pub struct AttitudeModel {
+// State vector: [roll, pitch, yaw, gyro_x, gyro_y, gyro_z]
+// Measurements: [gyro_x, gyro_y, gyro_z, accel_x, accel_y, accel_z]
+// Input data row: [t, gx, gy, gz, ax, ay, az]
+
+pub struct ImuModel6Axis {
     pub current_time: f64,
     pub previous_time: f64,
     pub delta_time: f64,
     gravity_reference: Array1<f64>,
-    magnetic_reference: Array1<f64>,
 }
 
-impl AttitudeModel {
+impl ImuModel6Axis {
     pub fn new(delta_time: f64) -> Self {
-        Self::with_reference_vectors(
-            delta_time,
-            [0.0, 0.0, 1.0],
-            Self::default_magnetic_reference(),
-        )
-        .expect("default gravity and magnetic reference vectors must be valid")
+        Self::with_gravity_reference(delta_time, [0.0, 0.0, 1.0])
+            .expect("default gravity reference vector must be valid")
     }
 
-    /// Construct the model with caller-provided reference vectors.
+    /// Construct the model with a caller-provided gravity reference vector.
     ///
-    /// `gravity_reference` should match the accelerometer reference direction in
-    /// the world frame.
-    /// `magnetic_reference` should be the local magnetic field direction in the
-    /// world frame, including dip/inclination.
-    pub fn with_reference_vectors(
+    /// `gravity_reference` should match the accelerometer reference direction
+    /// in the world frame.
+    pub fn with_gravity_reference(
         delta_time: f64,
         gravity_reference: [f64; 3],
-        magnetic_reference: [f64; 3],
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let gravity_reference = Self::normalize_vector(&arr1(&gravity_reference));
-        let magnetic_reference = Self::normalize_vector(&arr1(&magnetic_reference));
 
         if gravity_reference.iter().all(|value| value.abs() <= f64::EPSILON) {
             return Err(IoError::new(
@@ -41,27 +36,15 @@ impl AttitudeModel {
             ).into());
         }
 
-        if magnetic_reference.iter().all(|value| value.abs() <= f64::EPSILON) {
-            return Err(IoError::new(
-                ErrorKind::InvalidInput,
-                "magnetic reference vector must be non-zero",
-            ).into());
-        }
-
         Ok(Self {
             current_time: -delta_time,
             previous_time: -2.0 * delta_time,
             delta_time,
             gravity_reference,
-            magnetic_reference,
         })
     }
 
     // ── Private helpers ────────────────────────────────────────────────────
-
-    fn default_magnetic_reference() -> [f64; 3] {
-        [-0.04, 0.44, -0.89]
-    }
 
     /// ZYX Euler kinematic equation: [roll_dot, pitch_dot, yaw_dot] = W * omega
     #[inline]
@@ -162,12 +145,12 @@ impl AttitudeModel {
     }
 }
 
-impl EKFModel for AttitudeModel {
+impl EKFModel for ImuModel6Axis {
     fn delta_time(&self) -> Option<f64> {
         Some(self.delta_time)
     }
 
-    /// Parse a 10-element data row `[t, gx, gy, gz, ax, ay, az, mx, my, mz]`.
+    /// Parse a 7-element data row `[t, gx, gy, gz, ax, ay, az]`.
     fn parse_data(&mut self, data: &[f64]) -> Array1<f64> {
         self.previous_time = self.current_time;
         self.current_time = data[0];
@@ -177,12 +160,10 @@ impl EKFModel for AttitudeModel {
         }
 
         let accel = Self::normalize_vector(&arr1(&[data[4], data[5], data[6]]));
-        let mag = Self::normalize_vector(&arr1(&[data[7], data[8], data[9]]));
 
         Array1::from(vec![
             data[1], data[2], data[3], // gyro  (rad/s)
             accel[0], accel[1], accel[2],
-            mag[0], mag[1], mag[2],
         ])
     }
 
@@ -244,31 +225,26 @@ impl EKFModel for AttitudeModel {
         f
     }
 
-    /// Measurement prediction h(x) for the 9-axis IMU.
+    /// Measurement prediction h(x) for the 6-axis IMU.
     fn measurement_prediction_function(&self, state: &Array1<f64>) -> Array1<f64> {
         let euler = state.slice(s![0..3]).to_owned();
         let r = Self::euler_to_rotation_matrix(&euler);
         let gyro_pred = state.slice(s![3..6]).to_owned();
         let accel_pred = r.dot(&self.gravity_reference);
-        let mag_pred = r.dot(&self.magnetic_reference);
 
-        let mut z = Array1::zeros(9);
+        let mut z = Array1::zeros(6);
         z.slice_mut(s![0..3]).assign(&gyro_pred);
         z.slice_mut(s![3..6]).assign(&accel_pred);
-        z.slice_mut(s![6..9]).assign(&mag_pred);
         z
     }
 
     fn measurement_prediction_jacobian(&self, state: &Array1<f64>) -> Array2<f64> {
         let (dr_dphi, dr_dtheta, dr_dpsi) = Self::dcm_angle_derivatives(state);
-        let accel_dphi = dr_dphi.dot(&self.gravity_reference);
+        let accel_dphi   = dr_dphi.dot(&self.gravity_reference);
         let accel_dtheta = dr_dtheta.dot(&self.gravity_reference);
-        let accel_dpsi = dr_dpsi.dot(&self.gravity_reference);
-        let mag_dphi = dr_dphi.dot(&self.magnetic_reference);
-        let mag_dtheta = dr_dtheta.dot(&self.magnetic_reference);
-        let mag_dpsi = dr_dpsi.dot(&self.magnetic_reference);
+        let accel_dpsi   = dr_dpsi.dot(&self.gravity_reference);
 
-        let mut h = Array2::<f64>::zeros((9, 6));
+        let mut h = Array2::<f64>::zeros((6, 6));
         h[[0, 3]] = 1.0;
         h[[1, 4]] = 1.0;
         h[[2, 5]] = 1.0;
@@ -276,10 +252,6 @@ impl EKFModel for AttitudeModel {
         h.slice_mut(s![3..6, 0]).assign(&accel_dphi);
         h.slice_mut(s![3..6, 1]).assign(&accel_dtheta);
         h.slice_mut(s![3..6, 2]).assign(&accel_dpsi);
-
-        h.slice_mut(s![6..9, 0]).assign(&mag_dphi);
-        h.slice_mut(s![6..9, 1]).assign(&mag_dtheta);
-        h.slice_mut(s![6..9, 2]).assign(&mag_dpsi);
 
         h
     }

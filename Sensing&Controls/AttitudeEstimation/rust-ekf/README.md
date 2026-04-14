@@ -73,9 +73,9 @@ let mut ekf = AltitudeEKF::new(
     initial_state,
     initial_measurement,
     0.01,  // dt (seconds)
-    0.1,   // Process noise (Q)
-    0.01,  // Measurement noise (R)
-    1.0,   // Initial state covariance
+    array![[0.1]],  // Process noise covariance Q (1x1 matrix)
+    array![[0.01]], // Measurement noise covariance R (1x1 matrix)
+    array![[1.0]],  // Initial state covariance P (1x1 matrix)
     model,
 );
 
@@ -98,33 +98,43 @@ loop {
 
 ### 2. AttitudeModel
 
-Estimates 3D orientation (roll, pitch, yaw) using IMU measurements from gyroscope, accelerometer, and magnetometer.
+Estimates 3D orientation and body angular velocity using a fast 9-axis IMU model (gyroscope, accelerometer, magnetometer).
 
-**State Vector**: `[roll, pitch, yaw]` (radians)
+**Dynamics model**: Euler angle kinematics + constant body-rate angular dynamics between updates. This keeps the predict step cheap while the gyro, accelerometer, and magnetometer measurements continuously pull the state back toward the observed motion.
+
+**State Vector**: `[φ, θ, ψ, ωx, ωy, ωz]`
 
 **Input Data Format**: `[timestamp, gx, gy, gz, ax, ay, az, mx, my, mz]`
 - `gx,gy,gz`: Gyroscope measurements (rad/s)
-- `ax,ay,az`: Accelerometer measurements (m/s²)
-- `mx,my,mz`: Magnetometer measurements (normalized)
+- `ax,ay,az`: Accelerometer measurements (normalised internally to a direction vector)
+- `mx,my,mz`: Magnetometer measurements (normalised internally to a direction vector)
 
 **Example Usage**:
 ```rust
 use rust_ekf::{AttitudeModel, AttitudeEKF};
 use ndarray::array;
-use std::f64::consts::PI;
 
-// Initialize with 10ms timestep
+// Fast default model with built-in gravity and magnetic reference vectors
 let model = AttitudeModel::new(0.01);
-let initial_state = array![0.0, 0.0, 0.0];  // Initial orientation (roll, pitch, yaw)
-let initial_measurement = array![0.0; 9];   // Initial sensor readings
+
+// Or provide local field references explicitly:
+// let model = AttitudeModel::with_reference_vectors(
+//     0.01,
+//     [0.0, 0.0, -1.0],
+//     [0.45, 0.0, -0.89],
+// )?;
+
+// Initial state: [φ, θ, ψ, ωx, ωy, ωz]
+let initial_state = array![0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+let initial_measurement = array![0.0; 9];
 
 let mut ekf = AttitudeEKF::new(
     initial_state,
     initial_measurement,
-    0.01,  // dt
-    0.1,   // Process noise
-    0.01,  // Measurement noise
-    1.0,   // Initial covariance
+    0.01,  // dt (seconds)
+    Array2::eye(6) * 0.1,   // Process noise covariance Q (6x6 matrix)
+    Array2::eye(9) * 0.01,  // Measurement noise covariance R (9x9 matrix)
+    Array2::eye(6) * 1.0,   // Initial state covariance P (6x6 matrix)
     model,
 );
 
@@ -134,17 +144,20 @@ loop {
     let imu_data = [
         current_time,
         gx, gy, gz,   // Gyroscope (rad/s)
-        ax, ay, az,   // Accelerometer (m/s²)
-        mx, my, mz    // Magnetometer (normalized)
+        ax, ay, az,   // Accelerometer (normalised)
+        mx, my, mz,   // Magnetometer (normalised)
     ];
-    
-    ekf.predict();
-    ekf.update(&imu_data);
-    
+
+    // `step()` uses the timestamp in `imu_data` to update dt before prediction.
+    ekf.step(&imu_data);
+
     let state = ekf.get_state();
-    let (roll, pitch, yaw) = (state[0], state[1], state[2]);
+    let (roll, pitch, yaw)          = (state[0], state[1], state[2]);
+    let (omega_x, omega_y, omega_z) = (state[3], state[4], state[5]);
 }
 ```
+
+**Process noise tuning note**: The Q matrix allows you to specify different noise levels for each state variable. For uniform noise, use `Array2::eye(n) * scalar` where `n` is the state dimension.
 
 ### 3. XYPositionModel
 
@@ -175,9 +188,9 @@ let mut ekf = XYPositionEKF::new(
     initial_state,
     initial_measurement,
     1.0,    // dt (1 second between updates)
-    0.1,    // Process noise
-    1.0,    // Measurement noise (higher for GPS)
-    10.0,   // Initial covariance
+    Array2::eye(4) * 0.1,    // Process noise covariance Q (4x4 matrix)
+    Array2::eye(2) * 1.0,    // Measurement noise covariance R (2x2 matrix)
+    Array2::eye(4) * 10.0,   // Initial state covariance P (4x4 matrix)
     model,
 );
 
@@ -196,20 +209,26 @@ loop {
 
 ## Model Tuning Tips
 
-1. **Process Noise (Q)**:
+1. **Process Noise Covariance (Q)**:
    - Higher values make the filter more responsive to measurements
    - Lower values make the filter trust the model more
-   - Typical range: 0.01 to 1.0
+   - Can specify different noise levels for each state variable
+   - For uniform noise: `Array2::eye(n) * scalar` where `n` is state dimension
+   - Typical diagonal values: 0.01 to 1.0
 
-2. **Measurement Noise (R)**:
+2. **Measurement Noise Covariance (R)**:
    - Should match your sensor's expected error characteristics
    - Lower values indicate more trust in the measurements
-   - Typical range: 0.001 to 1.0
+   - Can specify different noise levels for each measurement
+   - For uniform noise: `Array2::eye(m) * scalar` where `m` is measurement dimension
+   - Typical diagonal values: 0.001 to 1.0
 
-3. **Initial Covariance (P)**:
+3. **Initial State Covariance (P)**:
    - Represents uncertainty in initial state
    - Larger values allow faster initial convergence
-   - Typical range: 0.1 to 10.0
+   - Can specify different uncertainty for each state variable
+   - For uniform uncertainty: `Array2::eye(n) * scalar`
+   - Typical diagonal values: 0.1 to 10.0
 
 ## Adding a Custom Model
 

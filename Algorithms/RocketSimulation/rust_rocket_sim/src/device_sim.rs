@@ -2,6 +2,37 @@ use nalgebra::{Vector3, UnitQuaternion};
 use rand::prelude::*;
 use rand_distr::{Normal, Distribution};
 
+#[derive(Debug, Clone)]
+pub struct RefreshUpdater {
+    pub overhead: f64, // overhead on startup of process, in seconds
+    pub iteration_time: f64, // time each iteration takes, in seconds
+    pub iterations: f64,
+    pub start_time: f64,
+}
+
+impl RefreshUpdater {
+    pub fn new(overhead: f64, iteration_time: f64) -> Self {
+        Self {
+            overhead,
+            iteration_time,
+            iterations: 1.0,
+            start_time: 0.0,
+        }
+    }
+
+    pub fn reset(&mut self, iterations: f64, system_time: f64) {
+        self.iterations = iterations;
+        self.start_time = system_time;
+    }
+
+    pub fn update(&mut self, system_time: f64) -> bool {
+        if system_time - self.start_time > self.overhead + self.iteration_time * self.iterations {
+            return true;
+        } else {
+            return false;
+        }
+    }
+}
 
 /*
 Acceleration units are in m/s^2
@@ -52,6 +83,22 @@ impl IMU {
             update_rate,
             system_time: 0.0,
         }
+    }
+
+    pub fn default() -> Self {
+        let imu_accel_noise_sigma = Vector3::new(0.00137, 0.00137, 0.00137);
+        let imu_accel_offset = Vector3::new(0.0, 0.0, 0.0);
+        let imu_gyro_noise_sigma = Vector3::new(0.000061, 0.000061, 0.000061    );
+        let imu_gyro_drift = Vector3::new(0.0, 0.0, 0.0);
+        let imu_mag_noise_sigma = Vector3::new(14.0e-9, 14.0e-9, 14.0e-9);
+        let imu_mag_offset = Vector3::new(0.0, 0.0, 0.0);
+        let imu_earth_magnetic_field = Vector3::new(
+                                                    -0.0000020,  // -2.0 microTesla East
+                                                    0.0000220,  // +22.0 microTesla North
+                                                    -0.0000443); // -44.3 microTesla Up (Pointing Down!)
+        let imu_update_rate = 300.0;
+
+        Self::new(imu_accel_noise_sigma, imu_accel_offset, imu_gyro_noise_sigma, imu_gyro_drift, imu_mag_noise_sigma, imu_mag_offset, imu_earth_magnetic_field, imu_update_rate)
     }
 
     pub fn update(&mut self, accel: Vector3<f64>, ang_vel: Vector3<f64>, attitude: UnitQuaternion<f64>, system_time: f64) -> IMUReading {
@@ -139,6 +186,14 @@ impl GPS {
         }
     }
 
+    pub fn default() -> Self {
+        let gps_position_noise_sigma = Vector3::zeros();
+        let gps_position_offset = Vector3::zeros();
+        let gps_update_rate = 5.0;
+
+        Self::new(gps_position_noise_sigma, gps_position_offset, gps_update_rate)
+    }
+
     pub fn update(&mut self, position: Vector3<f64>, system_time: f64) -> GPSReading {
         let elapsed_time = system_time - self.system_time;
         if elapsed_time < 1.0 / self.update_rate {
@@ -190,6 +245,16 @@ impl UWB {
             update_rate,
             system_time: 0.0,
         }
+    }
+
+    pub fn default() -> Self {
+        let uwb_position_noise_sigma = Vector3::zeros();
+        let uwb_position_offset = Vector3::zeros();
+        let uwb_origin = Vector3::zeros();
+        let uwb_range = 8.0;
+        let uwb_update_rate = 5.0;
+
+        Self::new(uwb_position_noise_sigma, uwb_position_offset, uwb_origin, uwb_range, uwb_update_rate)
     }
 
     pub fn update(&mut self, position: Vector3<f64>, system_time: f64) -> UWBReading {
@@ -249,6 +314,18 @@ impl TVCActuator {
             update_rate,
             system_time: 0.0,
         }
+    }
+
+    pub fn default() -> Self {
+        let actuator_start_position = 0.0;
+        let actuator_extension_limit = 0.08;
+        let acuator_unloaded_speed = 0.14986;
+        let actuator_stall_force = 102.06;
+        let actuator_p_gain = 10.0;
+        let actuator_pos_noise_sigma = 0.0;
+        let actuator_update_rate = 200.0;
+
+        Self::new(actuator_start_position, actuator_extension_limit, acuator_unloaded_speed, actuator_stall_force, actuator_p_gain, actuator_pos_noise_sigma, actuator_update_rate)
     }
 
     pub fn update(&mut self, target_position: f64, load_force: f64, dt: f64, system_time: f64) {
@@ -327,6 +404,19 @@ impl MTV {
             update_rate,
             system_time: 0.0,
         }
+    }
+
+    pub fn default(starting_fuel_grain_mass: f64) -> Self {
+        let mtv_angle = 60.0;
+        let mtv_ang_vel = 0.0;
+        let mtv_ang_accel = 0.0;
+        let mtv_unloaded_speed = 60.0;
+        let mtv_stall_torque = 70.0;
+        let mtv_p_gain = 1000.0;
+        let mtv_valve_torque = 30.0;
+        let mtv_update_rate = 200.0;
+
+        Self::new(mtv_angle, mtv_ang_vel, mtv_ang_accel, mtv_unloaded_speed, mtv_stall_torque, mtv_p_gain, mtv_valve_torque, starting_fuel_grain_mass, mtv_update_rate)
     }
 
     pub fn update(&mut self, target_thrust: f64, nitrogen_mass: f64, pressurizing_nitrogen_mass: f64, nitrous_mass: f64, fuel_grain_mass: f64, dt: f64, system_time: f64) -> MTVEffect {
@@ -446,7 +536,7 @@ pub struct ActuatorPositions {
 
 impl TVC {
     // Our actuators appear to have a stall force of 400 lbf (need to convert to metric) and an unloaded speed of 4.777173913 in/s (also convert)
-    pub fn new(mtv: MTV, x_actuator: TVCActuator, y_actuator: TVCActuator, actuator_lever_arm: f64, tvc_lever_arm: Vector3<f64>, max_fuel_inertia: f64, min_fuel_inertia: f64, starting_fuel_grain_mass: f64) -> Self {
+    pub fn new(mtv: MTV, x_actuator: TVCActuator, y_actuator: TVCActuator, actuator_lever_arm: f64, max_fuel_inertia: f64, min_fuel_inertia: f64, starting_fuel_grain_mass: f64) -> Self {
         Self {
             mtv,
             x_actuator,
@@ -459,6 +549,18 @@ impl TVC {
             min_fuel_inertia,
             starting_fuel_grain_mass,
         }
+    }
+
+    pub fn default(starting_fuel_grain_mass: f64) -> Self {
+        let mtv = MTV::default(starting_fuel_grain_mass);
+        let x_actuator = TVCActuator::default();
+        let y_actuator = TVCActuator::default();
+        let tvc_actuator_lever_arm = 0.1;
+        // TODO: Whenever properly implementing TVC, fix these values
+        let tvc_max_fuel_inertia = 3.0;
+        let tvc_min_fuel_inertia = 8.0;
+
+        Self::new(mtv, x_actuator, y_actuator, tvc_actuator_lever_arm, tvc_max_fuel_inertia, tvc_min_fuel_inertia, starting_fuel_grain_mass)
     }
 
     // engine is 11 kg with fuel, awaiting empty mass data
@@ -552,6 +654,15 @@ impl RCS {
             update_rate,
             system_time: 0.0,
         }
+    }
+
+    pub fn default() -> Self {
+        let rcs_thrust = 10.0;
+        let rcs_lever_arm = 0.15;
+        let rcs_nitrogen_consumption_rate = 0.1;
+        let rcs_update_rate = 10.0;
+
+        Self::new(rcs_thrust, rcs_lever_arm, rcs_nitrogen_consumption_rate, rcs_update_rate)
     }
 
     // The command is either positive, 0, or negative. positive is roll right, negative is roll left
