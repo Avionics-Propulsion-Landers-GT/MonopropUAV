@@ -121,6 +121,9 @@ pub struct RocketDebugInfo{
     pub imu_readings: Vec<IMUReading>,
     pub gps_readings: Vec<GPSReading>,
     pub uwb_readings: Vec<UWBReading>,
+    pub m2_pt_readings: Vec<PTReading>,
+    pub o_pt_readings: Vec<PTReading>,
+    pub oa_pt_readings: Vec<PTReading>,
 }
 
 impl Rocket {
@@ -209,6 +212,9 @@ impl Rocket {
                 imu_readings: Vec::new(),
                 gps_readings: Vec::new(),
                 uwb_readings: Vec::new(),
+                m2_pt_readings: Vec::new(),
+                o_pt_readings: Vec::new(),
+                oa_pt_readings: Vec::new(),
             },
         };
 
@@ -419,6 +425,14 @@ fn get_wind_model() -> WindModel {
         self.debug_info.nitrous_masses.push(self.nitrous_mass);
         self.debug_info.nitrogen_n2_tank_masses.push(self.nitrogen_mass);
         self.debug_info.nitrogen_n2o_tank_masses.push(self.pressurizing_nitrogen_mass);
+
+        // Update Pressure Transducers with true pressures from the fluid solver
+        let m2_pt_reading = self.m2_pt.update(fluid_dynamics_output.p_downstream_mtv_bar, self.system_time);
+        let o_pt_reading = self.o_pt.update(fluid_dynamics_output.p_runtank_bar, self.system_time);
+        let oa_pt_reading = self.oa_pt.update(fluid_dynamics_output.p_upstream_runtank_bar, self.system_time);
+        self.debug_info.m2_pt_readings.push(m2_pt_reading);
+        self.debug_info.o_pt_readings.push(o_pt_reading);
+        self.debug_info.oa_pt_readings.push(oa_pt_reading);
 
 
         self.system_time += dt;
@@ -739,7 +753,9 @@ fn get_wind_model() -> WindModel {
             // Aero Drag [N], body frame
             "aero_drag_x", "aero_drag_y", "aero_drag_z",
             // Aero Moment [N*m], body frame
-            "aero_moment_x", "aero_moment_y", "aero_moment_z"
+            "aero_moment_x", "aero_moment_y", "aero_moment_z",
+            // Pressure Transducer readings [bar]
+            "m2_pt_bar", "o_pt_bar", "oa_pt_bar"
         ])?;
 
         let num_records = self.debug_info.times.len();
@@ -792,6 +808,9 @@ fn get_wind_model() -> WindModel {
                 aero_moment.x.to_string(),
                 aero_moment.y.to_string(),
                 aero_moment.z.to_string(),
+                self.debug_info.m2_pt_readings[i].pressure_bar.to_string(),
+                self.debug_info.o_pt_readings[i].pressure_bar.to_string(),
+                self.debug_info.oa_pt_readings[i].pressure_bar.to_string(),
             ])?;
         }
 
