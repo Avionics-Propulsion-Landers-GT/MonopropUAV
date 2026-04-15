@@ -718,6 +718,98 @@ impl RCS {
     }
 }
 
+/// A simulated pressure transducer (PT) that measures static pressure at a
+/// specific point in the propellant feed system.
+///
+/// Unlike inertial sensors (IMU) or radio-based sensors (GPS, UWB), pressure
+/// transducers are direct-measurement devices and are extremely stable.
+/// Aerospace piezoresistive PTs typically achieve ±0.1–0.5% of Full Scale
+/// Output (FSO) total accuracy, with the dominant error source being a fixed
+/// calibration offset (bias) rather than random noise.  For a 100 bar FS
+/// sensor, actual measurement noise is on the order of ±0.005 bar — effectively
+/// negligible step-to-step.
+///
+/// Each PT outputs a scalar pressure reading [bar] with a small Gaussian noise
+/// component and an optional fixed bias.  A configurable update rate models
+/// the real sensor's sample-and-hold behaviour.
+///
+/// PTs on this vehicle:
+///   - m2_pt  : Downstream of the MTV, before the check valve.
+///              Reads the line pressure between the throttle valve and engine.
+///   - o_pt   : Immediately downstream of the N2O run tank, before o_vnt.
+///              Used by the vent controller to decide whether/how long to
+///              open the oxidizer vent valve.
+///   - oa_pt  : Upstream of the N2O run tank, downstream of r_mv.
+///              Reads the regulated nitrogen supply pressure entering the
+///              run tank.
+#[derive(Debug, Clone)]
+pub struct PressureTransducer {
+    /// Human-readable label for logging (e.g. "m2-pt")
+    pub label: String,
+    /// Standard deviation of the Gaussian measurement noise [bar].
+    /// Typical value for a 100 bar FS piezoresistive PT is ~0.005 bar.
+    pub noise_sigma: f64,
+    /// Fixed measurement bias (calibration offset) [bar]
+    pub bias: f64,
+    /// Most recent output (held between update ticks)
+    pub last_reading: PTReading,
+    /// Sensor sample rate [Hz] — piezoresistive PTs commonly run at 1 kHz+
+    pub update_rate: f64,
+    /// Internal clock tracking when the last update was issued
+    system_time: f64,
+}
+
+/// A single pressure transducer reading.
+#[derive(Debug, Clone)]
+pub struct PTReading {
+    /// Measured pressure [bar], including noise and bias
+    pub pressure_bar: f64,
+}
+
+impl PressureTransducer {
+    pub fn new(label: &str, noise_sigma: f64, bias: f64, update_rate: f64) -> Self {
+        Self {
+            label: label.to_string(),
+            noise_sigma,
+            bias,
+            last_reading: PTReading { pressure_bar: 0.0 },
+            update_rate,
+            system_time: 0.0,
+        }
+    }
+
+    /// Convenience constructor with realistic defaults for a 0–100 bar
+    /// aerospace piezoresistive PT:
+    ///   - 0.005 bar noise sigma  (~0.005% FS — essentially negligible)
+    ///   - Zero bias
+    ///   - 1000 Hz sample rate
+    pub fn default_with_label(label: &str) -> Self {
+        Self::new(label, 0.005, 0.0, 1000.0)
+    }
+
+    /// Feed the sensor the true local pressure.  Returns a (possibly stale)
+    /// reading.  Between update ticks the previous value is returned unchanged,
+    /// matching sample-and-hold hardware behaviour.
+    pub fn update(&mut self, true_pressure_bar: f64, system_time: f64) -> PTReading {
+        let elapsed = system_time - self.system_time;
+        if elapsed < 1.0 / self.update_rate {
+            return self.last_reading.clone();
+        }
+
+        self.system_time = system_time;
+
+        let mut rng = rand::rng();
+        let noise = noise_1_d(self.noise_sigma, &mut rng);
+
+        self.last_reading = PTReading {
+            pressure_bar: true_pressure_bar + self.bias + noise,
+        };
+
+        self.last_reading.clone()
+    }
+}
+
+
 // Helper to generate 3D noise
 fn noise_3_d(sigma: &Vector3<f64>, rng: &mut ThreadRng) -> Vector3<f64> {
     let n_x = Normal::new(0.0, sigma.x).unwrap().sample(rng);
