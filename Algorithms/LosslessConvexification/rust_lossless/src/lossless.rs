@@ -24,7 +24,6 @@ pub struct LosslessSolver {
     pub lower_thrust_bound: f64,
     pub upper_thrust_bound: f64,
     pub tvc_range_rad: f64,
-    pub min_time_s: f64,
     pub coarse_line_search_delta_t: f64,
     pub fine_line_search_delta_t: f64,
     pub coarse_delta_t: f64,
@@ -136,7 +135,6 @@ impl Default for LosslessSolver {
             lower_thrust_bound: 0.0,
             upper_thrust_bound: 0.0,
             tvc_range_rad: (15.0_f64).to_radians(),
-            min_time_s: 6.4,
             coarse_line_search_delta_t: 1.0,
             fine_line_search_delta_t: 1.0,
             coarse_delta_t: 1.0,
@@ -694,10 +692,7 @@ impl LosslessSolver {
             .map(|v| v * v)
             .sum::<f64>()
             .sqrt();
-
         let t_min = self.dry_mass * vel_norm / self.upper_thrust_bound;
-
-        // let t_min = self.min_time_s;
         let t_max = self.fuel_mass / (self.alpha * self.lower_thrust_bound);
 
         let coarse_n_min = (t_min / self.delta_t).ceil() as i64;

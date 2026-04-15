@@ -4,6 +4,8 @@ This crate owns the multi-method comparison workflow.
 
 It depends on `../rust_lossless` for the ZOH solver and keeps the Chebyshev solver, comparison runner, sweep binaries, and Python reporting scripts in one place.
 
+Archived run outputs, figures, and baseline truth/reference CSVs live under `output/`.
+
 ## What This Crate Does
 
 - Runs one or more solver methods on the same scenario.
@@ -24,7 +26,7 @@ It depends on `../rust_lossless` for the ZOH solver and keeps the Chebyshev solv
 1. Configure the scenario and enabled methods in `src/main.rs`.
 2. Run the comparison executable.
 3. The executable writes method-specific outputs under a run directory such as `offset_limited_descent_moreglide/long/`.
-4. The executable calls `scripts/batch_compare_rust_lossless.py` to compare those outputs against a baseline truth CSV.
+4. The executable calls `scripts/batch_compare_rust_lossless.py` to compare those outputs against a baseline truth CSV from `output/`.
 5. Use the scripts in `scripts/` to merge, summarize, and plot results across groups and run types.
 
 ## Running The Comparison
@@ -38,7 +40,7 @@ cargo run
 `src/main.rs` currently:
 
 - writes outputs under this crate directory
-- looks up the baseline truth CSV under `../rust_lossless`
+- looks up the baseline truth CSV under `output/`
 - writes per-method `trajectory_*.csv`
 - writes per-method `solve_metrics.csv`
 - writes `simple_solve_metrics.csv`

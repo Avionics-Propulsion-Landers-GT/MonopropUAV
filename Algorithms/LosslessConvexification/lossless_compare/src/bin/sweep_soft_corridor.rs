@@ -82,7 +82,6 @@ fn make_solver(kappa: f64) -> LosslessSolver {
         lower_thrust_bound: 1000.0 * 0.4,
         upper_thrust_bound: 1000.0,
         tvc_range_rad: 15_f64.to_radians(),
-        min_time_s: 11.0,
         coarse_line_search_delta_t: 0.1,
         fine_line_search_delta_t: 0.01,
         coarse_delta_t: 0.05,

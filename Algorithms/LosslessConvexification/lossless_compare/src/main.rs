@@ -26,8 +26,6 @@ struct SimpleMetricsContext {
 fn main() {
     let initial_position = [10.0, 20.0, 50.0];
     let max_velocity = 5.0;
-    let min_time_s: f64 = 11.0;
-
     let mut zoh_solver = LosslessSolver {
         landing_point: [0.0, 0.0, 0.0],
         initial_position,
@@ -39,7 +37,6 @@ fn main() {
         lower_thrust_bound: 1000.0 * 0.4,
         upper_thrust_bound: 1000.0,
         tvc_range_rad: 15_f64.to_radians(),
-        min_time_s,
         coarse_line_search_delta_t: 0.1,
         fine_line_search_delta_t: 0.01,
         coarse_delta_t: 0.025,
@@ -67,7 +64,6 @@ fn main() {
         lower_thrust_bound: 1000.0 * 0.4,
         upper_thrust_bound: 1000.0,
         tvc_range_rad: 15_f64.to_radians(),
-        min_time_s,
         coarse_line_search_delta_t: 0.1,
         fine_line_search_delta_t: 0.01,
         coarse_nodes: 15,
@@ -86,10 +82,7 @@ fn main() {
 
     let run_label = format!("{}_{}", group_name, run_type);
     let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let workspace_root = project_root
-        .parent()
-        .expect("lossless_compare must live under LosslessConvexification");
-    let rust_lossless_root = workspace_root.join("rust_lossless");
+    let output_archive_root = project_root.join("output");
     let output_root = project_root.join(group_name).join(run_type);
     std::fs::create_dir_all(&output_root).expect("Failed to create output root directory");
 
@@ -187,7 +180,7 @@ fn main() {
     )
     .expect("Failed to write simple solve metrics CSV");
 
-    let truth_path = rust_lossless_root.join(truth_name);
+    let truth_path = output_archive_root.join(truth_name);
     run_batch_compare(&output_root, &truth_path, comparison_nodes)
         .expect("Failed to run batch comparison against truth CSV");
 }

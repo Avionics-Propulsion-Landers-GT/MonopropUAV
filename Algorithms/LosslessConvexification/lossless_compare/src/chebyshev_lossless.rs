@@ -85,7 +85,6 @@ pub struct ChebyshevLosslessSolver {
     pub lower_thrust_bound: f64,
     pub upper_thrust_bound: f64,
     pub tvc_range_rad: f64,
-    pub min_time_s: f64,
     pub coarse_line_search_delta_t: f64,
     pub fine_line_search_delta_t: f64,
     pub coarse_nodes: usize,
@@ -111,7 +110,6 @@ impl Default for ChebyshevLosslessSolver {
             lower_thrust_bound: 0.0,
             upper_thrust_bound: 0.0,
             tvc_range_rad: (15.0_f64).to_radians(),
-            min_time_s: 6.4,
             coarse_line_search_delta_t: 1.0,
             fine_line_search_delta_t: 1.0,
             coarse_nodes: 1,
@@ -930,9 +928,15 @@ impl ChebyshevLosslessSolver {
         let solve_wall_start = Instant::now();
         self.N = self.coarse_nodes;
 
-        let t_min = self.min_time_s;
+        let vel_norm = self
+            .initial_velocity
+            .iter()
+            .map(|v| v * v)
+            .sum::<f64>()
+            .sqrt();
+        let t_min = self.dry_mass * vel_norm / self.upper_thrust_bound;
         let t_max = self.fuel_mass / (self.alpha * self.lower_thrust_bound);
-        let mut current_time = t_min;
+        let mut current_time = t_min.max(self.fine_line_search_delta_t.max(f64::EPSILON));
 
         let mut traj_result: Option<TrajectoryResult> = None;
         let mut coarse_metrics = SolveMetrics::default();

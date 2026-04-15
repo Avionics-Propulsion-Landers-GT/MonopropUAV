@@ -46,13 +46,9 @@ def resolve_csv_files(args: list[str], project_root: Path) -> list[Path]:
     if args:
         return [Path(arg).resolve() for arg in args]
 
-    default_csv = project_root / "trajectory.csv"
-    if default_csv.exists():
-        return [default_csv]
-
     inspect_dir = project_root / "to_inspect"
     inspect_dir.mkdir(parents=True, exist_ok=True)
-    return sorted(inspect_dir.glob("trajectory_*.csv"))
+    return sorted(inspect_dir.glob("trajectory*.csv"))
 
 
 def main() -> None:
@@ -62,7 +58,7 @@ def main() -> None:
     parser.add_argument(
         "csv_files",
         nargs="*",
-        help="Optional CSV paths. Defaults to trajectory.csv, then to_inspect/trajectory_*.csv",
+        help="Optional CSV paths. Defaults to to_inspect/trajectory*.csv",
     )
     parsed = parser.parse_args()
 
@@ -70,10 +66,7 @@ def main() -> None:
     csv_files = resolve_csv_files(parsed.csv_files, project_root)
 
     if not csv_files:
-        print(
-            "No files found. Expected an explicit CSV path, "
-            f"{project_root / 'trajectory.csv'}, or files under {project_root / 'to_inspect'}"
-        )
+        print(f"No files found matching trajectory*.csv in {project_root / 'to_inspect'}")
         return
 
     for csv_path in csv_files:

@@ -13,6 +13,8 @@ This crate contains the ZOH lossless-convexification solver and a minimal runner
 
 Everything related to comparing multiple methods, aggregating runs, or generating comparison figures now lives in `../lossless_compare`.
 
+Legacy comparison outputs and archived truth/reference files were moved to `../lossless_compare/output`.
+
 ## Quick Start
 
 Run a single solve:
