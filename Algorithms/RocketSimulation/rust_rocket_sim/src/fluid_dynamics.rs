@@ -39,6 +39,17 @@ pub struct FluidDynamicsOutput {
     pub isp_realized: f64,
     pub cstar_realized: f64,
     pub pc_bar: f64,
+
+    // --- Pressure transducer tap points ---
+    // TODO: p_downstream_mtv_bar currently aliases pc_bar (chamber pressure).
+    //       Once the check valve is modeled, this should account for the
+    //       pressure drop across the check valve between the MTV and engine.
+    /// Pressure downstream of the MTV, before the check valve [bar]
+    pub p_downstream_mtv_bar: f64,
+    /// N2O run tank pressure (N2 ullage via ideal gas law) [bar]
+    pub p_runtank_bar: f64,
+    /// Pressure upstream of the run tank, downstream of r_mv [bar]
+    pub p_upstream_runtank_bar: f64,
 }
 
 #[derive(Debug, Clone)]
