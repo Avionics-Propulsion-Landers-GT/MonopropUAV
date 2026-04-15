@@ -66,6 +66,11 @@ pub struct Rocket {
     pub gps: GPS,
     pub uwb: UWB,
 
+    // Pressure Transducers
+    pub m2_pt: PressureTransducer,  // After MTV, before check valve
+    pub o_pt: PressureTransducer,   // After N2O run tank, before vent
+    pub oa_pt: PressureTransducer,  // Before N2O run tank, after r_mv
+
     pub sloshing_model: SloshModel,
 
     pub thermo_fluid_solver: ThermoFluidSolver,
@@ -119,7 +124,7 @@ pub struct RocketDebugInfo{
 }
 
 impl Rocket {
-    pub fn new(position: Vector3<f64>, velocity: Vector3<f64>, accel: Vector3<f64>, attitude: UnitQuaternion<f64>, ang_vel: Vector3<f64>, ang_accel: Vector3<f64>, frame_mass: f64, nitrogen_tank_empty_mass: f64, starting_nitrogen_mass: f64, nitrogen_tank_offset: Vector3<f64>, nitrous_tank_empty_mass: f64, starting_pressurizing_nitrogen_mass: f64, starting_nitrous_mass: f64, nitrous_tank_offset: Vector3<f64>, tvc_module_empty_mass: f64, starting_fuel_grain_mass: f64, frame_com_to_gimbal: Vector3<f64>, gimbal_to_tvc_com: Vector3<f64>, frame_moi: Matrix3<f64>, dry_nitrogen_moi: Matrix3<f64>, wet_nitrogen_moi: Matrix3<f64>, nitrous_tank_radius: f64, nitrous_tank_length: f64, nitrous_level: f64, dry_nitrous_moi: Matrix3<f64>, dry_tvc_moi: Matrix3<f64>, wet_tvc_moi: Matrix3<f64>, tvc_range: f64, tvc: TVC, rcs: RCS, fill_mv: Valve, r_mv: Valve, rcs1_mv: Valve, rcs2_mv: Valve, o_iso: Valve, o_vnt: Valve, imu: IMU, gps: GPS, uwb: UWB, sloshing_model: SloshModel, thermo_fluid_solver: ThermoFluidSolver, com_to_ground: Vector3<f64>, wind_model: Option<WindModel>, nose_offset_z: f64, aero_table: Option<AeroTable>) -> Self {
+    pub fn new(position: Vector3<f64>, velocity: Vector3<f64>, accel: Vector3<f64>, attitude: UnitQuaternion<f64>, ang_vel: Vector3<f64>, ang_accel: Vector3<f64>, frame_mass: f64, nitrogen_tank_empty_mass: f64, starting_nitrogen_mass: f64, nitrogen_tank_offset: Vector3<f64>, nitrous_tank_empty_mass: f64, starting_pressurizing_nitrogen_mass: f64, starting_nitrous_mass: f64, nitrous_tank_offset: Vector3<f64>, tvc_module_empty_mass: f64, starting_fuel_grain_mass: f64, frame_com_to_gimbal: Vector3<f64>, gimbal_to_tvc_com: Vector3<f64>, frame_moi: Matrix3<f64>, dry_nitrogen_moi: Matrix3<f64>, wet_nitrogen_moi: Matrix3<f64>, nitrous_tank_radius: f64, nitrous_tank_length: f64, nitrous_level: f64, dry_nitrous_moi: Matrix3<f64>, dry_tvc_moi: Matrix3<f64>, wet_tvc_moi: Matrix3<f64>, tvc_range: f64, tvc: TVC, rcs: RCS, fill_mv: Valve, r_mv: Valve, rcs1_mv: Valve, rcs2_mv: Valve, o_iso: Valve, o_vnt: Valve, imu: IMU, gps: GPS, uwb: UWB, m2_pt: PressureTransducer, o_pt: PressureTransducer, oa_pt: PressureTransducer, sloshing_model: SloshModel, thermo_fluid_solver: ThermoFluidSolver, com_to_ground: Vector3<f64>, wind_model: Option<WindModel>, nose_offset_z: f64, aero_table: Option<AeroTable>) -> Self {
         let mut rocket = Self {
             position,
             velocity,
@@ -166,6 +171,9 @@ impl Rocket {
             imu,
             gps,
             uwb,
+            m2_pt,
+            o_pt,
+            oa_pt,
             sloshing_model,
             thermo_fluid_solver,
             nitrous_m_dot: 0.0,
@@ -269,6 +277,11 @@ impl Rocket {
 
         let uwb = UWB::default();
 
+        // Pressure Transducers
+        let m2_pt = PressureTransducer::default_with_label("m2-pt");
+        let o_pt = PressureTransducer::default_with_label("o-pt");
+        let oa_pt = PressureTransducer::default_with_label("oa-pt");
+
         // Propellant Feed System Valves — default operational states for flight
         let fill_mv = Valve::new(false);   // Closed in flight (only used during ground fill)
         let r_mv = Valve::new(true);       // Open: allows N2 to pressurize the N2O tank
@@ -283,7 +296,7 @@ impl Rocket {
         let com_to_ground = Vector3::new(0.0, 0.0, -1.5);
 
 
-        Self::new(position, velocity, acceleration, attitude, angular_velocity, angular_acceleration, frame_mass, nitrogen_tank_empty_mass, starting_nitrogen_mass, nitrogen_tank_offset, nitrous_tank_empty_mass, starting_pressurizing_nitrogen_mass, starting_nitrous_mass, nitrous_tank_offset, tvc_module_empty_mass, starting_fuel_grain_mass, frame_com_to_gimbal, gimbal_to_tvc_com, frame_moi, dry_nitrogen_moi, wet_nitrogen_moi, nitrous_tank_radius, nitrous_tank_length, nitrous_level, dry_nitrous_moi, dry_tvc_moi, wet_tvc_moi, tvc_range, tvc, rcs, fill_mv, r_mv, rcs1_mv, rcs2_mv, o_iso, o_vnt, imu, gps, uwb, slosh_model, thermo_fluid_solver, com_to_ground, None, 0.0, None)
+        Self::new(position, velocity, acceleration, attitude, angular_velocity, angular_acceleration, frame_mass, nitrogen_tank_empty_mass, starting_nitrogen_mass, nitrogen_tank_offset, nitrous_tank_empty_mass, starting_pressurizing_nitrogen_mass, starting_nitrous_mass, nitrous_tank_offset, tvc_module_empty_mass, starting_fuel_grain_mass, frame_com_to_gimbal, gimbal_to_tvc_com, frame_moi, dry_nitrogen_moi, wet_nitrogen_moi, nitrous_tank_radius, nitrous_tank_length, nitrous_level, dry_nitrous_moi, dry_tvc_moi, wet_tvc_moi, tvc_range, tvc, rcs, fill_mv, r_mv, rcs1_mv, rcs2_mv, o_iso, o_vnt, imu, gps, uwb, m2_pt, o_pt, oa_pt, slosh_model, thermo_fluid_solver, com_to_ground, None, 0.0, None)
     }
 
 fn get_wind_model() -> WindModel {
