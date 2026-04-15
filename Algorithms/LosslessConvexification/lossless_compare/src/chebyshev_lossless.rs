@@ -76,6 +76,9 @@ pub struct ChebyshevLosslessSolver {
     pub landing_point: [f64; 3],
     pub initial_position: [f64; 3],
     pub initial_velocity: [f64; 3],
+    pub use_terminal_lateral_hard_tube: bool,
+    pub terminal_lateral_hard_tube_time_s: f64,
+    pub terminal_lateral_hard_tube_radius_m: f64,
     pub glide_slope: f64,
     pub use_glide_slope: bool,
     pub max_velocity: f64,
@@ -101,6 +104,9 @@ impl Default for ChebyshevLosslessSolver {
             landing_point: [0.0, 0.0, 0.0],
             initial_position: [0.0, 0.0, 0.0],
             initial_velocity: [0.0, 0.0, 0.0],
+            use_terminal_lateral_hard_tube: false,
+            terminal_lateral_hard_tube_time_s: 0.0,
+            terminal_lateral_hard_tube_radius_m: 0.0,
             glide_slope: 0.0,
             use_glide_slope: false,
             max_velocity: 100.0,
@@ -421,16 +427,25 @@ impl ChebyshevLosslessSolver {
 
         const num_vars_per_node: usize = 11; // x (3), v (3), w (1), sigma (1), u (3)
         let num_nodes = (self.N + 1) as usize;
-        let n_vars = num_vars_per_node * num_nodes;
+        let tau_nodes = self.cgl_nodes();
+        let half_tf = 0.5 * current_time;
+        let terminal_hard_tube_start_time =
+            (current_time - self.terminal_lateral_hard_tube_time_s).max(0.0);
+        let use_terminal_lateral_hard_tube = self.use_terminal_lateral_hard_tube
+            && self.terminal_lateral_hard_tube_time_s > 0.0
+            && self.terminal_lateral_hard_tube_radius_m >= 0.0;
+
+        let base_n_vars = num_vars_per_node * num_nodes;
+        let n_vars = base_n_vars;
         let X_INDEX = 0;
         let V_INDEX = X_INDEX + 3 * num_nodes;
         let W_INDEX = V_INDEX + 3 * num_nodes;
         let SIGMA_INDEX = W_INDEX + num_nodes;
         let U_INDEX = SIGMA_INDEX + num_nodes;
+        let R_INDEX = U_INDEX + 3 * num_nodes;
+        let ETA_INDEX = R_INDEX;
 
         let D = self.cgl_diff_matrix();
-        let tau_nodes = self.cgl_nodes();
-        let half_tf = 0.5 * current_time;
 
         // Balance collocation rows to reduce condition growth at higher node counts.
         let mut dynamics_row_scale = vec![1.0_f64; self.N + 1];
@@ -745,6 +760,20 @@ impl ChebyshevLosslessSolver {
                 row_idx += 3;
             }
 
+            if use_terminal_lateral_hard_tube && k < self.N && node_time >= terminal_hard_tube_start_time {
+                rows.push((row_idx as usize) + 1);
+                cols.push((x_idx as usize) + 0);
+                vals.push(1.0);
+                rows.push((row_idx as usize) + 2);
+                cols.push((x_idx as usize) + 1);
+                vals.push(1.0);
+                cones.push(SupportedConeT::SecondOrderConeT(3));
+                b.push(self.terminal_lateral_hard_tube_radius_m);
+                b.push(self.landing_point[0]);
+                b.push(self.landing_point[1]);
+                row_idx += 3;
+            }
+
             // ---------- Max velocity SOC: ||v_k|| <= max_velocity ----------
             // rows.push((row_idx as usize) + 0); cols.push(v_idx as usize);     vals.push(0.0); // -v0
             // No need to push a zero value
@@ -770,8 +799,7 @@ impl ChebyshevLosslessSolver {
         let a_csc = Self::csc_from_triplets(row_idx as usize, n_vars as usize, &rows, &cols, &vals);
 
         let mut settings = DefaultSettings::default(); // Adjust tolerances here if needed
-        settings.verbose = true;
-        // settings.verbose = false;
+        settings.verbose = false;
 
         let mut solver = DefaultSolver::new(&p, &q, &a_csc, &b, &cones, settings);
 

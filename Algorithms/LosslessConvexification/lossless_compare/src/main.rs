@@ -41,14 +41,9 @@ fn main() {
         fine_line_search_delta_t: 0.01,
         coarse_delta_t: 0.025,
         fine_delta_t: 0.01,
-        use_glide_slope: false,
-        glide_slope: 0.005_f64.to_radians(),
-        use_terminal_lateral_soft_penalty: false,
-        terminal_lateral_soft_penalty_ratio: 0.5,
-        terminal_lateral_soft_penalty_weight: 100000.0,
         use_terminal_lateral_hard_tube: false,
-        terminal_lateral_hard_tube_steps: 24,
-        terminal_lateral_hard_tube_radius: 0.05,
+        terminal_lateral_hard_tube_time_s: 0.5,
+        terminal_lateral_hard_tube_radius_m: 0.05,
         N: 20,
         ..Default::default()
     };
@@ -70,6 +65,9 @@ fn main() {
         fine_nodes: 6,
         use_glide_slope: true,
         glide_slope: 10_f64.to_radians(),
+        use_terminal_lateral_hard_tube: false,
+        terminal_lateral_hard_tube_time_s: 0.5,
+        terminal_lateral_hard_tube_radius_m: 0.05,
         ..Default::default()
     };
 

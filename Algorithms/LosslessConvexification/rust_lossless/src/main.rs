@@ -3,74 +3,17 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
-// fn main() {
-//     let mut solver = LosslessSolver {
-//         landing_point: [0.0, 0.0, 0.0],
-//         initial_position: [10.0, 20.0, 50.0],
-//         initial_velocity: [0.0, 0.0, 0.0],
-//         max_velocity: 5.0,
-//         dry_mass: 50.0,
-//         fuel_mass: 30.0,
-//         alpha: 1.0 / (9.81 * 180.0),
-//         lower_thrust_bound: 1000.0 * 0.4,
-//         upper_thrust_bound: 1000.0,
-//         tvc_range_rad: 15_f64.to_radians(),
-//         coarse_line_search_delta_t: 0.1,
-//         fine_line_search_delta_t: 0.01,
-//         coarse_delta_t: 0.05,
-//         fine_delta_t: 0.025,
-//         use_glide_slope: true,
-//         glide_slope: 45_f64.to_radians(),
-//         use_terminal_lateral_soft_penalty: false,
-//         terminal_lateral_soft_penalty_ratio: 0.5,
-//         terminal_lateral_soft_penalty_weight: 100000.0,
-//         use_terminal_lateral_hard_tube: true,
-//         terminal_lateral_hard_tube_steps: 24,
-//         terminal_lateral_hard_tube_radius: 0.05,
-//         N: 20,
-//         ..Default::default()
-//     };
-
 fn main() {
-    //  let initial_position = [0.0, 0.0, 50.0];
-    let initial_position = [10.0, 20.0, 50.0];
-
-    // let max_velocity = 500.0;
-    let max_velocity = 5.0;
-
-    let min_time_s: f64 = 11.00;
-
     let mut solver = LosslessSolver {
-        landing_point: [0.0, 0.0, 0.0],
-        initial_position,
-        initial_velocity: [0.0, 0.0, 0.0],
-        max_velocity,
-        dry_mass: 50.0,
-        fuel_mass: 30.0,
-        alpha: 1.0 / (9.81 * 180.0),
-        lower_thrust_bound: 1000.0 * 0.4,
-        upper_thrust_bound: 1000.0,
-        tvc_range_rad: 15_f64.to_radians(),
-        coarse_line_search_delta_t: 0.1,
-        fine_line_search_delta_t: 0.01,
-        coarse_delta_t: 0.05,
-        fine_delta_t: 0.025,
-        use_glide_slope: false,
-        glide_slope: 45_f64.to_radians(),
-        use_terminal_lateral_soft_penalty: false,
-        terminal_lateral_soft_penalty_ratio: 0.5,
-        terminal_lateral_soft_penalty_weight: 100000.0,
-        use_terminal_lateral_hard_tube: true,
-        terminal_lateral_hard_tube_steps: 24,
-        terminal_lateral_hard_tube_radius: 0.05,
-        timeout: 30_f64,
-        N: 20,
-        ..Default::default()
+        ..base_solver()
     };
-
-    let solve_attempt = solver.solve_at_current_time();
-    let Some(trajectory) = solve_attempt.trajectory else {
-        eprintln!("ZOH solve failed: {:?}", solve_attempt.metrics.last_status);
+    let solve_run = solver.solve();
+    let Some(trajectory) = solve_run.trajectory else {
+        eprintln!(
+            "ZOH solve failed: coarse={:?}, fine={:?}",
+            solve_run.coarse_metrics.last_status,
+            solve_run.fine_metrics.last_status
+        );
         return;
     };
 
@@ -85,6 +28,32 @@ fn main() {
     write_trajectory_to_csv(&trajectory_path, &trajectory).expect("Failed to write trajectory.csv");
     println!("Wrote {}", trajectory_path.display());
 }
+
+fn base_solver() -> LosslessSolver {
+    LosslessSolver {
+        landing_point: [0.0, 0.0, 0.0],
+        initial_position: [10.0, 20.0, 50.0],
+        initial_velocity: [0.0, 0.0, 0.0],
+        max_velocity: 5.0,
+        dry_mass: 50.0,
+        fuel_mass: 30.0,
+        alpha: 1.0 / (9.81 * 180.0),
+        lower_thrust_bound: 1000.0 * 0.4,
+        upper_thrust_bound: 1000.0,
+        tvc_range_rad: 15_f64.to_radians(),
+        coarse_line_search_delta_t: 0.1,
+        fine_line_search_delta_t: 0.01,
+        use_terminal_lateral_hard_tube: true,
+        terminal_lateral_hard_tube_time_s: 0.5,
+        terminal_lateral_hard_tube_radius_m: 0.05,
+        coarse_delta_t: 0.05,
+        fine_delta_t: 0.025,
+        timeout: 30_f64,
+        N: 20,
+        ..Default::default()
+    }
+}
+
 
 fn write_trajectory_to_csv(path: impl AsRef<Path>, traj: &TrajectoryResult) -> std::io::Result<()> {
     let path = path.as_ref();

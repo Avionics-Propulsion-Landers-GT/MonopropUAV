@@ -270,9 +270,10 @@ impl Simulation {
                 100.0, 100.0, 1000.0, 
                 1000.0, 1000.0, 1000.0 
             ]));
-            self.lossless.flip_glide_slope = true;
-            self.lossless.use_glide_slope = true;
-            self.lossless.glide_slope = 0.005_f64.to_radians();
+            self.lossless.use_terminal_lateral_hard_tube = true;
+            self.lossless.terminal_lateral_hard_tube_time_s = 0.5;
+            self.lossless.terminal_lateral_hard_tube_radius_m = 0.05;
+
             self.lossless.max_velocity = 5.0;
             let mut trajectory;
             if self.rocket.position.z < 40.0 {

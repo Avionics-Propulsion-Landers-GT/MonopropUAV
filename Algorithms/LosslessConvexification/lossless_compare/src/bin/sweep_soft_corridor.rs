@@ -70,7 +70,7 @@ fn compute_stats(traj: &TrajectoryResult, kappa: f64, z_f: f64, x_f: f64, y_f: f
     }
 }
 
-fn make_solver(kappa: f64) -> LosslessSolver {
+fn make_solver(_kappa: f64) -> LosslessSolver {
     LosslessSolver {
         landing_point: [0.0, 0.0, 0.0],
         initial_position: [10.0, 20.0, 50.0],
@@ -87,11 +87,6 @@ fn make_solver(kappa: f64) -> LosslessSolver {
         coarse_delta_t: 0.05,
         fine_delta_t: 0.025,
         delta_t: 0.025,
-        use_glide_slope: true,
-        glide_slope: 45_f64.to_radians(),
-        use_terminal_lateral_soft_penalty: true,
-        terminal_lateral_soft_penalty_ratio: kappa,
-        terminal_lateral_soft_penalty_weight: 100000.0,
         N: 480,
         ..Default::default()
     }
