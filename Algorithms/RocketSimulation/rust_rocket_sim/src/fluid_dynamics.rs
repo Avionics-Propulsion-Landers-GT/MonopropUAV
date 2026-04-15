@@ -111,19 +111,32 @@ impl ThermoFluidParameters {
 #[derive(Debug, Clone)]
 pub struct ThermoFluidSolver {
     pub parameters: ThermoFluidParameters,
+
+    /// Tracked mass of nitrogen trapped in the line between r_mv and the
+    /// run tank [kg].  When r_mv is open this is kept at the set-point
+    /// density × line volume.  When r_mv closes, no more nitrogen enters
+    /// and this mass is held constant while the trapped pressure decays
+    /// via the ideal gas law as the line slowly equalises with the tank.
+    pub n2_mass_line: f64,
 }
 
 impl ThermoFluidSolver {
     pub fn new(parameters: ThermoFluidParameters) -> Self {
+        // Initialise the trapped line mass at the regulated set-point pressure.
+        // P = m * R * T / V  =>  m = P * V / (R * T)
+        let r_specific_n2 = 296.8; // J/(kg·K)
+        let p_set_pa = parameters.p1_mpa * 1e6;
+        let n2_mass_line = (p_set_pa * parameters.line_vol_r_mv)
+            / (r_specific_n2 * parameters.temp);
         Self {
             parameters,
+            n2_mass_line,
         }
     }
 
     pub fn default() -> Self {
-        Self {
-            parameters: ThermoFluidParameters::default(),
-        }
+        let params = ThermoFluidParameters::default();
+        Self::new(params)
     }
 
     pub fn flowrate_solver(
