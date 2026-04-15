@@ -31,9 +31,14 @@ fn main() {
 
 fn base_solver() -> LosslessSolver {
     LosslessSolver {
-        landing_point: [0.0, 0.0, 0.0],
-        initial_position: [10.0, 20.0, 50.0],
+        // landing_point: [0.0, 0.0, 0.0],
+        landing_point: [0.0, 5.0, 0.0],
+        // initial_position: [1.0, 1.0, 1.0],
+        initial_position: [0.0, 0.0, -0.1],
         initial_velocity: [0.0, 0.0, 0.0],
+        use_initial_glide_slope: true,
+        use_final_glide_slope: false,
+        glide_slope: 0.0000001_f64.to_radians(),
         max_velocity: 5.0,
         dry_mass: 50.0,
         fuel_mass: 30.0,

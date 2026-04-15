@@ -41,8 +41,10 @@ def plot_trajectory_3d(csv_path: Path) -> None:
 
     max_num = max(max(x), max(y), max(z))
     # max_num = max(max(x), max(y), max(z)) / 10
-    ax.set_xlim(-max_num/4, max_num/2)
-    ax.set_ylim(-max_num/4, max_num/2)
+    # ax.set_xlim(-max_num/4, max_num/2)
+    ax.set_xlim(-max_num/2, max_num)
+    # ax.set_ylim(-max_num/4, max_num/2)
+    ax.set_ylim(-max_num/2, max_num)
     ax.set_zlim(0, max_num)
 
     ax.set_xlabel("x [m]")

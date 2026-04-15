@@ -3,11 +3,18 @@ use clarabel::solver::*;
 use std::time::Instant;
 
 const GRAVITY: [f64; 3] = [0.0, 0.0, -9.81];
+// Prevents 1 / tan(glide_slope) from blowing up when the configured glide slope is
+// extremely small. This keeps the SOC rows numerically well-behaved.
+const GLIDE_TAN_FLOOR: f64 = 1.0e-6;
+const GROUND_Z_EPSILON: f64 = 1.0e-9;
 
 pub struct LosslessSolver {
     pub landing_point: [f64; 3],
     pub initial_position: [f64; 3],
     pub initial_velocity: [f64; 3],
+    pub glide_slope: f64,
+    pub use_initial_glide_slope: bool,
+    pub use_final_glide_slope: bool,
     pub use_terminal_lateral_hard_tube: bool,
     pub terminal_lateral_hard_tube_time_s: f64,
     pub terminal_lateral_hard_tube_radius_m: f64,
@@ -113,6 +120,9 @@ impl Default for LosslessSolver {
             landing_point: [0.0, 0.0, 0.0],
             initial_position: [0.0, 0.0, 0.0],
             initial_velocity: [0.0, 0.0, 0.0],
+            glide_slope: 0.0,
+            use_initial_glide_slope: false,
+            use_final_glide_slope: false,
             use_terminal_lateral_hard_tube: false,
             terminal_lateral_hard_tube_time_s: 0.0,
             terminal_lateral_hard_tube_radius_m: 0.0,
@@ -153,6 +163,9 @@ impl LosslessSolver {
         } else {
             0
         };
+        // Apply the tube near whichever endpoint is on the ground.
+        let initial_is_grounded = self.initial_position[2] <= GROUND_Z_EPSILON;
+        let landing_is_grounded = self.landing_point[2] <= GROUND_Z_EPSILON;
         let terminal_hard_tube_start = (self.N - terminal_hard_tube_steps).max(0);
 
         let n_vars = 3 * (self.N + 1) // x
@@ -390,10 +403,32 @@ impl LosslessSolver {
             b.push(0.0);
             row_counter += 4;
 
-            if use_terminal_lateral_hard_tube && k >= terminal_hard_tube_start {
+            let apply_initial_hard_tube =
+                use_terminal_lateral_hard_tube && initial_is_grounded && k < terminal_hard_tube_steps;
+            let apply_landing_hard_tube =
+                use_terminal_lateral_hard_tube && landing_is_grounded && k >= terminal_hard_tube_start;
+
+            if apply_initial_hard_tube {
                 let x_offset = idx_x + 3 * k;
 
-                // ---------- Hard terminal tube: ||x_k[:2] - x_f[:2]|| <= radius ----------
+                // ---------- Hard lateral tube near the grounded initial endpoint ----------
+                rows.push((row_counter as usize) + 1);
+                cols.push((x_offset as usize) + 0);
+                vals.push(1.0);
+                rows.push((row_counter as usize) + 2);
+                cols.push((x_offset as usize) + 1);
+                vals.push(1.0);
+                cones.push(SupportedConeT::SecondOrderConeT(3));
+                b.push(self.terminal_lateral_hard_tube_radius_m);
+                b.push(self.initial_position[0]);
+                b.push(self.initial_position[1]);
+                row_counter += 3;
+            }
+
+            if apply_landing_hard_tube {
+                let x_offset = idx_x + 3 * k;
+
+                // ---------- Hard lateral tube near the grounded landing endpoint ----------
                 rows.push((row_counter as usize) + 1);
                 cols.push((x_offset as usize) + 0);
                 vals.push(1.0);
@@ -425,6 +460,57 @@ impl LosslessSolver {
             b.push(0.0);
             b.push(0.0);
             row_counter += 4;
+        }
+
+        if self.use_initial_glide_slope || self.use_final_glide_slope {
+            // The glide-slope corridor scales allowable lateral displacement with
+            // vertical separation from an anchor point. We use tan(gamma) as the
+            // slope parameter, with a floor for numerical safety.
+            let glide_tan = self.glide_slope.tan();
+            let glide_tan_safe = if glide_tan >= 0.0 {
+                glide_tan.max(GLIDE_TAN_FLOOR)
+            } else {
+                glide_tan.min(-GLIDE_TAN_FLOOR)
+            };
+            for k in 0..=self.N {
+                let x_offset = idx_x + 3 * k;
+
+                if self.use_final_glide_slope {
+                    // Final-endpoint cone:
+                    //   if z_0 >= z_f: ||[x_k - x_f, y_k - y_f]||_2 <= (z_k - z_f) / tan(gamma)
+                    //   else         : ||[x_k - x_f, y_k - y_f]||_2 <= (z_f - z_k) / tan(gamma)
+                    Self::push_glide_slope_soc(
+                        &mut rows,
+                        &mut cols,
+                        &mut vals,
+                        &mut b,
+                        &mut cones,
+                        &mut row_counter,
+                        x_offset,
+                        self.landing_point,
+                        glide_tan_safe,
+                        self.initial_position[2] < self.landing_point[2],
+                    );
+                }
+
+                if self.use_initial_glide_slope {
+                    // Initial-endpoint cone:
+                    //   if z_0 >= z_f: ||[x_k - x_0, y_k - y_0]||_2 <= (z_0 - z_k) / tan(gamma)
+                    //   else         : ||[x_k - x_0, y_k - y_0]||_2 <= (z_k - z_0) / tan(gamma)
+                    Self::push_glide_slope_soc(
+                        &mut rows,
+                        &mut cols,
+                        &mut vals,
+                        &mut b,
+                        &mut cones,
+                        &mut row_counter,
+                        x_offset,
+                        self.initial_position,
+                        glide_tan_safe,
+                        self.initial_position[2] >= self.landing_point[2],
+                    );
+                }
+            }
         }
 
         // ---------- End mass SOC: w_N >= log(m_dry) ----------
@@ -536,6 +622,61 @@ impl LosslessSolver {
         }
 
         CscMatrix::new(nrows, ncols, colptr, rowval, nzval)
+    }
+
+    fn push_glide_slope_soc(
+        rows: &mut Vec<usize>,
+        cols: &mut Vec<usize>,
+        vals: &mut Vec<f64>,
+        b: &mut Vec<f64>,
+        cones: &mut Vec<SupportedConeT<f64>>,
+        row_counter: &mut i64,
+        x_offset: i64,
+        anchor: [f64; 3],
+        glide_tan: f64,
+        upper_bound: bool,
+    ) {
+        // This helper encodes one glide-slope bound in SOC form.
+        //
+        // Desired constraint about anchor a = [a_x, a_y, a_z]:
+        //
+        //   ||[x_k - a_x, y_k - a_y]||_2 <= (z_k - a_z) / tan(gamma)   lower-bound cone
+        //
+        // or
+        //
+        //   ||[x_k - a_x, y_k - a_y]||_2 <= (a_z - z_k) / tan(gamma)   upper-bound cone
+        //
+        // Clarabel takes SOC blocks as ||u||_2 <= t. We therefore assemble:
+        //
+        //   u = [x_k - a_x, y_k - a_y]
+        //   t = +/- z_k / tan(gamma)  +/- a_z / tan(gamma)
+        //
+        // with the sign chosen by `upper_bound`.
+        let top_coeff = if upper_bound {
+            1.0 / glide_tan
+        } else {
+            -1.0 / glide_tan
+        };
+        let top_rhs = anchor[2] / glide_tan;
+        let top_rhs = if upper_bound { top_rhs } else { -top_rhs };
+
+        rows.push(*row_counter as usize);
+        cols.push((x_offset + 2) as usize);
+        vals.push(top_coeff);
+
+        rows.push((*row_counter as usize) + 1);
+        cols.push(x_offset as usize);
+        vals.push(1.0);
+
+        rows.push((*row_counter as usize) + 2);
+        cols.push((x_offset + 1) as usize);
+        vals.push(1.0);
+
+        cones.push(SupportedConeT::SecondOrderConeT(3));
+        b.push(top_rhs);
+        b.push(anchor[0]);
+        b.push(anchor[1]);
+        *row_counter += 3;
     }
 
     fn extract_result(&self, result: &DefaultSolution<f64>) -> TrajectoryResult {
@@ -672,7 +813,9 @@ impl LosslessSolver {
                     fine_time_of_flight_s = Some(sol.time_of_flight_s);
                     traj_result = Some(sol);
                     fine_metrics.accumulate(&attempt.metrics);
-                    // break;
+
+                    // comment this line to perform a line search backwards for the "most optimal" (takes longer)
+                    break;
                 }
                 None => {
                     println!("Failed to converge at step {}.", k);
