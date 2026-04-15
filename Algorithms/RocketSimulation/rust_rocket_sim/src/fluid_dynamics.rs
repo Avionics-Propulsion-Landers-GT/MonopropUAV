@@ -67,6 +67,13 @@ pub struct ThermoFluidParameters {
     pub tank_d: f64,
     pub temp: f64,
     pub n2_mass_flowrate_rcs: f64,
+
+    /// Volume of the plumbing line segment between r_mv and the run tank [m³].
+    /// When r_mv closes, nitrogen is trapped in this volume and its pressure
+    /// decays as it slowly equalises with the run tank via leakage/diffusion.
+    /// This is a placeholder value — refine with actual CAD measurements of
+    /// the line length and inner diameter.
+    pub line_vol_r_mv: f64,
 }
 
 impl ThermoFluidParameters {
@@ -96,6 +103,7 @@ impl ThermoFluidParameters {
             tank_d: 0.254,
             temp: 301.15,
             n2_mass_flowrate_rcs: 0.0085 * 2.0,
+            line_vol_r_mv: 0.001,  // ~1 litre placeholder — refine with CAD
         }
     }
 }
