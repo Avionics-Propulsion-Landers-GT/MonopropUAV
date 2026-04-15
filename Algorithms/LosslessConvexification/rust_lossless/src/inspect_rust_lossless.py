@@ -1,3 +1,4 @@
+import argparse
 import csv
 from pathlib import Path
 
@@ -68,17 +69,44 @@ def plot_trajectory(csv_path: Path) -> None:
     plt.close(fig)
 
 
-def main() -> None:
-    project_root = Path(__file__).resolve().parents[1]
+def resolve_csv_files(args: list[str], project_root: Path) -> list[Path]:
+    if args:
+        return [Path(arg).resolve() for arg in args]
+
+    default_csv = project_root / "trajectory.csv"
+    if default_csv.exists():
+        return [default_csv]
+
     inspect_dir = project_root / "to_inspect"
     inspect_dir.mkdir(parents=True, exist_ok=True)
-    csv_files = sorted(inspect_dir.glob("trajectory_*.csv"))
+    return sorted(inspect_dir.glob("trajectory_*.csv"))
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Plot rust lossless trajectory CSV files."
+    )
+    parser.add_argument(
+        "csv_files",
+        nargs="*",
+        help="Optional CSV paths. Defaults to trajectory.csv, then to_inspect/trajectory_*.csv",
+    )
+    parsed = parser.parse_args()
+
+    project_root = Path(__file__).resolve().parents[1]
+    csv_files = resolve_csv_files(parsed.csv_files, project_root)
 
     if not csv_files:
-        print(f"No files found matching trajectory_*.csv in {inspect_dir}")
+        print(
+            "No files found. Expected an explicit CSV path, "
+            f"{project_root / 'trajectory.csv'}, or files under {project_root / 'to_inspect'}"
+        )
         return
 
     for csv_path in csv_files:
+        if not csv_path.exists():
+            print(f"Skipping missing file: {csv_path}")
+            continue
         plot_trajectory(csv_path)
 
 

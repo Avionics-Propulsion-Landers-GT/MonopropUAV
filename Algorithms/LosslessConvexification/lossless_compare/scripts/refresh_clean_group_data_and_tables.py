@@ -63,10 +63,11 @@ def main() -> None:
     args = parse_args()
     project_root = Path(__file__).resolve().parents[1]
 
-    prepare_script = project_root / "src" / "prepare_group_comparison_graph_data.py"
-    rmse_plot_script = project_root / "src" / "plot_rmse_split_by_method.py"
-    table_script = project_root / "src" / "render_run_config_tables.py"
-    avg_plot_script = project_root / "src" / "plot_avg_solve_time_grouped.py"
+    scripts_dir = project_root / "scripts"
+    prepare_script = scripts_dir / "prepare_group_comparison_graph_data.py"
+    rmse_plot_script = scripts_dir / "plot_rmse_split_by_method.py"
+    table_script = scripts_dir / "render_run_config_tables.py"
+    avg_plot_script = scripts_dir / "plot_avg_solve_time_grouped.py"
 
     run_step(
         [

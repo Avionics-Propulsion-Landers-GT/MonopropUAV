@@ -1,7 +1,4 @@
-#[path = "../lossless.rs"]
-mod lossless;
-
-use lossless::{LosslessSolver, TrajectoryResult};
+use rust_lossless::{LosslessSolver, TrajectoryResult};
 
 #[derive(Debug, Clone, Copy)]
 struct CorridorStats {

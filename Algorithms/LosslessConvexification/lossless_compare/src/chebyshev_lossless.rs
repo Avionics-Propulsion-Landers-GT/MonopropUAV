@@ -3,7 +3,7 @@ use clarabel::solver::*;
 use std::f64::consts::PI;
 use std::time::Instant;
 
-use crate::lossless::{SolveAttemptResult, SolveMetrics, SolveRunResult, TrajectoryResult};
+use rust_lossless::{SolveAttemptResult, SolveMetrics, SolveRunResult, TrajectoryResult};
 
 const GRAVITY: [f64; 3] = [0.0, 0.0, -9.81];
 

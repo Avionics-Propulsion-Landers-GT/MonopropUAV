@@ -1,9 +1,4 @@
-#[path = "../lossless.rs"]
-mod lossless;
-#[path = "../chebyshev_lossless.rs"]
-mod chebyshev_lossless;
-
-use crate::chebyshev_lossless::ChebyshevLosslessSolver;
+use lossless_compare::chebyshev_lossless::ChebyshevLosslessSolver;
 
 fn main() {
     let mut solver = ChebyshevLosslessSolver {
