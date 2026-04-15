@@ -539,6 +539,54 @@ impl ThermoFluidSolver {
         let tank_cross_sectional_area = std::f64::consts::PI * (self.parameters.tank_d / 2.0).powi(2);
         let new_n2o_level = (new_n2o_mass / rho_n2o) / tank_cross_sectional_area;
 
+        // ── Pressure transducer tap-point calculations ──────────────────────
+        //
+        // These compute the *true* physical pressures at the three PT
+        // locations.  The PT sensors in device_sim then add their own
+        // (very small) noise on top of these values.
+
+        // m2-pt: pressure downstream of the MTV, before the check valve.
+        // For now this is simply the chamber pressure from the flowrate
+        // solver.  See the TODO on FluidDynamicsOutput for the future
+        // check-valve pressure-drop extension.
+        let p_downstream_mtv_bar = fr_sol.pc_bar;
+
+        // o-pt: run tank pressure.  The ullage volume is the run tank
+        // volume minus the liquid N2O volume.  The nitrogen in that
+        // ullage obeys the ideal gas law: P = m·R·T / V.
+        let v_ullage = (self.parameters.runtank_vol - new_n2o_mass / rho_n2o).max(1e-9);
+        let p_runtank_pa = n2_mass_runtank_after_vent * r_specific_n2 * self.parameters.temp / v_ullage;
+        let p_runtank_bar = p_runtank_pa / 1e5;
+
+        // oa-pt: pressure upstream of the run tank, downstream of r_mv.
+        //
+        // We model the short plumbing line between r_mv and the run tank
+        // inlet as a small fixed volume (`line_vol_r_mv`).  This captures
+        // the physical behaviour that:
+        //   • When r_mv is OPEN the regulator maintains set-point pressure
+        //     in the line, so we refill the trapped mass to match.
+        //   • When r_mv is CLOSED no new nitrogen enters.  The trapped
+        //     mass stays constant and the line pressure is simply the
+        //     ideal-gas pressure of that trapped mass in the fixed volume.
+        //     Over time, if the run tank were to draw from this volume
+        //     (not yet modeled), the pressure would drop.
+        //
+        // This is an isothermal ideal-gas approximation — good enough for
+        // GNC-level simulation fidelity.  Replace with a more detailed
+        // model if transient accuracy during valve transitions matters.
+        if r_mv_open {
+            // Regulator keeps the line at set-point.  Recompute trapped mass
+            // so that P_line = P_set.
+            self.n2_mass_line = (p_set * self.parameters.line_vol_r_mv)
+                / (r_specific_n2 * self.parameters.temp);
+        }
+        // else: r_mv is closed — n2_mass_line stays at whatever it was
+        //       when the valve last closed, holding a fixed mass of gas.
+
+        let p_upstream_runtank_pa = self.n2_mass_line * r_specific_n2
+            * self.parameters.temp / self.parameters.line_vol_r_mv;
+        let p_upstream_runtank_bar = p_upstream_runtank_pa / 1e5;
+
         // 7. Return outputs neatly packaged
         FluidDynamicsOutput {
             thrust_realized: fr_sol.thrust_realized,
@@ -554,6 +602,9 @@ impl ThermoFluidSolver {
             isp_realized: fr_sol.isp_realized,
             cstar_realized: fr_sol.cstar_realized,
             pc_bar: fr_sol.pc_bar,
+            p_downstream_mtv_bar,
+            p_runtank_bar,
+            p_upstream_runtank_bar,
         }
     }
         
