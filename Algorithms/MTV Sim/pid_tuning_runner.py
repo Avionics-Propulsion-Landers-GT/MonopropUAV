@@ -8,15 +8,7 @@ without touching the engine module.
 
 Typical usage
 -------------
-    python "pid_tuning_runner.py"
-
-Sections (toggle with the RUN_* flags below)
---------------------------------------------
-    RUN_SINGLE      — nominal run with the current default gains
-    RUN_OPTIMIZE    — auto-tune PID gains to minimise thrust IAE
-    RUN_KP_KI_SWEEP — 2-D grid search over Kp and Ki
-    RUN_SERVO_SWEEP — vary servo_kp to see actuator-lag sensitivity
-    RUN_STEADY_MAP  — open-loop steady valve sweep (no controller)
+    python "pid_tuning_runner.py" <mode>
 """
 
 import importlib
