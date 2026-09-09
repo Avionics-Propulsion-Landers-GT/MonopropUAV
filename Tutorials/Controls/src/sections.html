@@ -1,0 +1,425 @@
+<header class="topbar"><div class="wrap topbar-in">
+  <a class="brand" href="#hero"><img class="mark" src="ASSET_MARK" alt=""><span>Propulsive Landers <b>/ GNC</b></span></a>
+  <nav class="topnav" aria-label="Chapters">
+    <a href="#why-control">Why</a>
+    <a href="#open-loop">Feedforward</a>
+    <a href="#closed-loop">Feedback</a>
+    <a href="#combine">Both</a>
+    <a href="#lqr">LQR</a>
+    <a href="#mpc">MPC</a>
+    <a href="#exercises">Exercises</a>
+  </nav>
+  <button class="theme-btn" id="themeBtn" type="button">Theme: auto</button>
+</div></header>
+<main class="wrap">
+<section class="hero" id="hero">
+<div class="prose">
+<span class="eyebrow">GNC onboarding for Propulsive Landers</span>
+<h1>Control, from the ground up</h1>
+<p class="lead">Here's the job. Monarch, our 1000 N hybrid rocket lander, has to take off, fly a 50 m hop and set itself back down on its legs. Guidance works out the path it should fly. Navigation works out where it actually is. Control sits between the two: given where we should be and where we are, it decides what the engine does, many times a second, so the rocket follows the path instead of falling over.</p>
+<p>On Monarch "what the engine does" comes down to three servos. One sits on the throttle valve on the nitrous oxide line and sets how much thrust you get (hybrid means the engine burns a solid fuel grain with liquid nitrous, so metering the nitrous meters the thrust). The other two swivel the whole engine on two axes to steer, which is the gimbal. So the controller's output is three angles, updated every few milliseconds, and its inputs are a target from guidance and a state estimate from navigation.</p>
+<p>This page is how you get from that job description to the controller in our repo. It starts with the simplest thing that could possibly work and adds one idea per chapter, each with a simulation you can push on: hand-flying, then feedforward, then PID, then the two together, then LQR, then the MPC the team actually runs. You don't need a controls class; if you can follow a rate of change you can follow all of it. Each chapter stands on its own, so jump to the one you need and use the chapter numbers to hop back when something is referenced.</p>
+<p class="hero-meta">Joseph Farkas, GNC vice lead. September 2026. Sims and file paths checked against MonopropUAV commit 1378746.</p>
+<p>Before any of the theory, fly the toy rocket yourself. Drag the throttle and try to hold it at 10 m for five seconds. Hover is around 46 percent, but don't take my word for it. When you've had enough, flip on Let the computer fly and watch a controller do the same job. That autopilot is roughly what you'll build by chapter 3.</p>
+</div>
+<div class="instrument" data-sim="handfly"></div>
+<p class="caption">You are the controller. Thrust lags the slider on purpose, because the real engine does too.</p>
+</section>
+<section class="chapter" id="why-control">
+<div class="chapter-head"><span class="eyebrow"><span class="n">01</span>Why control</span>
+<h2>Why control at all</h2></div>
+<div class="prose">
+<p>If you just tried the hand-throttle sim above, you probably shot past 10 m, yanked the throttle back, sank, and bounced a few times before it settled, if it settled at all. For those few seconds you were the controller: look at where you are, compare it with where you want to be, move something. Every controller on this page runs that same loop. The differences are in how much it moves, and how it decides.</p>
+<p>The reason it's hard, even for one axis, is delay. Your shower is the everyday version. You turn the knob toward hot and nothing happens for a few seconds because the hot water is still back in the pipe, so you turn it further, and then it all arrives at once. Monarch's engine has a gentler version of the same thing: the valve moves right away, but chamber pressure takes a couple of tenths of a second to mostly catch up, so the thrust you're getting is always a little behind the thrust you asked for. A controller that ignores that lag will overshoot, and you just felt why.</p>
+<p>Here are the words we use, each with a box in the diagram below. The setpoint is where we want to be (the 10 m line). The state is where we actually are (the altitude readout, plus how fast it's changing). The error is the gap between them. The controller is the box that turns error into a command, and the plant is the thing being controlled, the rocket in our case (an old factory word that stuck). Actuators are the things the command drives: on Monarch, one servo on the throttle valve and two on the gimbal.</p>
+<p>On the vehicle none of these are as clean as in the sim. The setpoint isn't one number: guidance hands the controller a position and velocity to hit at every moment of the hop, what we call the reference trajectory, so the setpoint moves and the controller chases it. The state doesn't come off one sensor either. Navigation runs an Extended Kalman Filter, the EKF, which merges the IMU (accelerometers and gyros), magnetometer, GPS, UWB (radio ranging to beacons on the ground), barometer and rangefinder into one best guess of where the rocket is and how it's moving. The controller's whole job is turning that moving setpoint and that estimated state into three servo angles, over and over.</p>
+</div>
+<figure class="diagram" id="fig-loops">
+<svg viewBox="0 0 900 430" role="img" aria-labelledby="fig-loops-t fig-loops-d">
+  <title id="fig-loops-t">Open loop versus closed loop</title>
+  <desc id="fig-loops-d">Top: a plan feeds a controller that commands the rocket, and nothing comes back. Bottom: the same chain, but a sensor measures the real altitude and the difference from the target is what the controller acts on.</desc>
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--ink-2)"/></marker>
+    <marker id="ah-fb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--sig-fb)"/></marker>
+    <marker id="ah-ref" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--sig-ref)"/></marker>
+  </defs>
+
+  <!-- open loop -->
+  <text x="20" y="34" class="label" style="font-weight:700">Open loop</text>
+  <text x="112" y="34" class="dim">the controller never hears back</text>
+  <rect class="box" x="20" y="70" width="170" height="64" rx="3"/>
+  <text x="105" y="96" text-anchor="middle" class="label">Target</text>
+  <text x="105" y="116" text-anchor="middle">hold 10 m</text>
+  <path class="wire wire-ref" d="M190 102 H262" marker-end="url(#ah-ref)"/>
+  <rect class="box" x="264" y="70" width="210" height="64" rx="3"/>
+  <text x="369" y="96" text-anchor="middle" class="label">Controller</text>
+  <text x="369" y="116" text-anchor="middle">thrust = weight = 9.81 N</text>
+  <path class="wire" d="M474 102 H546" marker-end="url(#ah)"/>
+  <text x="510" y="60" text-anchor="middle" class="dim">valve %</text>
+  <rect class="box box-hot" x="548" y="70" width="150" height="64" rx="3"/>
+  <text x="623" y="96" text-anchor="middle" class="label">Rocket</text>
+  <text x="623" y="116" text-anchor="middle">1 kg, lag 0.2 s</text>
+  <path class="wire" d="M698 102 H860" marker-end="url(#ah)"/>
+  <text x="780" y="92" text-anchor="middle" class="dim">real altitude</text>
+  <text x="780" y="128" text-anchor="middle" class="dim">(nobody is looking)</text>
+
+  <line x1="20" y1="180" x2="880" y2="180" style="stroke:var(--line)"/>
+
+  <!-- closed loop -->
+  <text x="20" y="220" class="label" style="font-weight:700">Closed loop</text>
+  <text x="128" y="220" class="dim">measure, compare, correct, repeat</text>
+  <rect class="box" x="20" y="256" width="150" height="64" rx="3"/>
+  <text x="95" y="282" text-anchor="middle" class="label">Target</text>
+  <text x="95" y="302" text-anchor="middle">10 m</text>
+  <path class="wire wire-ref" d="M170 288 H212" marker-end="url(#ah-ref)"/>
+  <circle cx="232" cy="288" r="16" class="box"/>
+  <text x="232" y="292" text-anchor="middle" style="font-size:14px">Σ</text>
+  <text x="232" y="336" text-anchor="middle" class="dim" style="font-size:11px">compare</text>
+  <text x="206" y="276" class="dim" style="font-size:11px">+</text>
+  <text x="238" y="323" class="dim" style="font-size:11px">−</text>
+  <path class="wire" d="M248 288 H300" marker-end="url(#ah)"/>
+  <text x="274" y="276" text-anchor="middle" class="dim">error</text>
+  <rect class="box" x="302" y="256" width="190" height="64" rx="3"/>
+  <text x="397" y="282" text-anchor="middle" class="label">Controller</text>
+  <text x="397" y="302" text-anchor="middle">error → thrust</text>
+  <path class="wire" d="M492 288 H546" marker-end="url(#ah)"/>
+  <rect class="box box-hot" x="548" y="256" width="150" height="64" rx="3"/>
+  <text x="623" y="282" text-anchor="middle" class="label">Rocket</text>
+  <text x="623" y="302" text-anchor="middle">1 kg, lag 0.2 s</text>
+  <path class="wire" d="M698 288 H860" marker-end="url(#ah)"/>
+  <text x="780" y="278" text-anchor="middle" class="dim">real altitude</text>
+  <!-- feedback path -->
+  <circle cx="740" cy="288" r="3" style="fill:var(--ink-2)"/>
+  <path class="wire wire-fb" d="M740 288 V386 H572"/>
+  <rect class="box" x="380" y="360" width="190" height="52" rx="3"/>
+  <text x="475" y="381" text-anchor="middle" class="label">Sensors</text>
+  <text x="475" y="400" text-anchor="middle" style="font-size:11px">rangefinder, IMU → EKF</text>
+  <path class="wire wire-fb" d="M380 386 H232 V306" marker-end="url(#ah-fb)"/>
+  <text x="306" y="376" text-anchor="middle" class="dim">measured altitude</text>
+</svg>
+<figcaption>Same target, same controller, same rocket. The only difference is the red wire: the closed loop knows what actually happened.</figcaption>
+</figure>
+<div class="prose">
+
+</div>
+<div class="try"><span class="eyebrow">Try this</span>
+<ol>
+  <li>Scroll back up to the hand-throttle sim and try again to get the altitude trace flat at 10 m for five seconds (the Time on target readout keeps score). Pay attention to how long after you move the slider the rocket actually responds. That delay is the thrust lag, and you'll be fighting it for the rest of the page.</li>
+  <li>Hold a hover, then press Gust and count how many corrections it takes you to get back. A controller makes that many corrections many times a second, on three axes at once, and it doesn't get bored.</li>
+</ol></div>
+<details class="check"><summary><span class="q">A controller only ever sees the error between setpoint and state. How can it deal with something it has no sensor for, like a gust of wind?</span></summary><div class="a"><p>It doesn't need to know the cause. The gust pushes the rocket off the setpoint, the error grows, and the controller pushes back because the error grew. It only ever sees the effect. That's the appeal of feedback: it corrects for things nobody modeled, and on a rocket that's a long list.</p></div></details>
+</section>
+<section class="chapter" id="open-loop">
+<div class="chapter-head"><span class="eyebrow"><span class="n">02</span>Feedforward</span>
+<h2>Guess first</h2></div>
+<div class="prose">
+<p>The simplest possible controller doesn't look at the sensors at all. You work out from the physics what thrust the rocket ought to need, you command it, and you hope. That's called open loop, because nothing flows back from the sensors into the decision, and the command you computed is called feedforward.</p>
+<p>The toy rocket in these sims weighs 1 kg, so hovering takes 9.81 N of thrust, exactly its weight (that's the Hover at 10 m profile, and it's about as exciting as it sounds). Want to climb from the pad to 10 m instead? Work backward from the physics to a thrust profile over time: a little more than 9.81 N at the start to get moving, a little less in the second half to slow down, and back to 9.81 N at the top. Press Play and the rocket flies the plan. On Monarch the same idea is a valve-angle schedule computed from an engine model, and chapter 5 shows how it gets combined with feedback.</p>
+</div>
+<div class="instrument" data-sim="openloop"></div>
+<p class="caption">Open loop. The thrust profile is computed from the model and played back blind. The Mass estimate error slider changes the real rocket without telling the plan.</p>
+<div class="try"><span class="eyebrow">Try this</span>
+<ol>
+  <li>Set Profile to Climb 0 to 10 m, leave Mass estimate error at zero and press Play. It should hit 10 m and stop there. Now drag Mass estimate error to +5 percent, so the real rocket is heavier than the plan thinks, and press Restart. Same profile, and the rocket is back on the ground before 10 s. Try minus 5 percent and it's at 36 m and still climbing when the clock hits 10 s.</li>
+  <li>Reset, start the climb, and press Gust halfway up. The rocket drifts and never comes back, because nothing in the controller can see that it drifted.</li>
+</ol></div>
+<div class="prose">
+<p>It works in the sim because the sim is the model. The real rocket isn't. Monarch burns off nitrous and fuel the whole flight, so the hover thrust you computed at ignition is too much a few seconds later. Tank pressure sags as the nitrous drains, so the same valve angle gives less thrust late in the burn. The valve's angle-to-flow table came from testing on the stand and won't match flight day exactly. And then there's wind, which no model knows about. Any one of these sends the thrust profile somewhere other than where you planned, and open loop has no way to notice, let alone fix it. The sim's Mass estimate error slider is the tame version: 5 percent is not a big mistake, and it puts the rocket on the ground.</p>
+</div>
+<details class="check"><summary><span class="q">Feedforward flew the sim perfectly. Name two things about the real Monarch that would make the same thrust profile miss.</span></summary><div class="a"><p>Any two of these: the mass drops as propellant burns, so hover thrust changes during the flight; tank pressure falls, so a fixed valve angle gives less thrust as the burn goes on; the valve table isn't exact; wind pushes the vehicle around. The common thread is that feedforward is only as good as the model, and the model is never quite right.</p></div></details>
+</section>
+<section class="chapter" id="closed-loop">
+<div class="chapter-head"><span class="eyebrow"><span class="n">03</span>Feedback</span>
+<h2>Look, then correct</h2></div>
+<div class="prose">
+<p>Feedback means the command depends on the error you're measuring right now, the gap between the setpoint (where you want to be) and the state (where the sensors say you are), rather than on a plan you made earlier. The workhorse feedback rule is PID, three terms added together, and the sandbox below lets you turn each one on by itself. The rocket is the same 1 kg toy as everywhere else on this page: hover takes 9.81 N, thrust is clipped between 1 and 20 N, and the engine lags the command by about 0.2 s.</p>
+</div>
+<div class="instrument" data-sim="pid"></div>
+<p class="caption">Closed loop. The controller sees the error and computes thrust from Kp, Ki and Kd. The stacked bar between the rocket and the charts shows what the PID is asking for, split into feedforward, P, I and D slices. The dashed lines are the engine limits, and it flags "clipped" when the request goes past them.</p>
+<div class="prose">
+<p>Start with proportional control, P: thrust equals a gain Kp times the error. Kp has units, newtons per meter of error. With Kp = 2, being two meters low means push with 4 N, and being right on the setpoint means push with nothing at all. That second half, zero thrust at zero error, is the thing that bites in a minute.</p>
+<p>Pick the P only preset and watch. The rocket climbs, overshoots, falls back, overshoots the other way, and keeps on bouncing. On this rocket it never settles. With Kp = 2 it swings between the ground and about 13 m with the thrust bar pinned at its top or bottom limit most of the time. Nothing in the rule slows it down: P pushes hard when the rocket is far away and eases off as it gets close, but the rocket is still moving fast when the error hits zero, so it sails straight through.</p>
+<p>The D term, for derivative, looks at how fast the error is changing. Kd is in newtons per meter-per-second (the slider writes it N·s/m). If the rocket is 2 m low but rising quickly, D says ease off, you're about to get there anyway. Pick the PD preset and the bouncing dies out. But now look where it parks: well below 10 m, at about 5 m. That gap is the steady-state error, or droop when we're being informal, and it's exactly the rocket's weight divided by Kp. Hovering takes 9.81 N, P only makes thrust when there's error, so the rocket settles at whatever altitude makes the error big enough to produce hover thrust. With Kp = 2 that's 4.9 m of error. A bigger Kp shrinks the gap, but it never closes it.</p>
+<p>The I term, for integral, closes it. It keeps a running total of the error over time. If the rocket sits 0.5 m low, the total keeps growing and so does the thrust the I term adds, and it only stops growing once the rocket is actually at 10 m. Pick the PID preset (Ki = 0.5) and the droop closes over ten seconds or so. Now push Ki ten times higher. The total builds the whole time the rocket is climbing and only starts shrinking once the rocket is above the setpoint, and by then the extra thrust has carried it well past. Piling up more integral than you can use, especially while the thrust bar is pinned at a limit, is called integral windup. The fix is to clamp the integral, and anything you'd actually fly does; the team's throttle PID in Algorithms/MTV Sim clamps it with PID_INTEGRAL_MIN and PID_INTEGRAL_MAX. In the sim the I term readout stops at 19 N and turns red while it's clamped.</p>
+<p>Two D gotchas. Drag Sensor noise up and the thrust bar starts shaking, because D reads every jitter in the altitude as a fast-changing error. In practice you run D on a filtered signal, or on the EKF's velocity estimate instead of subtracting two noisy altitude readings; the team's throttle PID currently runs with Kd = 0, which is the usual call on a noisy signal. The second gotcha is the kick. If the setpoint jumps, the error jumps, and D reads that as an enormous rate of change and slams the thrust for a split second. Real implementations take the derivative of the measurement instead of the error, which removes the spike, and the Derivative on control flips between the two so you can see it.</p>
+<p>Tuning is mostly done by feel, with a rough recipe. Pick a Kp and watch it bounce, then add Kd until the bounce dies. Raise both together until the response is brisk without being twitchy, add a little Ki last to remove the droop, and then hit it with a gust and decide whether you still like it.</p>
+<p>The thrust bar has a top and a bottom for a reason. The engine has a maximum, and a hybrid can't go below a minimum without flaming out, so the sim clips the command to 1 to 20 N. When your PID asks for 30 N and the engine gives 20, the controller is saturated: thrust is stuck at the limit no matter what the controller asks for, and the integral is winding up the whole time. The valve servo also has a rate limit, so a jump from 10 to 20 N takes time to arrive. Both of these come back to bite in the LQR and MPC chapters, because those controllers are built on a model that doesn't know the limits exist.</p>
+</div>
+<div class="try"><span class="eyebrow">Try this</span>
+<ol>
+  <li>Pick the P only preset (Kp around 2) and watch it bounce. Now double Kp. The bounce gets bigger, not faster, and the thrust bar spends most of its time pinned. Add just enough Kd to kill the bounce and notice where it parks: below 10 m.</li>
+  <li>Pick PD and read the steady-state error off the Error readout; with Kp = 2 it should be close to 4.9 m. Pick PID and watch the droop close over ten seconds or so. Then multiply Ki by 10 and watch the overshoot, with one eye on the I term readout while it happens.</li>
+  <li>With PID settled, drag Sensor noise up and watch the thrust bar. That shaking is D amplifying noise. Set the noise back to zero, make sure Derivative on says error, and jump the Setpoint from 10 to 15 m: the bar pins at 20 N for a split second. That's the kick. Switch Derivative on to measurement, do the same jump, and the spike is gone.</li>
+  <li>Set the Setpoint to 40 m with a big Kp (controls people say a stiff Kp) and watch the thrust bar pin at the top. Watch the I term climb until it hits the 19 N clamp and turns red. That clamp is the anti-windup. Without it the overshoot afterward would be even bigger than the one you're about to see.</li>
+</ol></div>
+<details class="check"><summary><span class="q">With P and D but no I, the rocket hovers well below the setpoint forever. Why doesn't it keep rising until the error is zero?</span></summary><div class="a"><p>Because at zero error a P controller outputs zero thrust, and zero thrust means falling. The rocket needs 9.81 N to hover, so once D has stopped the bouncing it settles where the leftover error times Kp equals 9.81 N (4.9 m low with Kp = 2). The I term fixes this by remembering the error and adding thrust until the error is gone.</p></div></details>
+</section>
+<section class="chapter" id="videos">
+<div class="chapter-head"><span class="eyebrow"><span class="n">04</span>Videos</span>
+<h2>Other explanations</h2></div>
+<div class="prose">
+<p>If the sliders didn't do it for you, watch someone explain the same thing with a different picture. The first three assume no more math than you've already got. The LQR and MPC ones will make a lot more sense after chapters 6 and 7, so come back for those, and the last one is a real hop, because you should see one.</p>
+</div>
+<ul class="videos">
+  <li><a class="vid" href="https://www.youtube.com/watch?v=4Y7zG48uHRo" target="_blank" rel="noopener"><span class="dur">4:40</span><span class="t">Controlling Self Driving Cars<span class="m">AerospaceControlsLab</span></span><span class="why">A car steering onto a lane line. P alone oscillates, PD damps it, PID removes the offset. No math.</span></a></li>
+  <li><a class="vid" href="https://www.youtube.com/watch?v=UR0hOmjaHp0" target="_blank" rel="noopener"><span class="dur">7:44</span><span class="t">PID Control - A brief introduction<span class="m">Brian Douglas</span></span><span class="why">Hand-drawn intuition for what each of the three terms is for.</span></a></li>
+  <li><a class="vid" href="https://www.youtube.com/watch?v=FW_ay7K4jPE" target="_blank" rel="noopener"><span class="dur">15:44</span><span class="t">What Is Feedforward Control? | Control Systems in Practice<span class="m">MATLAB</span></span><span class="why">Anticipation versus correction. Feedforward takes the predictable part so feedback only cleans up model error. Sets up the next section.</span></a></li>
+  <li><a class="vid" href="https://www.youtube.com/watch?v=1_UobILf3cc" target="_blank" rel="noopener"><span class="dur">13:03</span><span class="t">Linear Quadratic Regulator (LQR) Control for the Inverted Pendulum on a Cart [Control Bootcamp]<span class="m">Steve Brunton</span></span><span class="why">Balancing a pole while moving the cart is tilting to translate, the closest textbook stand-in for a rocket.</span></a></li>
+  <li><a class="vid" href="https://www.youtube.com/watch?v=8U0xiOkDcmw" target="_blank" rel="noopener"><span class="dur">4:50</span><span class="t">Why Use Model Predictive Control? | Understanding MPC, Part 1<span class="m">MATLAB</span></span><span class="why">Many inputs, hard limits, and looking ahead: the three reasons Monarch wants MPC.</span></a></li>
+  <li><a class="vid" href="https://www.youtube.com/watch?v=9ZDkItO-0a4" target="_blank" rel="noopener"><span class="dur">1:36</span><span class="t">Grasshopper 744m Test | Single Camera (Hexacopter)<span class="m">SpaceX</span></span><span class="why">A real hop with a sideways move. Watch the gimbal tilt the vehicle before it translates.</span></a></li>
+</ul>
+</section>
+<section class="chapter" id="combine">
+<div class="chapter-head"><span class="eyebrow"><span class="n">05</span>Feedforward and feedback</span>
+<h2>Anticipate and correct</h2></div>
+<div class="prose">
+<p>Chapters 2 and 3 gave you two tools that fail in opposite ways. Feedforward is the command you compute from the plan and a model of the rocket without looking at any sensor; it knows about gravity and the planned climb but can't see anything go wrong. Feedback, the PID, is the correction you compute from the measured error; it sees everything but knows nothing, and has to discover hover thrust from scratch by making errors. If you left the PID sandbox holding a hover, the I term readout crept up to 9.81 N, which is the rocket's weight: the I term was weighing the rocket for you, slowly, by trial and error. Feedforward would have told it the weight up front. Monarch's weight drops every second of the burn, which is why you want both. Let feedforward carry the known part, the weight of the vehicle and the acceleration the plan calls for, and let feedback handle the wind and whatever the model got wrong.</p>
+</div>
+<div class="instrument" data-sim="ffb"></div>
+<p class="caption">Feedforward plus feedback. The thrust bar is split into two slices, the model's guess and the PID's correction. A good tuning keeps the feedback slice small except during gusts.</p>
+<div class="try"><span class="eyebrow">Try this</span>
+<ol>
+  <li>The run is the same 0 to 10 m climb from chapter 2. Set Mode to Feedback only and tune a PID that tracks it. Note the Peak error readout. Now switch Mode to Both with the exact same gains (switching restarts the run). Watch how much smaller the feedback slice of the thrust bar is.</li>
+  <li>In Both, cut Kp and Ki in half. Tracking should still be fine. Try the same halved gains in Feedback only and watch it struggle.</li>
+  <li>Press Gust in all three modes. Feedforward only just falls, because nothing in it can see the gust. In Both, the feedback slice does all of the gust work and the feedforward slice doesn't move.</li>
+  <li>In Feedback only, watch the I term readout settle at 9.81 N (it takes about a minute). Drag Mass error to +10 percent and watch it crawl up to the new weight. Switch to Both: after the restart the I term only has to cover the mass error, about 1 N.</li>
+</ol></div>
+<div class="prose">
+<p>The two commands add. In the sim below the thrust bar shows them as two slices, feedforward from the model and feedback from the PID, and with Mode set to Both the feedback slice gets small. Feedforward is holding the rocket up now, so all the PID has left to do is trim. That's what lets you run gentler gains, and gentler gains bounce less and amplify less noise, while tracking still gets better because the feedforward is carrying the load.</p>
+<p>This is exactly how the team's throttle controller is built. The throttle valve code (the code calls the valve the MTV, so the folder is Algorithms/MTV Sim) works out which valve angle should produce the thrust the plan wants, using a model of the engine and a table of how much flow each valve angle passes, and commands that angle as feedforward. A PID on the thrust error trims it.</p>
+</div>
+<details class="check"><summary><span class="q">With feedforward on, why is it safe to run lower PID gains than you needed with feedback alone?</span></summary><div class="a"><p>Because the PID no longer has to generate hover thrust or the planned acceleration; feedforward already supplies both. Feedback only has to cover the difference between the model and reality, which is small, so it can be gentle and still keep the error small. Gentle gains mean less overshoot and less sensitivity to noise.</p></div></details>
+</section>
+<section class="chapter advanced" id="lqr">
+<div class="chapter-head"><span class="eyebrow"><span class="n">06</span>LQR</span>
+<h2>Where PID runs out</h2></div>
+<p class="chapter-note">This chapter and the next are for when you open the repo code. It's fine to skim them the first time and come back when you need them.</p>
+<div class="prose">
+<p>Everything before this chapter was one axis: altitude, controlled by thrust. Monarch has 12 numbers in its state: position in three directions, velocity in three, attitude (which way it's pointing) as three angles, and three angular rates. To move all of that around we have three main inputs, thrust through the valve and the two gimbal angles, plus small nitrogen thrusters (the reaction control system, or RCS) for roll.</p>
+<p>The trouble starts when you try to move sideways. Balance a broom on your palm: to move the broom to the right you first move your hand left, so the broom tilts right, and then you chase it. The gimbal works the same way. To translate right, the rocket swings the engine so the tail kicks left and the nose tips right, and for a fraction of a second the rocket moves the wrong way. Once it's tilted, less of the thrust points up, so it sinks, so it needs more thrust, which also pushes it harder sideways. Every state is tangled up with the others through the physics, which is what people mean by cross-coupling.</p>
+<p>If you try one PID per axis (an altitude loop, a pitch loop, an x-position loop) they fight, because each loop disturbs the state the others are trying to hold. Now you're hand-tuning a dozen or more gains that all interact, and a sim that looks fine tells you nothing about whether it's stable in wind. People do fly things this way, but nobody enjoys it, and the first gusty day usually ends the experiment.</p>
+<p>LQR, the linear quadratic regulator, flips the job around: you describe what you care about and let a solver choose the gains. (The name describes the math underneath, a linear model, a quadratic cost, a regulator that holds a setpoint; you won't need to unpack it here.) You write down a cost: being 1 m off in position hurts this much, moving the gimbal 1 degree costs that much. The weights on the state errors go in a matrix called Q and the weights on the inputs go in one called R; in the sandbox those are the Care about and effort sliders. Then you give the solver a linear model of the rocket, the A and B matrices. A says how the state drifts on its own and B says how each input pushes it (press Show A and B under the heatmap to see them). Out comes one gain matrix K that maps every state error to every input at once. On the full vehicle that would be 3 rows by 12 columns. The planar sandbox below (a side view: the rocket can move left-right and up-down and tilt, nothing else) has 6 states and 2 inputs, so its K is 2 by 6, and the heatmap is that K. Read it by rows: the gimbal row is nonzero under x, tilt, sideways speed and tilt rate, so sideways error gets fixed by tilting, while the thrust row only looks at z and vertical speed. And for the linear model, the result is stable without you checking.</p>
+</div>
+<div class="instrument" data-sim="lqr"></div>
+<div class="try"><span class="eyebrow">Try this</span>
+<ol>
+  <li>Leave the weights at their defaults, set Sideways move to 5 m and press Go. The rocket tilts, translates and straightens up in one motion: tilt peaks around 17 degrees, altitude dips only 7 cm, and it's settled in about 4 s using 8.4 degrees of gimbal. Nobody tuned that cross-coupling. It came out of K.</li>
+  <li>Turn on Show unclipped command, then drag Care about position (Q) up. At 3× the dashed asked-for trace already crosses the 10 degree line (14.5 degrees) while the solid gimbal flattens against it, and at 10× it's asking for 26. The controller has no idea the stop exists.</li>
+  <li>Put position back and drag Gimbal effort (R) up instead. The move gets gentler and a little slower, with peak tilt dropping from 17 degrees to about 9.6 at 10×. Watch the K heatmap while you drag and see which cells shrink.</li>
+  <li>Set Sideways move to 30 m and press Go. The linear model still thinks tilt is free, so the rocket tilts past 90 degrees, pins the gimbal for most of a second, clips thrust for two seconds and drops nearly 8 m before it recovers. The linear model's advice is actively wrong out here, and you're watching what that costs.</li>
+  <li>Hover, then press Nudge, which shoves the rocket sideways at 2 m/s. Look at the thrust bar during the recovery: one slice is hover thrust, the other is K times the error. Same two slices as chapter 5, with the feedback slice computed a different way.</li>
+</ol></div>
+<div class="prose">
+<p>Keep two words separate. Q and R are weights, prices you put on errors and on effort. K is gains, the same job Kp did in chapter 3. You set the prices and the solver hands you the gains. A big price on altitude means the controller will spend a lot of thrust to fix altitude quickly. A big price on gimbal effort means it'll move the gimbal reluctantly and accept more position error in exchange. And only the ratio matters: multiply every entry of Q and R by 10 and you get the exact same K.</p>
+<p>LQR's output is a correction added to hover thrust. That hover thrust is feedforward, K times the error is feedback, so the two-slice thrust bar from chapter 5 is back. The model is linearized around hover, which means it's only accurate for small tilts and small velocities, and LQR has no idea limits exist. Turn the position weight up and it will cheerfully ask for 26 degrees of gimbal on a gimbal that stops at 10; give it a 30 m move and it pins the gimbal and tilts past 90 degrees. Or the correction is a bigger negative number than hover thrust, and the total drops below the flameout floor. You clip the command and hope, and once you clip, the stability guarantee is gone. This is the approach the team used before the current MPC work. The MATLAB in Algorithms/LQR builds A and B for the full 12-state vehicle with a 7-wide input that also includes gimbal rates and accelerations, so its K is 7 by 12.</p>
+</div>
+<details class="check"><summary><span class="q">Why does a separate PID per axis get ugly on the rocket, when it was fine for altitude alone?</span></summary><div class="a"><p>Because the axes are coupled through the physics. To move sideways the rocket tilts, tilting changes how much of the thrust points up, which changes altitude, which the altitude loop then fights. Each loop disturbs the others, so you end up tuning a pile of gains that interact, with no way to know the whole thing is stable. LQR designs all the gains together from one cost and one model, so the coupling gets handled inside K instead of by hand.</p></div></details>
+</section>
+<section class="chapter advanced" id="mpc">
+<div class="chapter-head"><span class="eyebrow"><span class="n">07</span>MPC</span>
+<h2>Plan a little, act a little</h2></div>
+<p class="chapter-note">Same deal as LQR: this one earns its keep when you open Algorithms/MPC. It's fine to skim it the first time.</p>
+<div class="prose">
+<p>Write down Monarch's hard limits. The gimbal has a stop (10 degrees in the Python prototype, 15 in the Rust flight model). Thrust can't drop below a minimum without the hybrid flaming out, and there's no relighting it in flight. And guidance hands us a glide-slope cone, a region the rocket has to stay inside on the way down. The LQR from chapter 6 computes its gains from a linear model that doesn't know any of this; it can chase the setpoint, but it can't promise to stay inside any of those lines while it does, and once you clip its commands at the limits its stability guarantee is gone.</p>
+<p>MPC, model predictive control, makes the controller think ahead. At every tick (one pass of the control loop; the prototype runs ten a second), take the current state from the EKF, navigation's best estimate of where the rocket is. Use the model to simulate the next second or so (the prototype in the repo uses 10 steps of 0.1 s). Pick the sequence of 10 thrust and gimbal commands that makes the predicted path track the reference at the lowest cost, with every command kept inside the actuator limits. The reference is the reference trajectory, the moving setpoint guidance hands us. Then apply only the first command. The rest of the sequence isn't thrown away; you keep it, shifted one step forward, as the starting guess for the next tick's solve. That's the warm start. The window slides forward with you, which is where the name receding horizon comes from.</p>
+<p>Because the limits live inside the optimization instead of being clipped on afterward, MPC won't plan a maneuver that needs 26 degrees of gimbal. It finds the best one that fits inside the stop, which often means starting the tilt earlier, and it keeps thrust above flameout because it was told to. You can also put limits on the predicted states, like staying inside the glide-slope cone. The repo's solver today handles the input limits only. State constraints are on the list, and the cone in the sandbox below is a soft penalty standing in for them.</p>
+</div>
+<div class="instrument" data-sim="mpc"></div>
+<div class="try"><span class="eyebrow">Try this</span>
+<ol>
+  <li>Set Start altitude to 20 m and Horizon N to 5, then press Start descent. The controller only sees half a second ahead and creeps down for 13 s, never using more than 13 N. Push N to 30 and run it again. Now it commits to a fast descent and then has to brake hard. Watch the thrust gauge run up to the 20 N ceiling, which on a 1 kg rocket is only about 1 g of braking; it's down in about 5 s. Watch the Solve time readout climb as you lengthen the horizon too. The repo uses 10.</li>
+  <li>Turn Glide-slope constraint off and start the descent. The predicted path cuts straight through the dashed cone and the Cone violations readout jumps, about 33 steps instead of 4, with Pad error around 1.5 m instead of 0.5. Turn it back on and watch the same descent get replanned to hug the cone. The gimbal and thrust limits stay inside the solver either way; that toggle only touches the cone.</li>
+  <li>The cone is a soft constraint, and Cone penalty is how hard the solver is punished for crossing it. From 20 m, drag it down to 10 and the predicted path treats the cone as a suggestion (about 41 violating steps, 0.26 m outside). Push it to 100000 and MPC hugs the line, lands about 2 s later and touches down softer, under 1 m/s. That trade, cone discipline for time, is the kind of knob the guidance and control leads argue about.</li>
+  <li>Now the demo this whole chapter was building to. Set Controller to Both, Start altitude to 20 m, and drag Care about position (Q) to 3×. Both controllers now want the pad fast, with identical weights. LQR tilts to 77 degrees, sits on its gimbal stop for most of the descent, cuts 2.8 m through the cone and hits at over 7 m/s, 2.5 m from the pad. MPC peaks at 42 degrees, touches the stop for a few steps, stays within 0.4 m of the cone and arrives 0.5 m from the pad at 4 m/s. Neither is a landing you'd want, but only one of them did what it was told inside the limits it was given. At 10× LQR goes past 90 degrees and arrives at 20 m/s.</li>
+  <li>From 20 m, compare Touchdown speed across controllers and horizons: N = 10 lands at about 1.61 m/s, N = 30 at 0.64 m/s, and LQR (clipped) at 0.83 m/s. It isn't a neat trend, which is worth knowing before you argue about N with anyone.</li>
+  <li>Drag State latency from 0 toward 200 ms. The controller sees a state that's older and older. MPC falls apart somewhere above 80 ms and LQR above about 120 ms, and at 200 ms the MPC rocket crashes. That's a well-tuned controller turning back into the shower.</li>
+  <li>Set Controller to Both, start from 10 m, and press Gust partway down. LQR hits its gimbal stop (the dashed unclipped trace goes past 10 degrees), misses the pad by 1.86 m and arrives at 1.53 m/s in 3.4 s. MPC backs off, re-approaches, and lands within a centimeter at 0.43 m/s, about three times later. Compare the Touchdown speed and Pad error readouts and decide which one you'd rather be standing next to.</li>
+</ol></div>
+<div class="prose">
+<p>The price is that a solver runs every tick. Hansel Zhang's Python prototype in Algorithms/MPC/nonlinear_mpc.py does all of this from scratch (the flight version is the Rust rewrite in Algorithms/MPC/src), and you can match each step to a function in the file. These are names you'll meet there; you don't need to know them yet:</p>
+<ol>
+  <li>rollout runs the nonlinear model forward through the current guess of the 10 commands.</li>
+  <li>compute_jacobian and linearize_trajectory nudge each state and input a little and see how the next state moves. That's a finite-difference Jacobian: LQR's A and B, rebuilt along the predicted path every single tick.</li>
+  <li>assemble_qp_increment stacks the cost over the whole horizon into one quadratic problem in the command changes.</li>
+  <li>solve_qp_box is projected gradient descent. Take a step downhill, then clip every command back inside the box of gimbal and thrust limits. Repeat.</li>
+  <li>The line search in nmpc_step accepts the new commands only if the true nonlinear cost went down, and otherwise shrinks the step and tries again.</li>
+  <li>The warm start shift in the main loop drops the first command, repeats the last one, and hands the result to the next tick.</li>
+</ol>
+<p>Speed matters here in a way it didn't for PID. The plan in ControlLoopMPC/README.md has the MPC thread running as fast as it can on the latest state estimate, and a solve that finishes late is acting on stale information, which is the shower problem from chapter 1 again. The prototype re-solves ten times a second, the Rust sim five, and the flight computer has to keep that up or better without ever falling behind. One more thing you'll notice in the code: it tracks attitude with a quaternion (four numbers that describe an orientation without the blind spots three angles have) instead of three angles, and the Python version also carries the gimbal angles and rates as states. So you'll see 17 state numbers in Python and 13 in Rust instead of the 12 from chapter 6, which is the same rocket with different bookkeeping.</p>
+<p>The pieces fit together like this. Guidance runs its trajectory optimizer, lossless convexification, once at the start of the hop, and out comes the reference trajectory: position, velocity and thrust over time, planned to stay inside the cone. Navigation runs the EKF continuously and produces the current state. MPC takes both, solves, and outputs a thrust command for the valve servo and two angles for the gimbal servos. Today the prototype tracks a fixed setpoint. It climbs to a point, holds, and at 15 s the reference switches to the origin and it comes back. Wiring the moving reference from guidance into it isn't done yet.</p>
+<p>MPC doesn't fix everything. You still tune Q and R by hand; the sandbox has the same four weight sliders as the LQR chapter, and they drive both controllers at once so you can compare like with like. If the model is wrong the predictions are wrong, and MPC will confidently plan around a rocket that doesn't exist. Re-solving from the measured state every tick is what pulls it back, but even then it has no integrator, so a 5 percent mass error leaves it hovering low and unbothered (exercise 3 makes you watch). The solver can fail to converge in time, and you need a plan for that tick. And a flight computer has to run this nonlinear optimizer ten or more times a second for the whole flight, which is why solve time gets its own readout in the sandbox.</p>
+</div>
+<details class="check"><summary><span class="q">MPC solves for a whole sequence of commands every tick and executes only the first one. Why not execute the whole plan?</span></summary><div class="a"><p>Because the plan came from a model and a state estimate that are both a little wrong, and from no knowledge of the next gust. By the next tick the rocket is somewhere slightly different from the prediction. Re-solving from the new measured state is how feedback gets into MPC: the planning gives you lookahead and constraint handling, the re-solving gives you correction. Executing the old plan blind would be open loop, chapter 2's controller that never looks at the sensors.</p></div></details>
+</section>
+<section class="chapter" id="fits">
+<div class="chapter-head"><span class="eyebrow"><span class="n">08</span>GNC</span>
+<h2>The loop, with folder names</h2></div>
+<div class="prose">
+<p>This is the whole GNC loop on one diagram, with the repo folder each piece lives in. Follow it around once. The sensors on the vehicle are the IMU, magnetometer, GPS, UWB, barometer and rangefinder. Navigation's Extended Kalman Filter fuses them into a state estimate, position, velocity, attitude and rates, plus a measure of how sure it is about each number; the estimation code lives under Sensing&amp;Controls/AttitudeEstimation, and the plan in ControlLoopMPC/README.md gives the IMU, UWB and GPS one thread each, all updating that shared estimate. Guidance supplies the reference trajectory, the path the hop should follow, from Algorithms/LosslessConvexification.</p>
+<p>The controller, LQR in Algorithms/LQR or MPC in Algorithms/MPC, takes state and reference and produces a thrust and two gimbal angles. Thrust becomes a valve angle through the throttle valve code in Algorithms/MTV Sim, the gimbal angles go to the two gimbal servos, and the RCS handles roll. Everything gets tested first against Algorithms/RocketSimulation, a Rust model of the vehicle with wind in it. Our habit is to prototype in Python and rewrite in Rust before anything flies.</p>
+</div>
+<figure class="diagram" id="fig-gnc">
+<svg viewBox="0 0 1000 440" role="img" aria-labelledby="fig-gnc-t fig-gnc-d">
+  <title id="fig-gnc-t">How guidance, navigation and control fit together on Monarch</title>
+  <desc id="fig-gnc-d">Guidance plans a reference trajectory. The controller compares it with the navigation estimate and commands the throttle valve and gimbal servos. The vehicle moves, sensors measure it, the EKF turns measurements into a state estimate, and the loop repeats.</desc>
+  <defs>
+    <marker id="gh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--ink-2)"/></marker>
+    <marker id="gh-ref" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--sig-ref)"/></marker>
+    <marker id="gh-fb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--sig-fb)"/></marker>
+    <marker id="gh-bad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:var(--bad)"/></marker>
+  </defs>
+
+  <!-- Guidance -->
+  <rect class="box" x="20" y="40" width="270" height="78" rx="3"><title>Guidance team (path planning). Owns the reference trajectory.</title></rect>
+  <text x="155" y="66" text-anchor="middle" class="label" style="font-weight:700">Guidance</text>
+  <text x="155" y="86" text-anchor="middle">plans the hop</text>
+  <text x="155" y="106" text-anchor="middle" class="dim" style="font-size:11px">Algorithms/LosslessConvexification</text>
+
+  <!-- Controller -->
+  <rect class="box box-hot" x="365" y="40" width="270" height="78" rx="3"><title>Control team. Turns reference plus state into thrust and gimbal commands.</title></rect>
+  <text x="500" y="66" text-anchor="middle" class="label" style="font-weight:700">Controller (MPC)</text>
+  <text x="500" y="86" text-anchor="middle">this guide</text>
+  <text x="500" y="106" text-anchor="middle" class="dim" style="font-size:11px">Algorithms/MPC · ControlLoopMPC</text>
+
+  <!-- Actuators -->
+  <rect class="box" x="710" y="40" width="270" height="78" rx="3"><title>Avionics subteam. Firmware that drives the valve servo, TVC servos and RCS.</title></rect>
+  <text x="845" y="66" text-anchor="middle" class="label" style="font-weight:700">Actuators</text>
+  <text x="845" y="86" text-anchor="middle">throttle valve, gimbal servos, RCS</text>
+  <text x="845" y="106" text-anchor="middle" class="dim" style="font-size:11px">AvionicsFirmware · firmware</text>
+
+  <!-- Vehicle -->
+  <rect class="box" x="710" y="186" width="200" height="64" rx="3"><title>The vehicle. Everyone's problem.</title></rect>
+  <text x="810" y="212" text-anchor="middle" class="label" style="font-weight:700">Monarch</text>
+  <text x="810" y="232" text-anchor="middle">1000 N hybrid lander</text>
+
+  <!-- Sensors -->
+  <rect class="box" x="710" y="318" width="270" height="78" rx="3"><title>Avionics subteam builds them; Navigation reads them.</title></rect>
+  <text x="845" y="344" text-anchor="middle" class="label" style="font-weight:700">Sensors</text>
+  <text x="845" y="364" text-anchor="middle">IMU, magnetometer, GPS, UWB, barometer, rangefinder</text>
+  <text x="845" y="384" text-anchor="middle" class="dim" style="font-size:11px">Electronics</text>
+
+  <!-- Navigation -->
+  <rect class="box" x="365" y="318" width="270" height="78" rx="3"><title>Navigation team (sensor fusion). Owns the state estimate.</title></rect>
+  <text x="500" y="344" text-anchor="middle" class="label" style="font-weight:700">Navigation (EKF)</text>
+  <text x="500" y="364" text-anchor="middle">turns noisy readings into a state</text>
+  <text x="500" y="384" text-anchor="middle" class="dim" style="font-size:11px">Sensing&amp;Controls/AttitudeEstimation</text>
+
+  <!-- wires -->
+  <path id="w-ref" class="wire wire-ref" d="M290 79 H363" marker-end="url(#gh-ref)"/>
+  <text x="327" y="30" text-anchor="middle" class="dim">reference trajectory</text>
+  <path id="w-cmd" class="wire" d="M635 79 H708" marker-end="url(#gh)"/>
+  <text x="672" y="30" text-anchor="middle" class="dim">thrust N, gimbal deg</text>
+  <path id="w-act" class="wire" d="M810 118 V184" marker-end="url(#gh)"/>
+  <text x="822" y="156" class="dim">valve %, servo angle</text>
+  <path id="w-veh" class="wire" d="M810 250 V316" marker-end="url(#gh)"/>
+  <text x="822" y="288" class="dim">the real world</text>
+  <path id="w-sen" class="wire wire-fb" d="M710 357 H637" marker-end="url(#gh-fb)"/>
+  <text x="672" y="306" text-anchor="middle" class="dim">raw readings</text>
+  <path id="w-nav" class="wire wire-fb" d="M500 318 V120" marker-end="url(#gh-fb)"/>
+  <text x="512" y="222" class="dim">state estimate</text>
+  <text x="512" y="238" class="dim" style="font-size:11px">position, velocity, attitude, rates</text>
+  <path id="w-nav2" class="wire wire-fb" d="M365 357 H155 V120" marker-end="url(#gh-fb)"/>
+  <text x="167" y="222" class="dim">where we are now</text>
+  <!-- disturbances -->
+  <path class="wire" style="stroke:var(--bad);stroke-dasharray:4 4" d="M992 218 H922" marker-end="url(#gh-bad)"/>
+  <text x="956" y="196" text-anchor="middle" class="dim" style="fill:var(--bad);font-size:11px">wind, slosh,</text>
+  <text x="956" y="209" text-anchor="middle" class="dim" style="fill:var(--bad);font-size:11px">mass change</text>
+
+  <!-- moving dots along the loop; hidden under prefers-reduced-motion via CSS -->
+  <g class="flow">
+    <circle r="3.5" class="dot"><animateMotion dur="2.4s" repeatCount="indefinite" begin="0s"><mpath href="#w-ref"/></animateMotion></circle>
+    <circle r="3.5" class="dot"><animateMotion dur="2.4s" repeatCount="indefinite" begin="0.4s"><mpath href="#w-cmd"/></animateMotion></circle>
+    <circle r="3.5" class="dot"><animateMotion dur="1.6s" repeatCount="indefinite" begin="0.8s"><mpath href="#w-act"/></animateMotion></circle>
+    <circle r="3.5" class="dot"><animateMotion dur="1.6s" repeatCount="indefinite" begin="1.2s"><mpath href="#w-veh"/></animateMotion></circle>
+    <circle r="3.5" class="dot"><animateMotion dur="2.4s" repeatCount="indefinite" begin="1.6s"><mpath href="#w-sen"/></animateMotion></circle>
+    <circle r="3.5" class="dot"><animateMotion dur="3s" repeatCount="indefinite" begin="2.0s"><mpath href="#w-nav"/></animateMotion></circle>
+    <circle r="3.5" class="dot"><animateMotion dur="4s" repeatCount="indefinite" begin="2.0s"><mpath href="#w-nav2"/></animateMotion></circle>
+  </g>
+</svg>
+<figcaption>One tick of the GNC loop. The repo folder for each software box is printed inside it, and if you're on a mouse, hovering a box shows the team that owns it.</figcaption>
+</figure>
+<div class="try"><span class="eyebrow">Try this</span>
+<ol>
+  <li>Read the folder name inside each software box; that's where the code lives in the repo. Then find the one arrow that crosses from Navigation into Control. That arrow is the state estimate, and it's the only thing the controller knows about the world.</li>
+</ol></div>
+<figure class="monarch">
+  <img src="ASSET_MONARCH" alt="Render of Monarch, GTPL's 1000 N hybrid lander: three tanks around a central column, a gimbaled engine below, four legs">
+  <ol class="callouts">
+    <li><span class="n">01</span><span><b>Throttle valve</b>on the oxidizer line. One servo. This is the thrust command.</span></li>
+    <li><span class="n">02</span><span><b>Gimbaled engine</b>two servos. This is the pair of gimbal angle commands.</span></li>
+    <li><span class="n">03</span><span><b>Three tanks</b>mass changes as they drain, so hover thrust changes during the burn.</span></li>
+    <li><span class="n">04</span><span><b>Avionics</b>with the IMU up top. Where the state estimate starts.</span></li>
+  </ol>
+</figure>
+</section>
+<section class="chapter" id="exercises">
+<div class="chapter-head"><span class="eyebrow"><span class="n">09</span>Exercises</span>
+<h2>Your turn</h2></div>
+<div class="prose">
+<p>Pick one of these and do it this week. They get harder in order, but start wherever you like; the first needs nothing but Python, and the other two want a clone of the repo. Fork MonopropUAV (the name is older than the current vehicle), work on a branch, and open a pull request when you've got something to show, even if it's rough. Someone on the team will review it, and questions go in #gnc on Discord. If you're stuck for more than an hour, ask. It saves everyone time, you included.</p>
+</div>
+<aside class="repo-note"><span class="eyebrow">In the repo</span>Starter files, a small grader and setup notes live in <code>exercises/</code>. Read <a href="exercises/README.md"><code>exercises/README.md</code></a> first.</aside>
+<ol class="exercises">
+  <li class="ex">
+    <h3>Hold 10 m with PID and feedforward</h3>
+    <p class="meta">about 2 hours, plus an hour the first time you fork and open a PR · <a href="exercises/ex1_hover_pid.py"><code>exercises/ex1_hover_pid.py</code></a></p>
+    <p class="goal">The 1D hover rocket from chapter 3, in Python. The file already has the rocket (1 kg, thrust clipped to 1 to 20 N, a 0.2 s thrust lag) and the scenario: hover at 10 m, then a step to 15 m at t = 1 s. It also has the plotting and a small grader. You write one function, controller(t, z, vz, target, dt, state), and return a thrust in newtons.</p>
+    <ol>
+      <li>Open <a href="exercises/ex1_hover_pid.py"><code>exercises/ex1_hover_pid.py</code></a> and read the docstring and the plant. Run it once as is. The placeholder controller just commands the rocket's weight, so it hovers wherever it starts and ignores the step.</li>
+      <li>Fill in controller(). The state argument is a dict that survives between calls and arrives holding kp, ki, kd, mass, g, use_ff, thrust_min and thrust_max, so keep your integral in there. Use vz for the D term: it's the measured climb rate, which means derivative on measurement and no kick when the setpoint steps. Clamp the integral.</li>
+      <li>Run P only (pass --kp and --no-ff), then PD (add --kd), then PD with feedforward (drop --no-ff), then PID with feedforward (add --ki). Every run writes a PNG into outputs/ and prints settle time, overshoot and steady-state error, then the grader's PASS or FAIL lines. The grader wants a settle inside 0.25 m within 6 s, overshoot under 15 percent of the step, and steady-state error under 0.15 m.</li>
+      <li>The page's gains (Kp 2, Ki 0.5, Kd 3) get close and fail: about 9.8 s to settle and 22 percent overshoot. The grader is stricter than the sandbox. Retune toward stiffer Kp and Kd with less Ki until it passes, and write down what each change did.</li>
+      <li>Still with feedforward on, run again with --mass-error 20 and --ki 0 and read the gap: 0.98 m, which is 0.2 times 9.81 divided by Kp. Put Ki back and watch it close. Then run with --gust; the grader adds an excursion under 1 m and recovery within 6 s.</li>
+    </ol>
+    <p class="submit"><b>Submit:</b> Fork MonopropUAV and branch controls-tutorial/your-handle. Put your file, the PNGs and a short RESULTS.md under Tutorials/Controls/submissions/your-handle/. Open a PR titled "Controls tutorial: your name" and ask in #gnc for a review.</p>
+    <p class="stretch"><b>Stretch:</b> Run with --plant repo --repo-model. That overlays the repo's own 17-state rocketdynamics_plus.dynamics on your controller, and for pure vertical flight the two traces should be identical. If they aren't, one of the two models is wrong, and finding out which is a real contribution.</p>
+  </li>
+  <li class="ex">
+    <h3>One gain matrix for the whole vehicle</h3>
+    <p class="meta">about 3 hours · <a href="exercises/ex2_lqr_tvc.py"><code>exercises/ex2_lqr_tvc.py</code></a> · imports Algorithms/MPC, or run --planar without the repo</p>
+    <p class="goal">LQR (chapter 6) on the repo's own 17-state rocket model (the code calls it the TVC model, for thrust vector control, which is the gimbal), using the repo's own finite-difference linearization. You'll find out why the Riccati solver refuses the raw model, what Q and R do in actual numbers, and where LQR falls over. If you don't have the repo cloned yet, --planar runs the whole recipe on a self-contained planar rocket instead.</p>
+    <ol>
+      <li>Run the file. It linearizes rocketdynamics_plus at hover with nonlinear_mpc.compute_jacobian and hands you A and B. Print the nonzero entries of B and write one comment per entry saying which input moves which state.</li>
+      <li>Call scipy.linalg.solve_discrete_are on all 17 states (that's the Riccati solver, the thing that turns Q, R, A and B into K). It fails. Compute the controllability rank, meaning how many of the 17 states the two-axis gimbal plus thrust can actually push: 14. Work out which three they can't reach and why, then drop them with reduce_model (it removes qw, qz and wz).</li>
+      <li>Solve for K on the 14-state model with the repo's MPC weights. Simulate a 0.3 m step with the inputs clipped to plus or minus 10 degrees and 1 to 20 N. It settles in about 1.8 s using 3.1 degrees of gimbal, which looks great.</li>
+      <li>Now simulate the repo's own step to (2, -3, 10) with the same K and the same clipping. It diverges, with the gimbal saturated for about 300 steps. Run with --no-clip and read off what it wanted: 18943 degrees of gimbal. That number is the whole LQR chapter in one line.</li>
+      <li>Fix it in student_weights() with Bryson's rule (each diagonal weight is 1 over the square of the biggest error you'd accept), or a gentler weighting of your own. Bryson's weights settle the big step in about 5.7 s with 8 saturated steps. Put the gimbal traces on one plot with the 10 degree line drawn.</li>
+    </ol>
+    <p class="submit"><b>Submit:</b> Same branch and folder as exercise 1. Add the K matrix you would fly, the plots, and a paragraph on why the first K diverged under clipping.</p>
+    <p class="stretch"><b>Stretch:</b> Re-linearize at every step and re-solve for K along the trajectory, which is halfway to the next exercise. Or reproduce K with the 50-iteration Riccati recursion in Sensing&amp;Controls/Controllers/LQR.py and show it converges to the same answer.</p>
+  </li>
+  <li class="ex">
+    <h3>Run the MPC, then change one thing</h3>
+    <p class="meta">about 3 hours · <a href="exercises/ex3_mpc_receding_horizon.py"><code>exercises/ex3_mpc_receding_horizon.py</code></a> · imports Algorithms/MPC</p>
+    <p class="goal">Run a receding-horizon loop (chapter 7) around nmpc_step from nonlinear_mpc.py, change the constraints and the reference, then put the MPC and your LQR from exercise 2 on the same plot with the same limits. The receding_horizon function is shipped complete; the point is to read it until you could have written it, then change what it's fed.</p>
+    <ol>
+      <li>Run the file with the defaults, --profile demo and --steps 60, which is 6 s of flight at about 33 ms per step. Read the per-step log. When you want the whole repo demo, including the return to the origin after 15 s, run --steps 300 and go get coffee; it takes about a minute.</li>
+      <li>Read receding_horizon line by line: each tick solves, applies the first command, and warm-starts the next tick from the shifted sequence. Then fill in the step branch of make_reference so the reference can change partway through a run. The whole horizon has to carry the new reference, row by row, not only the first row.</li>
+      <li>Run --thrust-max 12. The MPC still reaches the setpoint, sitting pinned at 12 N for 17 steps, and never once asks for more than it has. Write down what happened to the settle time and the peak gimbal angle.</li>
+      <li>Run --compare-lqr. It builds K from your student_weights() in exercise 2 and flies the same scenario with the same clipping (with the placeholder weights the LQR diverges, so finish exercise 2 first). Plot positions, gimbal and thrust for both. Which one would you fly, and what would you change in Q and R to make the MPC faster?</li>
+      <li>Run --mass 1.05 for at least 150 steps. The plant is now 5 percent heavier than the MPC's model, and the MPC hovers 0.72 m low at steady state without noticing, because it has no integrator and believes its model. Explain why in a sentence, then add the integral reference shift that the Rust version in Algorithms/MPC/src/main.rs already has a hook for: accumulate the altitude error and nudge the reference up by it.</li>
+    </ol>
+    <p class="submit"><b>Submit:</b> Same branch and folder. Add the comparison plot and a table of horizon N versus solve time versus final error for three values of N. Say which controller you would fly, and why.</p>
+    <p class="stretch"><b>Stretch:</b> A hard rate limit on the gimbal isn't a box constraint (a box constraint is a plain upper and lower bound on each command, which is all solve_qp_box knows how to clip to). Read solve_qp_box and explain why, then find a way around it. Hint: penalize the change between consecutive commands in the cost.</p>
+  </li>
+</ol>
+</section>
+<section class="chapter" id="further">
+<div class="chapter-head"><span class="eyebrow">Further reading</span>
+<h2>Going deeper</h2></div>
+<div class="prose">
+<p>None of this is required. Read them when you want to know why the math behind the sliders works, or when you're ready to write your own controller from a blank file.</p>
+</div>
+<ul class="further">
+  <li><div class="t"><a href="https://file.tavsys.net/control/controls-engineering-in-frc.pdf" target="_blank" rel="noopener">Controls Engineering in the FIRST Robotics Competition, Tyler Veness</a></div><div class="w">Free PDF written for high school robotics students. It goes from PID through LQR and state estimation with actual code, and it's the best next step from this page.</div></li>
+  <li><div class="t"><a href="https://www.youtube.com/playlist?list=PLMrJAkhIeNNR20Mz-VpzgfQs5zrYi085m" target="_blank" rel="noopener">Control Bootcamp, Steve Brunton</a></div><div class="w">A YouTube series that builds up state-space, LQR and Kalman filtering with MATLAB on screen. Watch the LQR and controllability videos when you want to see where K actually comes from.</div></li>
+  <li><div class="t"><a href="https://engineeringmedia.com/" target="_blank" rel="noopener">Brian Douglas, Control Systems Lectures and MATLAB Tech Talks</a></div><div class="w">Short whiteboard videos on almost every topic here, including a clear MPC series. Good for the night before you touch the repo code.</div></li>
+  <li><div class="t"><a href="https://docs.wpilib.org/en/stable/docs/software/advanced-controls/introduction/index.html" target="_blank" rel="noopener">WPILib controls tuning tutorials</a></div><div class="w">Four more mechanisms to practice on in the browser: a flywheel, a turret, an arm under gravity and an elevator. Same feedforward-first recipe as here. Their sims use typed-in gains instead of sliders, which is part of why we built our own.</div></li>
+</ul>
+</section>
+</main>
+<footer><div class="wrap">
+  <p>Propulsive Landers @ Georgia Tech · GNC subteam · questions in #gnc on Discord</p>
+  <p><a href="https://gtpropulsivelanders.org/" target="_blank" rel="noopener">gtpropulsivelanders.org</a> · <a href="https://github.com/Avionics-Propulsion-Landers-GT/MonopropUAV" target="_blank" rel="noopener">MonopropUAV on GitHub</a></p>
+  <p>The tune-feedforward-first progression and the noise and disturbance toggles are borrowed from the WPILib controls tuning tutorials (<a href="https://github.com/wpilibsuite/wpilib-docs" target="_blank" rel="noopener">wpilibsuite/wpilib-docs</a>, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>). The simulations here are our own.</p>
+</div></footer>
