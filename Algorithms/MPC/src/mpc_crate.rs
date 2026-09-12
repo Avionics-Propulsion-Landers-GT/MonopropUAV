@@ -3,7 +3,6 @@
 
 use ndarray::{Array1, Array2};
 use ndarray::s;
-use ndarray_linalg::Inverse;
 use ndarray_linalg::Norm;
 use ndarray::ArrayView1;
 use optimization_engine::{panoc::*, *};
@@ -144,13 +143,31 @@ impl MPCDebugInfo {
 
 //     x_next
 // }
+
+// Closed form 3x3 inverse. The MOI is constant and dynamics() gets hammered by the
+// finite difference Jacobians, so an LU factorisation every call is wasted work.
+fn inv3(mat: &Array2<f64>) -> Array2<f64> {
+    let a = mat[(0, 0)]; let b = mat[(0, 1)]; let c = mat[(0, 2)];
+    let d = mat[(1, 0)]; let e = mat[(1, 1)]; let f = mat[(1, 2)];
+    let g = mat[(2, 0)]; let h = mat[(2, 1)]; let k = mat[(2, 2)];
+
+    let det = a * (e * k - f * h) - b * (d * k - f * g) + c * (d * h - e * g);
+    let inv_det = 1.0 / det;
+
+    Array2::from_shape_vec((3, 3), vec![
+        (e * k - f * h) * inv_det, (c * h - b * k) * inv_det, (b * f - c * e) * inv_det,
+        (f * g - d * k) * inv_det, (a * k - c * g) * inv_det, (c * d - a * f) * inv_det,
+        (d * h - e * g) * inv_det, (b * g - a * h) * inv_det, (a * e - b * d) * inv_det,
+    ]).unwrap()
+}
+
 pub fn dynamics(x: &Array1<f64>, u: &Array1<f64>, mass: f64, moi: &Array2<f64>, dt: f64) -> Array1<f64> {
     let m = mass;
     let g = 9.81;
 
     // Inertia matrix and inverse
     let i = moi.clone();
-    let i_inv = i.clone().inv().unwrap();
+    let i_inv = inv3(&i);
 
     // Unpack state
     let x_pos = x[0];
@@ -284,8 +301,11 @@ fn compute_jacobian(x: &Array1<f64>, u: &Array1<f64>, mass: f64, moi: &Array2<f6
     let mut B = Array2::<f64>::zeros((n, m));
     // compute Jacobians A and B here via central difference
 
-    let eps = 1e-6;
+    // scale the perturbation with the magnitude of the entry, otherwise thrust (~1e3 N)
+    // and position at altitude get differenced with only a few significant digits left
+    let eps_rel = 1e-6;
     for i in 0..n {
+        let eps = eps_rel * x[i].abs().max(1.0);
         let mut x_plus = x.clone();
         let mut x_minus = x.clone();
         x_plus[i] += eps;
@@ -295,6 +315,7 @@ fn compute_jacobian(x: &Array1<f64>, u: &Array1<f64>, mass: f64, moi: &Array2<f6
         A.column_mut(i).assign(&((fx_plus - fx_minus) / (2.0 * eps)));
     }
     for i in 0..m {
+        let eps = eps_rel * u[i].abs().max(1.0);
         let mut u_plus = u.clone();
         let mut u_minus = u.clone();
         u_plus[i] += eps;
@@ -340,7 +361,9 @@ fn build_Su(A_seq: &Vec<Array2<f64>>, B_seq: &Vec<Array2<f64>>) -> Array2<f64> {
         for j in 0..=k {
             let mut Phi = Array2::<f64>::eye(n);
             if j + 1 <= k {
-                for t in (j+1)..=k {
+                // block (k,j) is dx_{k+1}/du_j = A_k A_{k-1} ... A_{j+1} B_j.
+                // descending order, these do not commute
+                for t in ((j+1)..=k).rev() {
                     Phi = Phi.dot(&A_seq[t]);
                 }
             }
@@ -387,14 +410,17 @@ fn assemble_qp_increment(xs: &Vec<Array1<f64>>, U: &Vec<Array1<f64>>, xref_traj:
         r.slice_mut(s![k*n..(k+1)*n]).assign(&x_diff);
     }
 
-    let Su = build_Su(A_seq, B_seq);
-    let mut H = Su.t().dot(&Q_bar).dot(&Su) + &R_bar;
-    let g = Su.t().dot(&Q_bar).dot(&r);
-
     let mut Ustack = Array1::<f64>::zeros(m * N);
     for k in 0..N {
         Ustack.slice_mut(s![k*m..(k+1)*m]).assign(&U[k]);
     }
+
+    let Su = build_Su(A_seq, B_seq);
+    let mut H = Su.t().dot(&Q_bar).dot(&Su) + &R_bar;
+    // R penalises the absolute control, so expanding 0.5*(u_nom+dU)^T R_bar (u_nom+dU)
+    // about the nominal leaves R_bar in H AND a linear term R_bar*u_nom in g.
+    // without it R would only be damping the increment, not the effort.
+    let g = Su.t().dot(&Q_bar).dot(&r) + R_bar.dot(&Ustack);
 
     let mut U_max = Array1::<f64>::zeros(m * N);
     let mut U_min = Array1::<f64>::zeros(m * N);
@@ -416,6 +442,7 @@ fn assemble_qp_increment(xs: &Vec<Array1<f64>>, U: &Vec<Array1<f64>>, xref_traj:
 fn solve_qp_pgd(H: &Array2<f64>, g: &Array1<f64>, dU_min: &Array1<f64>, dU_max: &Array1<f64>, dU_init: &Array1<f64>, max_iters: usize, _alpha: f64) -> Array1<f64> {
     let mut dU = dU_init.clone();
     let n = dU.len();
+    // with Jacobi scaling below the natural step is 1.0, the caller's alpha would only slow it down
     let alpha = 1.0;
     
     // Initial projection to ensure feasibility
@@ -489,10 +516,14 @@ fn true_cost(x0: &Array1<f64>, U: &Vec<Array1<f64>>, xref_traj: &Vec<Array1<f64>
     let N = U.len();
     let mut cost = 0.0;
 
-    // add up stage costs
+    // add up stage costs. x_N is skipped here, it is weighted by QN below.
+    // Q_bar in the QP puts Q on x_1..x_{N-1} and QN on x_N, this has to match or
+    // the line search is grading against a different objective than the one being solved.
     for k in 0..N {
-        let x_diff = &xs[k+1] - &xref_traj[k+1];
-        cost += x_diff.t().dot(Q).dot(&x_diff);
+        if k < N - 1 {
+            let x_diff = &xs[k+1] - &xref_traj[k+1];
+            cost += x_diff.t().dot(Q).dot(&x_diff);
+        }
         cost += U[k].t().dot(R).dot(&U[k]);
     }
 
@@ -516,6 +547,12 @@ fn nmpc_step(x0: &Array1<f64>, U_init: &Vec<Array1<f64>>, xref_traj: &Vec<Array1
         let (H, g, dU_min, dU_max, _Su, _Q_bar, _R_bar) = assemble_qp_increment(&xs, &U, &xref_traj, &A_seq, &B_seq, &Q, &R, &QN, &u_min, &u_max);
         let dU0 = Array1::<f64>::zeros(m * N);
         let dU = solve_qp_pgd(&H, &g, &dU_min, &dU_max, &dU0, 20, alpha_pgd);
+
+        // already at the QP solution, another outer iteration would rebuild the same problem
+        if dU.norm() < 1e-8 {
+            break;
+        }
+
         let mut flatU = Array1::<f64>::zeros(m * N);
         // flatten U
         // Flatten U into flatU
@@ -547,10 +584,10 @@ fn nmpc_step(x0: &Array1<f64>, U_init: &Vec<Array1<f64>>, xref_traj: &Vec<Array1
         }
         if !found {
             println!("MPC line search failed: J0 = {:.3}, dU norm = {:.6}, dU = {:?}", J0, dU.norm(), dU);
+            // U is unchanged, so the next iteration would solve an identical QP
+            break;
         }
 
-        // test for convergence ?
-        
     }
     // print time taken
     let duration = start_time.elapsed();
@@ -631,6 +668,31 @@ pub fn OpEnSolve(
     gimbal_limit_rad: f64,
     dt: f64,
 ) -> (Array1<f64>, Array2<f64>, MPCDebugInfo) {
+    OpEnSolveWithPrev(x0, U, xref_traj, Q, R, QN, smoothing_weight, panoc_cache, mass, moi,
+                      min_thrust, max_thrust, gimbal_limit_rad, dt, None)
+}
+
+// Same as OpEnSolve but takes the control that was actually commanded last cycle.
+// The smoothing sum starts at k=0, so without this u_0 is free to jump anywhere inside
+// the box between cycles, which is the step the gimbal servo actually has to slew.
+// Pass None to get the old behaviour exactly.
+pub fn OpEnSolveWithPrev(
+    x0: &Array1<f64>,
+    U: &Vec<Array1<f64>>,
+    xref_traj: &Vec<Array1<f64>>,
+    Q: &Array2<f64>,
+    R: &Array2<f64>,
+    QN: &Array2<f64>,
+    smoothing_weight: &Array1<f64>,
+    panoc_cache: &mut PANOCCache,
+    mass: f64,
+    moi: &Array2<f64>,
+    min_thrust: f64,
+    max_thrust: f64,
+    gimbal_limit_rad: f64,
+    dt: f64,
+    u_prev: Option<&Array1<f64>>,
+) -> (Array1<f64>, Array2<f64>, MPCDebugInfo) {
     use ndarray::ArrayView1;
     let mut debug_info = MPCDebugInfo::new();
 
@@ -660,19 +722,35 @@ pub fn OpEnSolve(
     println!("MPC QP DIAG: g_norm={:.4}, H_diag_mean={:.4}, H_diag_min={:.4}, H_diag_max={:.4}", 
              g_norm, h_mean, h_min, h_max);
 
-    // Gradient and cost are in delta-U space: min 0.5 dU^T H dU + g^T dU
+    // Gradient and cost are in delta-U space: min 0.5 dU^T H dU + g^T dU.
+    // The smoothing penalty is on the ABSOLUTE control though, so it gets u_nom + dU.
+    // Feeding it dU alone makes its gradient vanish at the warm start, which means a
+    // jagged warm start never gets smoothed out, it just gets carried forward.
     let df = |du_slice: &[f64], grad_slice: &mut [f64]| -> Result<(), SolverError> {
         let du = Array1::from(du_slice.to_vec());
+        let u_abs = &u_nom + &du;
         let grad = QP_gradient(&H, &g, &du);
-        let smooth_grad = smoothing_cost_grad(&du, smoothing_weight, m);
-        let total_grad = &grad + &smooth_grad;
+        let smooth_grad = smoothing_cost_grad(&u_abs, smoothing_weight, m);
+        let mut total_grad = &grad + &smooth_grad;
+        if let Some(up) = u_prev {
+            for i in 0..m {
+                total_grad[i] += 2.0 * smoothing_weight[i] * (u_abs[i] - up[i]);
+            }
+        }
         grad_slice.copy_from_slice(total_grad.as_slice().unwrap());
         Ok(())
     };
 
     let f = |du_slice: &[f64], cost: &mut f64| -> Result<(), SolverError> {
         let du = Array1::from(du_slice.to_vec());
-        let smooth_cost = smoothing_cost(&du, smoothing_weight, m);
+        let u_abs = &u_nom + &du;
+        let mut smooth_cost = smoothing_cost(&u_abs, smoothing_weight, m);
+        if let Some(up) = u_prev {
+            for i in 0..m {
+                let e = u_abs[i] - up[i];
+                smooth_cost += smoothing_weight[i] * e * e;
+            }
+        }
         *cost = QP_cost(&H, &g, &du) + smooth_cost;
         Ok(())
     };
@@ -699,24 +777,68 @@ pub fn OpEnSolve(
 
     // Initialize at zero — meaning "start from the warm-start U, apply no delta"
     let mut du_flat: Vec<f64> = vec![0.0; n_dim_u];
-    let status = panoc.solve(&mut du_flat).unwrap();
-    debug_info.iterations = status.iterations();
+    match panoc.solve(&mut du_flat) {
+        Ok(status) => {
+            debug_info.iterations = status.iterations();
+        }
+        Err(e) => {
+            // solver blew up, hold the warm start rather than panicking mid-flight
+            println!("MPC PANOC solve failed: {:?}, holding warm start", e);
+            for v in du_flat.iter_mut() { *v = 0.0; }
+            debug_info.iterations = 0;
+        }
+    }
 
-    // Recover absolute U: U_new = U_warm + dU, clamped to hard bounds
-    let du_seq = Array1::from(du_flat);
-    let u_seq = &u_nom + &du_seq;
+    // Build a clamped absolute control sequence from a step along dU, and score it on the
+    // real nonlinear rollout. The factor 2 puts the smoothing on the same footing as
+    // true_cost, which carries no 0.5 while QP_cost does.
+    let merit = |step: f64| -> (f64, Vec<Array1<f64>>) {
+        let mut U_try = Vec::with_capacity(N);
+        let mut flat = Array1::<f64>::zeros(n_dim_u);
+        for k in 0..N {
+            let base = k * m;
+            let u_k = Array1::from(vec![
+                (u_nom[base + 0] + step * du_flat[base + 0]).clamp(-gimbal_limit_rad, gimbal_limit_rad),
+                (u_nom[base + 1] + step * du_flat[base + 1]).clamp(-gimbal_limit_rad, gimbal_limit_rad),
+                (u_nom[base + 2] + step * du_flat[base + 2]).clamp(min_thrust, max_thrust),
+            ]);
+            flat.slice_mut(s![base..base+m]).assign(&u_k);
+            U_try.push(u_k);
+        }
+        let mut cost = true_cost(x0, &U_try, xref_traj, Q, R, QN, mass, moi, dt);
+        cost += 2.0 * smoothing_cost(&flat, smoothing_weight, m);
+        if let Some(up) = u_prev {
+            for i in 0..m {
+                let e = flat[i] - up[i];
+                cost += 2.0 * smoothing_weight[i] * e * e;
+            }
+        }
+        (cost, U_try)
+    };
 
-    // Clamp final result to absolute bounds (safety)
-    let u_seq_clamped: Vec<f64> = (0..N).flat_map(|k| {
-        let base = k * m;
-        vec![
-            u_seq[base + 0].clamp(-gimbal_limit_rad, gimbal_limit_rad),
-            u_seq[base + 1].clamp(-gimbal_limit_rad, gimbal_limit_rad),
-            u_seq[base + 2].clamp(min_thrust, max_thrust),
-        ]
-    }).collect();
+    // Globalisation. The QP is only a model, so back off along dU until the step actually
+    // improves the nonlinear cost. step = 0 is the warm start, which is always feasible.
+    let (J0, U_hold) = merit(0.0);
+    let mut U_new = U_hold;
+    let mut step = 1.0;
+    while step > 1e-3 {
+        let (Jtry, U_try) = merit(step);
+        if Jtry < J0 {
+            U_new = U_try;
+            break;
+        }
+        step *= 0.5;
+    }
+    if step <= 1e-3 {
+        println!("MPC OpEn line search failed: J0 = {:.3}, holding warm start", J0);
+    }
 
-    let u_seq_arr = Array1::from(u_seq_clamped);
+    let mut u_seq_flat: Vec<f64> = Vec::with_capacity(n_dim_u);
+    for k in 0..N {
+        u_seq_flat.extend_from_slice(U_new[k].as_slice().unwrap());
+    }
+
+    let u_seq_arr = Array1::from(u_seq_flat);
     let u_apply = u_seq_arr.slice(s![0..m]).to_owned();
     let U_seq = Array2::from_shape_vec((N, m), u_seq_arr.to_vec()).unwrap();
 
